@@ -138,3 +138,16 @@ Follow-up to merged #330, one PR on `eng/development-blue-icons`. Restore hidden
 Optional tab icons preserve text, accessible names and keyboard behavior. No icon dependency, inferred icon labels, API, records or financial calculations added. Desktop Overview/Permits and narrow-phone Consultant previews inspected; phone page width equals scroll width. Sample routes removed. Existing frontend tests (124) and isolated CI-routing tests (39) passed. Final lint/build and GitHub results are recorded in the PR.
 
 The same-repository, complete-diff frontend-only PR exception now applies only to this branch; merged briefing branch, main pushes, forks and unrelated paths retain normal CI. Draft review policy remains unchanged.
+
+## Property presentation — roadmap phase 1
+
+One PR from main after #331: `eng/property-presentation`.
+
+- Inventory adds a building selector across the building stack and property cards. Stable phase/building IDs keep identically named locations distinct. Selecting a building resets the floor selection. All building/floor counts explicitly cover the current register page; Schedule continues to show the complete loaded page.
+- Property cards separate commercial and delivery badges, add labelled bedroom/bathroom/parking icons, show recorded outlook and balcony measurements, and retain exact launch prices and price-access gates. Unknown quantities remain unknown; zero stays zero. White reading surfaces, pale blue context, green success and red blockers carry specific meanings.
+- Parcel cards group title/ownership, acquisition and planning into distinct readable sections. Existing full-page opening, financial visibility and source fields remain unchanged.
+- Mobile building and floor selectors scroll horizontally, keeping properties near the top. Desktop and phone sample previews shown and inspected; no document-level horizontal overflow. No stock photography, fabricated plans or new media fields.
+
+Validation: 126 frontend tests and 39 isolated CI-routing tests passed. New tests cover building identity/filter persistence, schedule scope, separate status tones and unknown versus zero quantities. Lint/build and final-head GitHub evidence recorded in the PR. Sample routes removed before build. No backend application tests run.
+
+CI exception remains exact-branch, same-repository and full-diff scoped; previous branches, main pushes and unrelated paths use normal CI. Draft requires independent review under ENGINEERING_RULES.md. Next roadmap phases: Development workspace, then remaining-platform consistency.

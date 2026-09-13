@@ -371,3 +371,51 @@
   .development-workspace .page-glyph .icon { width: 21px; height: 21px; }
   .development-workspace .briefing-dates > header { margin: -18px -18px 16px; padding: 16px 18px 8px; flex-wrap: wrap; gap: 4px; }
 }
+
+/* Property presentation: colour belongs to a status or a deliberate point of emphasis. */
+.property-building-nav { display: flex; gap: 24px; align-items: center; padding: 18px 24px; background: var(--dev-blue-wash); border-block: 1px solid var(--dev-blue-line); }
+.property-building-nav > div:first-child { display: flex; align-items: center; gap: 12px; color: var(--accent); font-weight: 600; }
+.property-building-nav > div:first-child > .icon { width: 25px; height: 25px; }
+.property-building-nav .footnote { display: block; margin: 4px 0 0; font-weight: 400; white-space: nowrap; }
+.property-building-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.property-building-options button { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); color: var(--text-secondary); border: 1px solid var(--dev-blue-line); border-radius: 8px; font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.property-building-options button > span { font-variant-numeric: tabular-nums; color: var(--accent); }
+.property-building-options button[aria-pressed="true"] { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+.property-building-options button[aria-pressed="true"] > span { color: inherit; }
+.property-building-options button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.atlas-floor-label small { font-size: var(--text-xs); color: var(--text-muted); font-weight: 400; }
+.development-workspace .stock-property-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--line-default); border-radius: 12px; }
+.development-workspace .stock-property-card:only-child { display: flex; }
+.development-workspace .stock-property-card > * { margin-inline: 22px; }
+.development-workspace .stock-property-card .stock-property-emblem { margin: 0 0 18px; padding: 16px 22px; background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
+.development-workspace .stock-property-identity { gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.development-workspace .stock-property-identity a { font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; color: var(--accent); }
+.property-feature-row { display: flex; flex-wrap: wrap; gap: 10px 16px; padding-block: 18px 12px; }
+.property-feature-row > span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
+.property-feature-row .icon { color: var(--accent); width: 18px; height: 18px; }
+.property-outlook { display: flex; align-items: center; gap: 7px; font-size: var(--text-xs); color: var(--text-muted); margin-block: 0 18px; }
+.property-outlook .icon { flex: none; }
+.development-workspace .stock-property-card dl { grid-template-columns: repeat(3,minmax(0,1fr)); padding-block: 16px; border-block: 1px solid var(--line-soft); }
+.development-workspace .stock-property-card dd { font-size: var(--text-sm); color: var(--text-secondary); }
+.property-delivery { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; font-size: var(--text-xs); color: var(--text-muted); }
+.development-workspace .stock-property-card .stock-property-price { margin: auto 0 0; padding: 18px 22px; background: var(--surface-secondary); border-top: 1px solid var(--line-soft); color: var(--accent); }
+.development-workspace .stock-property-price small { color: var(--text-muted); }
+.parcel-classification, .property-section-title, .parcel-estate-footer > span { display: flex; align-items: center; gap: 9px; }
+.property-section-title { margin: 0 0 22px; color: var(--text-secondary); font-size: var(--text-sm); font-weight: 600; }
+.property-section-title .icon, .parcel-classification .icon, .parcel-estate-footer > span .icon { color: var(--accent); flex: none; }
+.parcel-architectural .parcel-estate-context { background: var(--surface); }
+.parcel-architectural .parcel-estate-context > section { border: 1px solid var(--dev-blue-line); border-radius: 10px; padding: 20px; background: var(--dev-blue-wash); }
+.parcel-architectural .parcel-estate-context > section + section { margin-top: 16px; padding-top: 20px; }
+.parcel-estate-price { color: var(--accent); }
+@media (max-width: 760px) {
+ .property-building-nav { flex-direction: column; align-items: stretch; gap: 14px; padding: 18px; }
+ .property-building-options { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }
+ .property-building-options button { flex-shrink: 0; }
+ .development-workspace .stock-property-card > * { margin-inline: 18px; }
+ .development-workspace .stock-property-card .stock-property-emblem, .development-workspace .stock-property-card .stock-property-price { padding-inline: 18px; }
+}
+@media (max-width: 760px) {
+ .stock-hierarchy { flex-direction: row; align-items: center; overflow-x: auto; padding: 12px 16px; }
+ .stock-hierarchy > .eyebrow { display: none; }
+ .stock-hierarchy button { flex-shrink: 0; white-space: nowrap; }
+}
