@@ -332,7 +332,11 @@ def domain_of_migration(path: str) -> str | None:
     """
     stem = Path(path).stem
     # This revision joins two domain histories; keep the complete regression fallback.
-    if stem in {"0024_merge_permits_inventory", "0027_merge_permit_common"}:
+    if stem in {
+        "0024_merge_permits_inventory",
+        "0027_merge_permit_common",
+        "0028_merge_permit_sales",
+    }:
         return None
     for domain in DOMAIN_TEST_PREFIXES:
         if domain in NON_SCHEMA_DOMAINS:

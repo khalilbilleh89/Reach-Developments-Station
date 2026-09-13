@@ -866,6 +866,10 @@ export const sales = {
     put<ReservationDetail>(`/projects/${projectId}/sales/reservations/${id}/sales-price`, {sales_price_ex_tax}),
   registerBuyer: (projectId: string, input: Record<string, unknown>) =>
     post<SaleDetail>(`/projects/${projectId}/sales/buyer-registrations`, input),
+  removeSale: (projectId: string, id: string, reason: string) =>
+    remove(`/projects/${projectId}/sales/contracts/${id}?${new URLSearchParams({reason})}`),
+  updateSaleAgent: (projectId: string, id: string, body: Record<string, unknown>) =>
+    put<SaleContract>(`/projects/${projectId}/sales/contracts/${id}/agent`, body),
   deleteClient: (projectId: string, id: string, reason: string) =>
     remove(`/projects/${projectId}/sales/clients/${id}?${new URLSearchParams({reason})}`),
   history: (projectId: string, query: Record<string, string>) =>

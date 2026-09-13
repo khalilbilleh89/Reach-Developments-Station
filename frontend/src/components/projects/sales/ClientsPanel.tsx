@@ -8,6 +8,7 @@ import {
   Badge,
   Button,
   Card,
+  RecordPage,
   DataToolbar,
   EmptyState,
   Field,
@@ -47,12 +48,14 @@ export function ClientsPanel({
   canWrite,
   onChanged,
   onClose,
+  onConnect,
 }: {
   projectId: string;
   canWrite: boolean;
   canAdmin?: boolean;
   onChanged: () => Promise<void>;
-  onClose: () => void;
+  onClose?: () => void;
+  onConnect?: (buyer: SalesClient) => void;
 }) {
   const [clients, setClients] = useState<SalesClient[] | null>(null);
   const [search, setSearch] = useState("");
@@ -77,6 +80,11 @@ export function ClientsPanel({
   ];
   const clientFields: EditField[] = [
     { name: "display_name", label: "Buyer name" },
+    { name: "agent_country", label: "Country" },
+    { name: "agent_branch", label: "Branch" },
+    { name: "agent_branch_leader", label: "Branch Leader" },
+    { name: "agent_name", label: "Agent" },
+
     { name: "email", label: "Email" }, { name: "phone", label: "Phone" },
     { name: "address", label: "Address" },
     { name: "preferred_language_code", label: "Language code" },
@@ -158,7 +166,7 @@ export function ClientsPanel({
   return (
     <Card
       title="Buyers"
-      description="Project-scoped. This is not a portfolio-wide customer master."
+      description="Buyer details, sales team and unit connections for this project."
       actions={
         <>
           {canWrite ? (
@@ -166,30 +174,30 @@ export function ClientsPanel({
               {registering ? "Cancel" : "Register a buyer"}
             </Button>
           ) : null}
-          <Button variant="quiet" small data-leaves-editor onClick={onClose}>
+          {onClose ? <Button variant="quiet" small data-leaves-editor onClick={onClose}>
             Close
-          </Button>
+          </Button> : null}
         </>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
-      {editing ? <SubPanel title={`Edit ${editing.display_name}`}><EditForm
+      {editing ? <RecordPage title={`Edit ${editing.display_name}`} onClose={() => setEditing(null)}><EditForm
         key={editing.id} fields={clientFields}
         initial={Object.fromEntries(clientFields.map(field => [field.name, asValue(editing[field.name as keyof SalesClient] as never)]))}
         onCancel={() => setEditing(null)} onSave={async changes => {
           await sales.updateClient(projectId, editing.id, changes); setEditing(null); await load(); await onChanged();
-        }} /></SubPanel> : null}
+        }} /></RecordPage> : null}
 
       {canWrite && registering ? (
-        <SubPanel title="Register a buyer">
+        <RecordPage title="Register buyer and agent" onClose={() => setRegistering(false)}>
           <BuyerForm projectId={projectId} onCancel={() => setRegistering(false)} onSaved={(buyer) => {
             setRegistering(false);
             setSelected(buyer.id);
             void load();
             void onChanged();
           }} />
-        </SubPanel>
+        </RecordPage>
       ) : null}
 
       <DataToolbar
@@ -228,7 +236,7 @@ export function ClientsPanel({
                 <th scope="row" className="mono">
                   {client.client_number}
                 </th>
-                <td>{client.display_name}</td>
+                <td className="buyer-identity">{client.display_name}<span className="cell-secondary">{[client.agent_country, client.agent_branch, client.agent_branch_leader, client.agent_name].filter(Boolean).join(" · ") || "Sales team not recorded"}</span></td>
                 <td>
                   <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge>
                 </td>
@@ -246,7 +254,7 @@ export function ClientsPanel({
                     <StatusDot tone="muted">Inactive</StatusDot>
                   )}
                 </td>
-                <td>
+                <td><div className="buyer-actions">
                   <Button
                     small
                     variant="quiet"
@@ -256,9 +264,10 @@ export function ClientsPanel({
                   >
                     {selected === client.id ? "Hide parties" : "Parties"}
                   </Button>
+                  {canWrite && client.is_active && onConnect ? <Button small data-leaves-editor onClick={() => onConnect(client)}>Connect unit</Button> : null}
                   {canWrite ? <Button small data-leaves-editor onClick={() => setEditing(client)}>Edit buyer</Button> : null}
                   {canAdmin ? <DeleteRecordButton label="buyer" onDelete={reason => sales.deleteClient(projectId, client.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : null}
-                </td>
+                </div></td>
               </tr>
             ))}
           </tbody>

@@ -48,3 +48,9 @@ retained permits become visible again. Do not silently discard retained records.
 
 No production deployment or data removal is performed by opening this draft PR.
 Independent review and exact-head Full Backend/Frontend checks remain required.
+# Migration convergence after Sales
+
+Revision `0028_merge_permit_sales` joins `0027_merge_permit_common` and
+`0027_merge_sales_areas` without rewriting either history or changing data.
+Both parent upgrade paths are covered by migration convergence tests and schema
+drift checks. Downgrades retain the existing completed-permit history guards.

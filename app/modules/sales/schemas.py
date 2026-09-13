@@ -94,6 +94,13 @@ class ReasonRequest(StrictRequest):
     reason: Reason
 
 
+class AgentDetailsRequest(ReasonRequest):
+    agent_country: Name | None = None
+    agent_branch: Name | None = None
+    agent_branch_leader: Name | None = None
+    agent_name: Name | None = None
+
+
 class RequoteRequest(ReasonRequest):
     price_locked_until: date | None = None
 
@@ -160,6 +167,11 @@ class ClientCreateRequest(StrictRequest):
     owner_advisor_user_id: uuid.UUID | None = None
     notes: Notes | None = None
 
+    agent_country: Name | None = None
+    agent_branch: Name | None = None
+    agent_branch_leader: Name | None = None
+    agent_name: Name | None = None
+
 
 class ClientUpdateRequest(StrictRequest):
     """Correction, not replacement. ``client_number`` is not writable."""
@@ -176,6 +188,11 @@ class ClientUpdateRequest(StrictRequest):
     notes: Notes | None = None
     is_active: bool | None = None
 
+    agent_country: Name | None = None
+    agent_branch: Name | None = None
+    agent_branch_leader: Name | None = None
+    agent_name: Name | None = None
+
 
 class ClientSummaryRead(BaseModel):
     """A buyer without their personal data.
@@ -186,6 +203,11 @@ class ClientSummaryRead(BaseModel):
     address, no identity documents — those are on the full read model, and the
     route chooses between the two before serialising anything.
     """
+
+    agent_country: str | None = None
+    agent_branch: str | None = None
+    agent_branch_leader: str | None = None
+    agent_name: str | None = None
 
     model_config = _READ
 
@@ -474,6 +496,11 @@ class ReservationRead(BaseModel):
     cannot answer any of the three.
     """
 
+    agent_country: str | None = None
+    agent_branch: str | None = None
+    agent_branch_leader: str | None = None
+    agent_name: str | None = None
+
     model_config = _READ
 
     id: uuid.UUID
@@ -641,6 +668,11 @@ class SaleTaxLineRead(BaseModel):
 
 class SaleRead(BaseModel):
     """A contract and the commercial terms it was signed on."""
+
+    agent_country: str | None = None
+    agent_branch: str | None = None
+    agent_branch_leader: str | None = None
+    agent_name: str | None = None
 
     model_config = _READ
     price_per_gross_area: DecimalStr | None = None

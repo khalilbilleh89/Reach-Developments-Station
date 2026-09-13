@@ -38,6 +38,7 @@ import { LandTab } from "@/components/projects/LandTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
 import { PreLaunchTab } from "@/components/projects/PreLaunchTab";
+import { AgentBuyerTab } from "./AgentBuyerTab";
 import { SalesTab } from "@/components/projects/SalesTab";
 import { UnitEconomicsTab } from "@/components/projects/UnitEconomicsTab";
 import { UnitWorkspace } from "@/components/projects/inventory/UnitWorkspace";
@@ -243,6 +244,7 @@ export function ProjectWorkspace({
             canConfigure={canWriteProject}
           />
         ) : null}
+        {section === "agent-buyer" ? <AgentBuyerTab projectId={projectId} projectStatus={project.status} roles={roles} /> : null}
         {section === "sales" ? (
           <SalesTab
             projectId={projectId}

@@ -530,18 +530,18 @@
   {
     "handler": "sales.create_reservation",
     "create_route": "POST /{project_id}/sales/reservations",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Review retention and source-record removal."
+    "status": "implemented",
+    "removal_route": "POST /{project_id}/sales/reservations/{reservation_id}/cancel",
+    "ui_file": "frontend/src/components/projects/sales/SaleWorkspace.tsx",
+    "notes": "Master Administrator Delete reservation supports preparation and live reservations, retains reasoned history, and releases only this reservation's commitment. A converted reservation belongs to its sale removal/cancellation flow."
   },
   {
     "handler": "sales.create_sale",
     "create_route": "POST /{project_id}/sales/contracts",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Review retention and source-record removal."
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/sales/contracts/{sale_id}",
+    "ui_file": "frontend/src/components/projects/sales/SaleWorkspace.tsx",
+    "notes": "Master Administrator Delete sale retains the contract, buyer, reservation and audit while cancelling a draft/unsigned sale and releasing its unit where eligible. Signed/collection-active sales expose Start cancellation. Existing cancellation, registry and handover obligations are guarded. Tests: test_sales_agent_removal.py."
   },
   {
     "handler": "sales.record_legal_event",
@@ -554,10 +554,10 @@
   {
     "handler": "sales.register_buyer",
     "create_route": "POST /{project_id}/sales/buyer-registrations",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Single-save buyer registration also creates a contract. Buyer deletion alone does not remove this combined draft; contract removal coverage is missing."
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/sales/contracts/{sale_id}",
+    "ui_file": "frontend/src/components/projects/sales/SaleWorkspace.tsx",
+    "notes": "Master Administrator Delete sale retains the contract, buyer, reservation and audit while cancelling a draft/unsigned sale and releasing its unit where eligible. Signed/collection-active sales expose Start cancellation. Existing cancellation, registry and handover obligations are guarded. Tests: test_sales_agent_removal.py."
   },
   {
     "handler": "sales.start_cancellation",

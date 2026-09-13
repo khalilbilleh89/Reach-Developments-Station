@@ -43,6 +43,7 @@ export type ProjectSection =
   // Retained as a technical route key for domain components and historical
   // links; it is deliberately absent from ordinary PROJECT_NAVIGATION.
   | "pricing"
+  | "agent-buyer"
   | "sales"
   | "payments"
   | "collections"
@@ -133,6 +134,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "commercial",
     label: "Commercial",
     items: [
+      {
+        key: "agent-buyer",
+        label: "Agent/Buyer",
+        icon: "sales",
+        description: "Register buyers and their sales team, then connect a unit.",
+        visible: (roles) => hasAnyRole(roles, SALES_READERS),
+      },
       {
         key: "sales",
         label: "Sales",

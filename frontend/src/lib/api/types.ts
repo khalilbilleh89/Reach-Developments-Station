@@ -909,6 +909,11 @@ export interface SalesPolicy {
 }
 
 export interface SalesClient {
+  agent_country?: string | null;
+  agent_branch?: string | null;
+  agent_branch_leader?: string | null;
+  agent_name?: string | null;
+
   id: string;
   project_id: string;
   client_number: string;
@@ -974,6 +979,11 @@ export interface ReservationStatusEvent {
 }
 
 export interface Reservation extends SalesPriceFacts {
+  agent_country?: string | null;
+  agent_branch?: string | null;
+  agent_branch_leader?: string | null;
+  agent_name?: string | null;
+
   unit_reference: string;
   id: string;
   project_id: string;
@@ -1064,6 +1074,11 @@ export interface SaleTaxLine {
 }
 
 export interface SaleContract extends SalesPriceFacts {
+  agent_country?: string | null;
+  agent_branch?: string | null;
+  agent_branch_leader?: string | null;
+  agent_name?: string | null;
+
   unit_reference: string;
   price_per_gross_area: string | null;
   gross_area_unit: string | null;
