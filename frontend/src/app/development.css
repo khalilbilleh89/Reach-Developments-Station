@@ -226,3 +226,82 @@
   .consultant-workspace .consultant-stage-heading { align-items: flex-start; flex-direction: column; }
   .consultant-record-card dl { grid-template-columns: 1fr; }
 }
+/* Architectural property workspaces: spatial context without invented geometry. */
+.building-atlas { padding: 16px 24px 24px; }
+.atlas-toolbar { display: flex; justify-content: space-between; align-items: start; gap: 24px; }
+.atlas-toolbar p { margin: 8px 0 0; color: var(--text-muted); font-size: var(--text-xs); }
+.atlas-lens { display: grid; gap: 6px; font-size: var(--text-xs); color: var(--text-secondary); min-width: 180px; }
+.atlas-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 14px 0; font-size: var(--text-xs); color: var(--text-secondary); }
+.atlas-legend > span { display: inline-flex; align-items: center; gap: 7px; }
+.atlas-unit,.atlas-legend > span { --unit-colour: var(--text-muted); --unit-wash: var(--surface-secondary); }
+.atlas-unit[data-tone="success"],.atlas-legend > span[data-tone="success"] { --unit-colour: var(--success); --unit-wash: var(--success-soft); }
+.atlas-unit[data-tone="warning"],.atlas-legend > span[data-tone="warning"] { --unit-colour: var(--warning); --unit-wash: var(--warning-soft); }
+.atlas-unit[data-tone="accent"],.atlas-unit[data-tone="info"],.atlas-legend > span[data-tone="accent"],.atlas-legend > span[data-tone="info"] { --unit-colour: var(--accent); --unit-wash: var(--accent-soft); }
+.atlas-unit[data-tone="danger"],.atlas-legend > span[data-tone="danger"] { --unit-colour: var(--danger); --unit-wash: var(--danger-soft); }
+.atlas-legend i,.atlas-unit-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--unit-colour); flex-shrink: 0; }
+.atlas-buildings { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,28rem),1fr)); align-items: start; gap: 24px; }
+.atlas-building { min-width: 0; margin: 0; border: 1px solid var(--line-default); border-radius: 10px; overflow: hidden; }
+.atlas-building > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--line-default); }
+.atlas-building h3 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; margin: 6px 0 0; }
+.atlas-building > header > span,.atlas-building > footer { font-size: var(--text-xs); color: var(--text-secondary); }
+.atlas-floors { background: var(--surface-secondary); padding: 8px 24px; }
+.atlas-floor { display: grid; grid-template-columns: 60px minmax(0,1fr); gap: 20px; padding: 12px 0; align-items: center; }
+.atlas-floor + .atlas-floor { border-top: 1px solid var(--line-default); }
+.atlas-floor-label { display: grid; gap: 4px; color: var(--text-secondary); }
+.atlas-floor-label span { font-size: var(--text-xs); }
+.atlas-floor-label strong { font-size: 1.35rem; font-weight: 500; overflow-wrap: anywhere; }
+.atlas-units { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,170px),1fr)); gap: 12px; min-width: 0; }
+.atlas-unit { position: relative; background: var(--surface); border: 1px solid var(--line-default); border-top: 3px solid var(--unit-colour); border-radius: 6px; padding: 12px; min-width: 0; transition: border-color 160ms, box-shadow 160ms; }
+.atlas-unit:hover,.atlas-unit:focus-within { border-color: var(--unit-colour); box-shadow: 0 3px 12px var(--accent-ring); }
+.atlas-unit-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.atlas-unit-top a { font-size: 1rem; font-weight: 650; color: var(--text-primary); overflow-wrap: anywhere; text-decoration: none; }
+.atlas-unit-top a::after { content: ""; position: absolute; inset: 0; }
+.atlas-unit-top a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.atlas-unit-state { display: inline-block; color: var(--unit-colour); background: var(--unit-wash); border-radius: 3px; font-size: .68rem; padding: 3px 6px; margin: 8px 0 10px; }
+.atlas-unit-facts { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: var(--text-xs); color: var(--text-secondary); }
+.atlas-unit-price { display: block; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); font-size: var(--text-sm); font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.atlas-building > footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--line-default); }
+.land-register-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.land-register-toolbar > :first-child { flex: 1; min-width: 0; }
+.land-register-toolbar .land-layout-controls { flex-shrink: 0; }
+.land-register-toolbar .data-toolbar { border: 0; background: transparent; padding-inline: 0; }
+.parcel-architectural { grid-template-columns: minmax(0,2fr) minmax(240px,1fr); border-radius: 6px; }
+.parcel-architectural .parcel-estate-identity { background: var(--surface); border-top: 3px solid var(--accent); padding: 26px 28px 22px; }
+.parcel-architectural .parcel-estate-title { margin: 18px 0; }
+.parcel-architectural .parcel-estate-title h2 { font-size: clamp(3rem,5vw,5rem); }
+.parcel-architectural .parcel-estate-area strong { font-size: clamp(2rem,3vw,3rem); }
+.parcel-architectural .parcel-estate-context { background: var(--surface-secondary); }
+.parcel-architectural .parcel-estate-facts .kv { gap: 20px 32px; }
+.parcel-architectural .parcel-estate-context h3 { font-family: var(--font-display); font-size: 1.5rem; }
+.development-workspace .page-head { padding-bottom: 16px; margin-bottom: 20px; gap: 12px; }
+.development-workspace .page-title { font-size: clamp(2rem,2.8vw,2.6rem); }
+.development-workspace .page-subtitle { font-size: .85rem; margin-top: 6px; }
+@media (max-width: 760px) {
+  .building-atlas { padding: 16px; }
+  .atlas-toolbar { flex-direction: column; gap: 16px; }
+  .atlas-lens { width: 100%; }
+  .atlas-building > header { padding: 18px; align-items: flex-start; }
+  .atlas-floors { padding: 0 14px; }
+  .atlas-floor { grid-template-columns: 1fr; gap: 12px; }
+  .atlas-floor-label { display: flex; align-items: baseline; gap: 8px; }
+  .atlas-units { grid-template-columns: repeat(auto-fill,minmax(min(100%,150px),1fr)); }
+  .atlas-building > footer { padding: 14px; }
+  .parcel-architectural { grid-template-columns: 1fr; }
+  .land-register-toolbar { flex-wrap: wrap; gap: 8px; }
+  .land-register-toolbar > :first-child { flex-basis: 100%; }
+}
+@media (max-width: 600px) {
+  .development-nav { margin-bottom: 16px; padding-bottom: 10px; gap: 6px; }
+  .development-nav-label { display: none; }
+  .development-nav-links { display: flex; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }
+  .development-nav-links a { flex-shrink: 0; }
+  .parcel-architectural .parcel-estate-title { flex-direction: row; align-items: center; gap: 16px; }
+  .parcel-architectural .parcel-estate-title h2 { font-size: 2.8rem; }
+  .parcel-architectural .parcel-estate-area { text-align: right; }
+  .parcel-architectural .parcel-estate-area strong { font-size: 1.7rem; }
+  .parcel-architectural .parcel-estate-area span { display: block; max-width: 8rem; }
+}
+@media (max-width: 760px) {
+  .development-workspace .stock-register-heading { flex-direction: column; align-items: stretch; gap: 16px; padding: 18px; }
+  .stock-register-heading .stock-view-controls { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
+}

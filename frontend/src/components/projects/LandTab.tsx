@@ -450,11 +450,11 @@ export function LandTab({
         }
       />
 
-      <div className="stack">
+      <div className="stack land-workspace">
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-        <DataToolbar
+        <div className="land-register-toolbar"><DataToolbar
           framed
           search={{
             value: search,
@@ -466,7 +466,7 @@ export function LandTab({
           onReset={search ? () => setSearch("") : undefined}
         />
 
-        <div className="land-layout-controls" aria-label="Land presentation"><Button small aria-pressed={layout === "parcels"} onClick={() => setLayout("parcels")}>Parcels</Button><Button small aria-pressed={layout === "schedule"} onClick={() => setLayout("schedule")}>Schedule</Button></div>
+        <div className="land-layout-controls" aria-label="Land presentation"><Button small aria-pressed={layout === "parcels"} onClick={() => setLayout("parcels")}>Parcels</Button><Button small aria-pressed={layout === "schedule"} onClick={() => setLayout("schedule")}>Schedule</Button></div></div>
         <div className="land-register-surface">
           {parcels === null ? (
             <Loading label="Loading the land register…" shape="rows" rows={5} />

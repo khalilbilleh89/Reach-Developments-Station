@@ -105,3 +105,15 @@ Financial analysis retains the existing currency-separated monthly cash view;
 additional imagery/charts need appropriate source data and a focused follow-up.
 
 White redesign delivery: #328 targets main and includes #327 at b82d0e3. Full frontend lint and production build passed. Final frontend CI is triggered by this documentation commit after retargeting; draft status remains until independent acceptance.
+
+## Architectural property pass (supersedes the previous delivery exception)
+
+After reviewing public real-estate product examples, the owner authorized a creative implementation focused on Inventory and Land. Branch eng/architectural-property-workspace starts from main after merged #328. Deliver as one PR; there is no dependent stack needed for this contained pass.
+
+Inventory now starts with a building/floor schematic, selectable full-record links, commercial/delivery colour lenses and a dynamic text legend. Equal-width tiles carry no physical layout or area-proportional meaning; floors follow register order. Counts and groups explicitly cover the current filtered page. Property cards and schedule remain available. All prices use existing currency/visibility/stale-price handling.
+
+Land has a compact search/view toolbar, architectural parcel identity, readable area typography and a lighter acquisition/planning context. Mobile navigation becomes one scrollable row; all links remain accessible. No fabricated site plan, geographic shape, stock photography or API data is introduced.
+
+The frontend-only CI exception now applies solely to this exact same-repository branch targeting main, using the complete allowlisted diff. Earlier delivery branches no longer qualify. No backend application tests or changes, dependencies, endpoints, schema or financial formula changes. Full-page records, removal, history and unsaved-change handling are retained. Independent review precedes merge.
+
+Architectural pass validation: 120 frontend tests, full ESLint, production Next.js build and 39 isolated CI routing checks passed. Desktop/multi-building and 390px mobile sample previews inspected; no document overflow on Land/Inventory. Temporary sample routes removed. Final GitHub CI runs when the completed draft is opened.
