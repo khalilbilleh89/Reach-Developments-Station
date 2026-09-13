@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, projects, settings } from "@/lib/api";
 import type { DocumentReference, LandParcel, PlanningControl, ReferenceValue } from "@/lib/api";
 import { businessDate, fractionFromPercent, money, percent, percentInput } from "@/lib/format";
-import { sectionDescription } from "@/components/shell/navigation";
+import { projectHref, sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
   Button,
@@ -945,8 +945,11 @@ export function LandTab({
 
               {planning && !editingPlanning ? (
                 <>
+                  <div className="land-envelope">
                   <KeyValueGrid columns={3}>
-                    <KeyValue label="Permitted uses" value={planning.permitted_uses} />
+                    <KeyValue label="Maximum GFA" value={measurement(planning.maximum_gfa, selected.area_unit)} />
+                    <KeyValue label="Maximum floors" value={planning.maximum_floors?.toString() ?? "Not recorded"} />
+                    <KeyValue label="Maximum height · recorded units" value={measurement(planning.maximum_height)} />
                     <KeyValue
                       label="Site coverage"
                       value={
@@ -956,18 +959,17 @@ export function LandTab({
                       }
                     />
                     <KeyValue label="Floor area ratio" value={measurement(planning.far_ratio)} />
-                    <KeyValue label="Maximum GFA" value={measurement(planning.maximum_gfa, selected.area_unit)} />
-                    <KeyValue
-                      label="Maximum floors"
-                      value={planning.maximum_floors?.toString() ?? null}
-                    />
-                    <KeyValue label="Maximum height" value={planning.maximum_height} />
-                    <KeyValue label="Front setback" value={planning.front_setback} />
-                    <KeyValue label="Side setback" value={planning.side_setback} />
-                    <KeyValue label="Rear setback" value={planning.rear_setback} />
+                    <KeyValue label="Permitted uses" value={planning.permitted_uses} />
+                  </KeyValueGrid>
+                  </div>
+                  <SectionHeader title="Setbacks & minimums" description="Linear dimensions retain the units of the recorded planning decision." />
+                  <KeyValueGrid columns={3}>
+                    <KeyValue label="Front setback" value={measurement(planning.front_setback)} />
+                    <KeyValue label="Side setback" value={measurement(planning.side_setback)} />
+                    <KeyValue label="Rear setback" value={measurement(planning.rear_setback)} />
                     <KeyValue label="Minimum plot area" value={measurement(planning.minimum_plot_area, selected.area_unit)} />
-                    <KeyValue label="Minimum frontage" value={planning.minimum_frontage} />
-                    <KeyValue label="Density" value={planning.density} />
+                    <KeyValue label="Minimum frontage" value={measurement(planning.minimum_frontage)} />
+                    <KeyValue label="Density" value={measurement(planning.density)} />
                   </KeyValueGrid>
                   {planning.parking_requirement ? (
                     <>
@@ -1262,6 +1264,7 @@ export function LandTab({
               <SectionHeader
                 title="Documents"
                 description="Title deeds, surveys and planning decisions linked to this parcel. Files open at their recorded source."
+                actions={<a className="button" href={projectHref(projectId, "documents")}>Open project documents</a>}
               />
               {documentsError ? <><Notice tone="error">Supporting documents could not be loaded.</Notice><Button onClick={() => { setDocumentsError(false); void projects.documents(projectId, selected.id ? {parcel_id: selected.id} : {}).then(setDocuments).catch(() => setDocumentsError(true)); }}>Retry documents</Button></> : documents === null ? (
                 <Loading label="Loading documents…" shape="rows" rows={3} />
