@@ -1338,9 +1338,10 @@ PERMIT_TRANSITIONS: dict[str, frozenset[str]] = {
         }
     ),
     "approved_with_conditions": frozenset({"issued", "expired", "on_hold", "withdrawn"}),
-    "issued": frozenset({"expired", "renewed"}),
+    "issued": frozenset({"expired", "renewed", "completed"}),
     "expired": frozenset({"renewed"}),
-    "renewed": frozenset({"expired"}),
+    "renewed": frozenset({"expired", "completed"}),
+    "completed": frozenset(),
     "rejected": frozenset({"preparing", "withdrawn"}),
     "on_hold": frozenset(
         {
@@ -1358,10 +1359,6 @@ PERMIT_TRANSITIONS: dict[str, frozenset[str]] = {
     "withdrawn": frozenset(),
 }
 
-#: Moves a person has to explain. Each one either stops the application or
-#: restarts it after a refusal, and "why" is the part that matters later.
-_REASON_REQUIRED = frozenset({"rejected", "on_hold", "withdrawn", "preparing"})
-
 #: Which milestone a transition establishes, when that date is not already set.
 _MILESTONE_FOR_STATUS = {
     "submitted": "actual_submission_date",
@@ -1376,7 +1373,7 @@ _MILESTONE_FOR_STATUS = {
 #: A prerequisite counts as met only when the permit it names actually exists in
 #: force. ``approved_with_conditions`` deliberately does not qualify: conditions
 #: are exactly what is not yet satisfied.
-_SATISFYING_STATUSES = frozenset({"issued", "renewed"})
+_SATISFYING_STATUSES = frozenset({"issued", "renewed", "completed"})
 
 #: Bound on prerequisite-chain traversal. Chains are a handful of permits deep;
 #: the bound exists so a cycle introduced by some future path cannot hang a
@@ -1392,8 +1389,10 @@ def _sla_overdue_clause(today: date) -> ColumnElement[bool]:
     row's own ``sla_overdue`` must never be able to disagree about what overdue
     means, which they would the moment the rule were written out twice.
     """
-    return (Permit.statutory_sla_days.is_not(None)) & (
-        Permit.status_effective_date + Permit.statutory_sla_days < today
+    return (
+        (Permit.status != "completed")
+        & (Permit.statutory_sla_days.is_not(None))
+        & (Permit.status_effective_date + Permit.statutory_sla_days < today)
     )
 
 
@@ -1869,14 +1868,6 @@ def transition_permit(
         raise ConflictError("The permit is already in that status.")
     if to_status not in PERMIT_TRANSITIONS[from_status]:
         raise ConflictError(f"A permit cannot move from {from_status} to {to_status}.")
-    # ``preparing`` needs a reason only when it restarts a refused application;
-    # the very first move off ``not_started`` is just work beginning.
-    if (
-        to_status in _REASON_REQUIRED
-        and from_status != PERMIT_STATUS_NOT_STARTED
-        and not (reason or "").strip()
-    ):
-        raise ValidationError(f"A reason is required when moving a permit to {to_status}.")
     if effective_date < permit.status_effective_date:
         raise ValidationError(
             "The effective date cannot be earlier than the current status effective date."
@@ -1888,7 +1879,7 @@ def transition_permit(
         from_status=from_status,
         to_status=to_status,
         effective_date=effective_date,
-        reason=reason.strip() if reason else None,
+        reason=(reason or "").strip() or None,
         notes=notes.strip() if notes else None,
         changed_by_user_id=actor_user_id,
     )
@@ -1932,7 +1923,7 @@ def derive_permit_metrics(
     days_in_stage = (now - permit.status_effective_date).days
 
     sla_days_remaining: int | None = None
-    if permit.statutory_sla_days is not None:
+    if permit.statutory_sla_days is not None and permit.status != "completed":
         sla_days_remaining = permit.statutory_sla_days - days_in_stage
 
     # Actual beats forecast: once something has happened, the estimate of it is

@@ -75,9 +75,10 @@ const TRANSITIONS: Record<string, string[]> = {
     "withdrawn",
   ],
   approved_with_conditions: ["issued", "expired", "on_hold", "withdrawn"],
-  issued: ["expired", "renewed"],
+  issued: ["completed", "expired", "renewed"],
   expired: ["renewed"],
-  renewed: ["expired"],
+  renewed: ["completed", "expired"],
+  completed: [],
   rejected: ["preparing", "withdrawn"],
   on_hold: [
     "preparing",
@@ -101,6 +102,7 @@ const STATUS_LABELS: Record<string, string> = {
   resubmission: "Resubmission",
   approved_with_conditions: "Approved with conditions",
   issued: "Obtained / Issued",
+  completed: "Completed",
   expired: "Expired",
   renewed: "Renewed",
   rejected: "Rejected",
@@ -125,15 +127,13 @@ const STATUS_TONES: Record<string, Tone> = {
   resubmission: "warning",
   approved_with_conditions: "success",
   issued: "success",
+  completed: "success",
   expired: "danger",
   renewed: "success",
   rejected: "danger",
   on_hold: "warning",
   withdrawn: "muted",
 };
-
-/** Moves the API requires an explanation for. */
-const REASON_REQUIRED = new Set(["rejected", "on_hold", "withdrawn", "preparing"]);
 
 function slaLabel(permit: Permit): string {
   if (permit.sla_days_remaining === null) return "—";
@@ -705,7 +705,7 @@ function PermitFile({
             <section>
               <SectionHeader
                 title="Change status"
-                description="Recorded with the date it took effect and the reason, and kept in the history. Status is never edited as a field."
+                description="Recorded with the date it took effect and kept in the history. You may add a reason, but it is optional."
               />
               <DraftBoundary dirty={JSON.stringify(move) !== JSON.stringify(moveBaseline)} busy={busy} onDiscard={() => setMove(moveBaseline)}>
                 <form onSubmit={transition}>
@@ -736,12 +736,10 @@ function PermitFile({
                     </Field>
                     <Field
                       label="Reason"
-                      optional={!REASON_REQUIRED.has(move.to_status)}
-                      hint={REASON_REQUIRED.has(move.to_status) ? "Required for this move." : undefined}
+                      optional
                     >
                       <input
                         className="input"
-                        required={REASON_REQUIRED.has(move.to_status)}
                         value={move.reason}
                         onChange={(event) => setMove({ ...move, reason: event.target.value })}
                       />

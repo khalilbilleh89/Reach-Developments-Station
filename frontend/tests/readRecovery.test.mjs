@@ -7,6 +7,26 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test("Issued permits offer Completed and submit without a mandatory reason", async () => {
+  const calls = [];
+  const permit = { id: "permit", permit_code: "TEST", status: "issued", prerequisite_satisfied: true };
+  const render = mount("projects/PermitsTab", "PermitFile", {
+    "@/lib/api": { projects: { permitHistory: async () => [], transitionPermit: async (...args) => { calls.push(args); return { ...permit, status: "completed" }; } } },
+    "@/lib/format": { todayISO: () => "2026-09-12", businessDate: value => value },
+  }, { projectId: "project", permit, types: [], permits: [], canWrite: true, canDelete: false,
+    typeLabel: value => value, onClose() {}, onNotice() {}, onChanged: async () => {} });
+  render(); await settle();
+  const choice = nodes(render()).find(n => n.type === "Field" && n.props.label === "Move to").props.children;
+  assert.ok(nodes(choice).some(n => n.type === "option" && n.props.value === "completed" && n.props.children === "Completed"));
+  choice.props.onChange({ target: { value: "completed" } });
+  const reason = nodes(render()).find(n => n.type === "Field" && n.props.label === "Reason");
+  assert.equal(reason.props.optional, true);
+  assert.ok(!reason.props.children.props.required);
+  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(calls[0][2].to_status, "completed");
+  assert.ok(!("reason" in calls[0][2]));
+});
+
 test("Permit deletion waits for confirmation and keeps server refusal visible", async () => {
   const calls = []; let removed = 0;
   class ApiError extends Error {}

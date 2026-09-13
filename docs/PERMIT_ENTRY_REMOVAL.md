@@ -1,5 +1,23 @@
 # Permit entry and removal
 
+## Completion
+
+Issued and Renewed permits can move to **Completed**, a final operational status.
+It remains visible in the register and history, satisfies prerequisite links and
+is excluded from overdue work and unresolved Portfolio permit risks. Completing
+a permit does not change its issue/expiry dates or establish new authority approval.
+The status effective date records when completion took effect. Reasons are optional
+for all permit transitions; actor, date and status history remain mandatory.
+
+Migration 0026 extends the permit and event status checks. Downgrade is refused
+while any completed row or event exists, including retained/deleted permits, so
+history is not silently rewritten. Back up before deployment; roll forward if
+completion history has already been recorded.
+
+Migration 0027 merges the parallel permit-completion and common-area histories.
+It changes no tables or records and preserves both 0026 revisions. Migration
+tests verify upgrading from either branch to the single merged head.
+
 Add permit opens a full-page editor. Identity, current status and effective date,
 scope, owners, application details, dates, fee, conditions and management flags
 can be supplied in one save. An optional new permit type is created in the same
