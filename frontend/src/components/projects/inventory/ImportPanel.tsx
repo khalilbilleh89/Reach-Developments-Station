@@ -109,8 +109,13 @@ export function ImportPanel({
   const ready = report !== null && report.error_count === 0 && !report.applied;
   const records = report?.structure.records ?? null;
 
+  if (advanced) return <div className="stack">
+    <Button data-leaves-editor onClick={() => setAdvanced(false)}>Back to workbook import</Button>
+    <CsvImport projectId={projectId} onApplied={onApplied} />
+  </div>;
+
   return (
-    <DraftBoundary dirty={bytes !== null && !report?.applied} busy={busy}>
+    <DraftBoundary dirty={bytes !== null && !report?.applied} busy={busy} onDiscard={() => { setBytes(null); setFilename(""); setSize(0); reset(); }}>
     <div className="stack">
       <ol className="inventory-import-steps" aria-label="Import progress">
         <li aria-current={bytes === null ? "step" : undefined}><strong>1</strong> Prepare workbook</li>
@@ -209,7 +214,6 @@ export function ImportPanel({
           {advanced ? "Hide advanced CSV import" : "Advanced CSV import"}
         </Button>
       </div>
-      {advanced ? <CsvImport projectId={projectId} onApplied={onApplied} /> : null}
     </div>
     </DraftBoundary>
   );
@@ -295,7 +299,7 @@ function CsvImport({
   const ready = report !== null && report.error_count === 0 && !report.applied;
 
   return (
-    <DraftBoundary dirty={csv !== null && !report?.applied} busy={busy}>
+    <DraftBoundary dirty={csv !== null && !report?.applied} busy={busy} onDiscard={() => { setCsv(null); setFilename(""); setReport(null); }}>
     <div className="stack">
       <Notice tone="info">
         The CSV contract is unchanged. Use it for area schedules, custom fields and updates

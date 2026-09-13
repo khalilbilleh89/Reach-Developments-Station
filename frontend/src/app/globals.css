@@ -5331,6 +5331,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .land-cost-breakdown { margin: var(--space-4) 0; font-size: .875rem; }
 .land-parcel-list { display: none; }
 .unit-release-requirements { margin: var(--space-3) 0; padding-left: var(--space-5); }
+.inventory-measurement-guide { color: var(--text-secondary); font-size: .875rem; padding: var(--space-3) 0; }
+.inventory-measurement-guide summary { cursor: pointer; font-weight: 600; }
+.inventory-measurement-guide p { max-width: 75ch; line-height: 1.6; }
 .stock-view-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .stock-floor-groups { display: grid; gap: var(--space-5); padding: var(--space-5); }
 .stock-floor-group h3 { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-3); font-size: .95rem; }

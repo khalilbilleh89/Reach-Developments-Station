@@ -285,6 +285,9 @@ export function UnitWorkspace({
       headline={headline}
       actions={
         <>
+        <Button variant="primary" onClick={() => setSection(unit.release_blockers.length ? "release" : "detail")}>
+          {unit.release_blockers.length ? "Review requirements" : "View property"}
+        </Button>
         <UnitRemovalAction projectId={projectId} unitId={unitId} reference={unit.unit_reference} roles={roles}
           onRemoved={async () => { router.replace(`/projects/?project=${projectId}&section=inventory`); await onChanged(); }} />
         </>
