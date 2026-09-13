@@ -35,3 +35,9 @@ to discard tax history. Retain the schema and roll forward after use.
 No new entity/create endpoint is added. Draft rows retain Remove + Save schedule;
 governed rows retain revision/restructure. Existing plan/version deletion gaps
 remain recorded in deletion_contracts.json and are not claimed as resolved.
+## Migration convergence
+
+Revision `0029_merge_installment_tax` joins `0026_installment_tax` with
+`0028_merge_permit_sales`. The existing VAT, permit and Sales migrations remain
+unchanged. Convergence tests exercise both parents, verify one final head and
+check schema drift. Existing retained-history downgrade guards still apply.
