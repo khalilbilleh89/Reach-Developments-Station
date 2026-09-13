@@ -130,3 +130,11 @@ Single PR from main after #329: `eng/development-briefing`.
 Validation: 124 frontend tests, full ESLint and production Next.js build passed. Desktop and narrow-phone sample previews inspected; deliverable editor identity and Back checked. Temporary sample routes removed before build. 39 isolated CI workflow tests passed; no backend application tests run.
 
 CI: the existing complete-diff, same-repository frontend-only PR exception is restricted to this exact branch. The previous architectural branch no longer qualifies. Forks, unrelated paths and main pushes retain normal CI. This is a draft for independent review under ENGINEERING_RULES.md; no deployment claim.
+
+## Blue accents and icons — 13 September 2026
+
+Follow-up to merged #330, one PR on `eng/development-blue-icons`. Restore hidden Development page glyphs; give sidebar icons blue tiles and selected icons a solid blue treatment. Add explicit labelled Land/Consultant tab icons and Overview entry/diary icons using the existing SVG set. Pale blue highlights diary headers, parcel identity, building headers, record facts and secondary buttons. Main reading surfaces remain white; status colours and danger actions retain their meaning.
+
+Optional tab icons preserve text, accessible names and keyboard behavior. No icon dependency, inferred icon labels, API, records or financial calculations added. Desktop Overview/Permits and narrow-phone Consultant previews inspected; phone page width equals scroll width. Sample routes removed. Existing frontend tests (124) and isolated CI-routing tests (39) passed. Final lint/build and GitHub results are recorded in the PR.
+
+The same-repository, complete-diff frontend-only PR exception now applies only to this branch; merged briefing branch, main pushes, forks and unrelated paths retain normal CI. Draft review policy remains unchanged.

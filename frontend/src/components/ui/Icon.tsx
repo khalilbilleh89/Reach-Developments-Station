@@ -29,6 +29,9 @@ const PATHS = {
   plus: "M8 3v10M3 8h10",
   swap: "M4 6.5 6.5 4 9 6.5M6.5 4v8M12 9.5 9.5 12 7 9.5",
   filter: "M2.5 4h11M4.5 8h7M6.5 12h3",
+  blueprint: "M3 2.5h10v11H3ZM3 7h6M9 2.5v7h4M6 10v3.5",
+  history: "M2 7a6 6 0 1 1 1.5 5M2 2.5V7h4.5M8 4.5V8l2.5 1.5",
+  layers: "M8 2 14 5 8 8 2 5ZM2 8l6 3 6-3M2 11l6 3 6-3",
   // Places
   projects: "M2.5 5.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1Z",
   overview: "M2.5 2.5h4.5v4.5H2.5ZM9 2.5h4.5V6H9ZM9 8h4.5v5.5H9ZM2.5 9.5H7v4H2.5Z",

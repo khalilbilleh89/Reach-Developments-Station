@@ -345,3 +345,29 @@
   .stage-deliverables li > button { justify-self: start; }
   .permit-journey ol { gap: 6px; }
 }
+
+/* Blue is a secondary surface, while records and primary reading areas stay white. */
+.development-workspace { --dev-blue-wash: #f0f5ff; --dev-blue-line: #d7e3fa; }
+.development-workspace .page-glyph { display: grid; place-items: center; width: 48px; height: 48px; flex: none; border: 1px solid var(--dev-blue-line); border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
+.development-workspace .page-glyph .icon { width: 25px; height: 25px; }
+.development-workspace .workspace-facts,
+.development-workspace .atlas-building > header,
+.development-workspace .parcel-architectural .parcel-estate-identity { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
+.development-workspace .briefing-dates { border-top: 3px solid var(--accent); }
+.development-workspace .briefing-dates > header { background: var(--dev-blue-wash); margin: -24px -24px 20px; padding: 20px 24px 10px; }
+.development-workspace .eyebrow:has(> .icon), .entry-label { display: inline-flex; align-items: center; gap: 9px; }
+.entry-label > .icon { width: 32px; height: 32px; padding: 7px; box-sizing: border-box; border-radius: 9px; color: var(--accent); background: var(--accent-soft); }
+.development-workspace .development-entry:hover { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
+.development-workspace .button:not(.button-primary):not(.button-danger):not(.button-link):not(.button-quiet) { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); color: var(--accent); }
+.development-workspace .button:not(.button-primary):not(.button-danger):not(.button-link):not(.button-quiet):hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+.development-workspace .tab { display: inline-flex; align-items: center; gap: 8px; }
+.development-workspace .tab > .icon { width: 17px; height: 17px; flex: none; color: var(--accent); }
+.development-workspace .tab-active { box-shadow: inset 0 -2px var(--accent); }
+.development-nav-links a[aria-current="page"] { background: var(--accent-soft); border-color: var(--dev-blue-line); }
+.sidebar .nav-icon, .nav-page .nav-icon { width: 26px; height: 26px; padding: 4px; box-sizing: border-box; border-radius: 7px; background: var(--accent-soft); color: var(--accent); }
+.sidebar .nav-item[aria-current="page"] .nav-icon, .nav-page .nav-item[aria-current="page"] .nav-icon { color: var(--accent-contrast); background: var(--accent); }
+@media (max-width: 600px) {
+  .development-workspace .page-glyph { width: 38px; height: 38px; border-radius: 11px; }
+  .development-workspace .page-glyph .icon { width: 21px; height: 21px; }
+  .development-workspace .briefing-dates > header { margin: -18px -18px 16px; padding: 16px 18px 8px; flex-wrap: wrap; gap: 4px; }
+}

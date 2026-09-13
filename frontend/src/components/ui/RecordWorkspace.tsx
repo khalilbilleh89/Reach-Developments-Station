@@ -38,7 +38,7 @@ export function RecordLink({ projectId, kind, id, tab, children, className = "bu
 export function RecordWorkspace({ projectId, kind, eyebrow, icon, title, subtitle, meta, status, headline, facts, actions, tabs, activeTab, onSelectTab, children }: {
   projectId: string; kind: RecordKind; eyebrow?: string; icon?: IconName; title: string; subtitle?: ReactNode;
   meta?: ReactNode; status?: ReactNode; headline?: WorkspaceHeadline; facts?: WorkspaceFact[]; actions?: ReactNode;
-  tabs?: { key: string; label: string }[]; activeTab?: string; onSelectTab?: (key: string) => void; children: ReactNode;
+  tabs?: { key: string; label: string; icon?: IconName }[]; activeTab?: string; onSelectTab?: (key: string) => void; children: ReactNode;
 }) {
   const params = useSearchParams(), router = useRouter(), heading = useRef<HTMLHeadingElement>(null);
   const identity = `${kind}:${params.get("unit") ?? params.get("sale") ?? params.get("reservation") ?? params.get("plan")}`;

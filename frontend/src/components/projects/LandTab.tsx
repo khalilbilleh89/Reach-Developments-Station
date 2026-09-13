@@ -807,11 +807,11 @@ export function LandTab({
             ) : undefined
           }
           tabs={[
-            { key: "overview", label: "Overview" },
-            { key: "planning", label: "Planning" },
-            { key: "site", label: "Site & utilities" },
-            { key: "documents", label: "Documents" },
-            { key: "analytics", label: "Analytics" },
+            { key: "overview", icon: "overview", label: "Overview" },
+            { key: "planning", icon: "blueprint", label: "Planning" },
+            { key: "site", icon: "land", label: "Site & utilities" },
+            { key: "documents", icon: "documents", label: "Documents" },
+            { key: "analytics", icon: "economics", label: "Analytics" },
           ]}
           activeTab={section}
           onSelectTab={setSection}

@@ -96,7 +96,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
       </Position>
     </Card> : !readError ? <Loading label="Loading consultant agreement" shape="page" /> : null}
     {data && !current ? <EmptyState title="No active or draft agreement" hint="A consultant agreement establishes the appointment and its design programme. Previous agreements remain in the history below." /> : null}
-    {data ? <Tabs label="Consultant views" tabs={[{key:"agreement",label:"Agreement"},{key:"programme",label:"Programme"},{key:"disciplines",label:"Disciplines"},{key:"deliverables",label:"Deliverables"},{key:"history",label:"History"}]} active={section} onSelect={setSection} /> : null}
+    {data ? <Tabs label="Consultant views" tabs={[{key:"agreement",icon:"documents",label:"Agreement"},{key:"programme",icon:"calendar",label:"Programme"},{key:"disciplines",icon:"layers",label:"Disciplines"},{key:"deliverables",icon:"blueprint",label:"Deliverables"},{key:"history",icon:"history",label:"History"}]} active={section} onSelect={setSection} /> : null}
     <TabPanel group="Consultant views" tab={section}>
     {selected && section !== "history" ? <>
       <Card title={selected.consultant_name} description="Consultant agreement and design programme" actions={current && selected.id !== current.id ? <Button small onClick={() => setSelectedId(current.id)}>Return to current agreement</Button> : undefined}>

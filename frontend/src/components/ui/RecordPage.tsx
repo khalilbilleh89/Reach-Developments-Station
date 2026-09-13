@@ -62,7 +62,7 @@ export function RecordPage({
   facts?: RecordPageFact[];
   /** Contextual actions beside Close: the one or two things this record invites. */
   actions?: ReactNode;
-  tabs?: { key: string; label: string }[];
+  tabs?: { key: string; label: string; icon?: IconName }[];
   activeTab?: string;
   onSelectTab?: (key: string) => void;
   onClose: () => void;

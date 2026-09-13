@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import { Icon, type IconName } from "./Icon";
 
 /** A stable, unique id stem for one tab group, taken from its label. */
 function slug(label: string): string {
@@ -29,7 +30,7 @@ export function Tabs({
   variant = "workspace",
 }: {
   label: string;
-  tabs: { key: string; label: string }[];
+  tabs: { key: string; label: string; icon?: IconName }[];
   active: string;
   onSelect: (key: string) => void;
   group?: string;
@@ -96,7 +97,7 @@ export function Tabs({
             }
           }}
         >
-          {tab.label}
+          {tab.icon ? <Icon name={tab.icon} /> : null}{tab.label}
         </button>
       ))}
     </div>
