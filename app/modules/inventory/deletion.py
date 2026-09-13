@@ -27,8 +27,96 @@ from app.modules.inventory.models import (
     UnitStatusEvent,
     UserPhaseAccess,
 )
+from app.modules.inventory.permissions import require_operational_project
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
+
+
+def list_removed_units(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    search: str | None,
+    limit: int,
+    offset: int,
+) -> list[Unit]:
+    """Only the owner may discover retained removals, within this project."""
+    if not actor.is_master_admin:
+        raise PermissionDeniedError("Only Master Administrator may view removed units.")
+    statement = select(Unit).where(Unit.project_id == project.id, Unit.removed_at.is_not(None))
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        statement = statement.where(
+            Unit.unit_reference.ilike(pattern) | Unit.unit_number.ilike(pattern)
+        )
+    return list(
+        session.scalars(
+            statement.order_by(Unit.unit_reference, Unit.id).limit(limit).offset(offset)
+        )
+    )
+
+
+def restore_unit(
+    session: Session, *, project: Project, actor: ActorContext, identifier: uuid.UUID, reason: str
+) -> Unit:
+    """Recover the original identity and current visibility without rewriting history."""
+    if not actor.is_master_admin:
+        raise PermissionDeniedError("Only Master Administrator may restore a removed unit.")
+    if not reason.strip():
+        raise ValidationError("Give a reason for restoring this unit.")
+    project = lock_project(session, project.id)
+    unit = session.scalar(
+        select(Unit)
+        .where(Unit.id == identifier, Unit.project_id == project.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if unit is None:
+        raise NotFoundError("Unit not found.")
+    require_operational_project(project)
+    if unit.removed_at is None:
+        return unit
+    active_hierarchy = session.scalar(
+        select(Floor.id)
+        .join(Building, Building.id == Floor.building_id)
+        .join(Phase, Phase.id == Building.phase_id)
+        .where(
+            Floor.id == unit.floor_id,
+            Floor.project_id == project.id,
+            Building.project_id == project.id,
+            Phase.project_id == project.id,
+            Floor.is_active.is_(True),
+            Building.is_active.is_(True),
+            Phase.is_active.is_(True),
+        )
+    )
+    if active_hierarchy is None:
+        raise ConflictError("Reactivate the unit's phase, building and floor before restoring it.")
+    before = {"removed_at": unit.removed_at.isoformat(), "is_active": unit.is_active}
+    unit.removed_at = None
+    unit.is_active = True
+    record_event(
+        session,
+        action="unit.restored",
+        entity_type="unit",
+        entity_id=unit.id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        reason=reason.strip(),
+        before=before,
+        after={
+            "project_id": str(project.id),
+            "reference": unit.unit_reference,
+            "removed_at": None,
+            "is_active": True,
+            "commercial_status": unit.commercial_status,
+            "linked_history_retained": True,
+        },
+    )
+    session.commit()
+    session.refresh(unit)
+    return unit
 
 
 def delete_record(
@@ -39,7 +127,10 @@ def delete_record(
     kind: str,
     identifier: uuid.UUID,
     reason: str,
+    permanent: bool = False,
 ) -> None:
+    if permanent and kind != "units":
+        raise ValidationError("Explicit permanent deletion is supported for units only.")
     if kind == "units" and not actor.is_master_admin:
         raise PermissionDeniedError("Only Master Administrator may remove a unit.")
     if not actor.is_system_admin:
@@ -69,9 +160,14 @@ def delete_record(
     )
     if row is None:
         raise NotFoundError("Inventory record not found.")
-    if isinstance(row, Unit) and row.removed_at is not None:
+    if isinstance(row, Unit) and row.removed_at is not None and not permanent:
         return
     if isinstance(row, Unit) and row.commercial_status not in {"unreleased", "available", "held"}:
+        if permanent:
+            raise ConflictError(
+                "This unit has a commercial commitment. Permanent deletion is blocked; "
+                "its sales, financial and legal history must be retained."
+            )
         remove_unit(session, project=project, actor=actor, identifier=identifier, reason=reason)
         return
     if isinstance(row, UnitAreaSchedule) and row.status != "draft":
@@ -134,6 +230,26 @@ def delete_record(
         session.commit()
     except IntegrityError as exc:
         session.rollback()
+        if kind == "units" and permanent:
+            # Report a safe business label, never a raw PostgreSQL exception.
+            table = getattr(getattr(exc.orig, "diag", None), "table_name", None)
+            label = {
+                "unit_price_versions": "unit price versions",
+                "unit_price_components": "unit price components",
+                "reservations": "reservations",
+                "sale_contracts": "sale contracts",
+                "commission_grants": "commissions",
+                "unit_stage_events": "construction progress",
+                "unit_economics_allocations": "cost allocations",
+                "unit_economics_unit_costs": "unit costs",
+                "inventory_sub_assets": "parking or storage assets",
+                "inventory_common_areas": "common-area allocations",
+            }.get(table, "dependent business records")
+            raise ConflictError(
+                f"Permanent deletion is blocked by linked {label}. "
+                "No records were deleted. Review those records first, or keep this unit "
+                "in Removed units to preserve its history."
+            ) from exc
         if kind == "units":
             remove_unit(session, project=project, actor=actor, identifier=identifier, reason=reason)
             return

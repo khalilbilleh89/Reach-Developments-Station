@@ -6,6 +6,7 @@
 
 import { download, get, patch, post, postBinary, postCsv, put, remove } from "./client";
 import type {
+  RemovedUnit,
   InventoryOption,
   SalesUnitOption, SalesPricePreview, SalesTransaction,
   PreLaunchExpense,
@@ -438,6 +439,12 @@ export const inventory = {
     get<Unit>(`/projects/${projectId}/inventory/units/${unitId}`),
   createUnit: (projectId: string, input: Record<string, unknown>) =>
     post<Unit>(`/projects/${projectId}/inventory/units`, input),
+  removedUnits: (projectId: string, query: Record<string, string> = {}) =>
+    get<RemovedUnit[]>(`/projects/${projectId}/inventory/removed-units?${new URLSearchParams(query)}`),
+  restoreUnit: (projectId: string, unitId: string, reason: string) =>
+    post<Unit>(`/projects/${projectId}/inventory/units/${unitId}/restoration`, { reason }),
+  permanentlyDeleteUnit: (projectId: string, unitId: string, reason: string) =>
+    remove(`/projects/${projectId}/inventory/units/${unitId}?${new URLSearchParams({ reason, permanent: "true" })}`),
   updateUnit: (
     projectId: string,
     unitId: string,
