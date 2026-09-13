@@ -214,6 +214,7 @@ def test_invalid_inputs_and_linked_apartment(
     admin_client: TestClient,
     project_id: str,
     unit_id: str,
+    db: Session,
 ) -> None:
     for change in (
         {"area_sqm": "-1"},
@@ -232,11 +233,25 @@ def test_invalid_inputs_and_linked_apartment(
     assert response.status_code == 404
     created = admin_client.post(common_url(project_id), json=area_payload(apartment=unit_id))
     assert created.status_code == 201
-    # Existing unit removal catches the restrictive FK and preserves both records.
+    # Ordinary administrators cannot remove units, including linked apartments.
     response = admin_client.delete(
         f"{inventory_url(project_id)}/units/{unit_id}", params={"reason": "Test linked"}
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 403, response.text
+    owner = client_for(
+        make_user(db, email="feasibility-owner@example.com", roles=("master_admin",)).email
+    )
+    response = owner.delete(
+        f"{inventory_url(project_id)}/units/{unit_id}", params={"reason": "Test linked"}
+    )
+    assert response.status_code == 204, response.text
+    db.expire_all()
+    unit = db.get(Unit, uuid.UUID(unit_id))
+    assert unit is not None and unit.removed_at is not None and not unit.is_active
+    retained = admin_client.get(common_url(project_id))
+    assert retained.status_code == 200, retained.text
+    linked = next(row for row in retained.json() if row["id"] == created.json()["id"])
+    assert linked["apartment_id"] == unit_id
 
 
 def test_measurement_conversion_and_invalid_components() -> None:
