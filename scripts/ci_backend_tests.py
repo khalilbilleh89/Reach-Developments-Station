@@ -336,6 +336,7 @@ def domain_of_migration(path: str) -> str | None:
         "0024_merge_permits_inventory",
         "0027_merge_permit_common",
         "0028_merge_permit_sales",
+        "0029_merge_installment_tax",
     }:
         return None
     for domain in DOMAIN_TEST_PREFIXES:
@@ -343,6 +344,8 @@ def domain_of_migration(path: str) -> str | None:
             continue
         if stem.endswith(domain) or stem.endswith(domain.rstrip("s")):
             return domain
+    if stem == "0026_installment_tax":
+        return "payment_plans"
     if stem == "0025_prelaunch_master":
         return "cashflow"
     if stem in {"0023_inventory_options", "0026_common_areas"}:

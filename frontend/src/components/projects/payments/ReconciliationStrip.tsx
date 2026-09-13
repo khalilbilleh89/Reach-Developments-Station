@@ -67,7 +67,7 @@ export function ReconciliationStrip({
         <span className="reconcile-title">{ok ? "Reconciled." : "Does not reconcile."}</span>
         <span>
           {ok
-            ? "The schedule covers the contract exactly."
+            ? "Principal, tax and fees reconcile to the selected schedule basis."
             : "This schedule cannot be put forward yet."}
         </span>
         {ok ? null : (

@@ -79,8 +79,9 @@ ALLOCATION_MODES = ("percentage", "amount")
 ALLOCATION_PERCENTAGE = "percentage"
 ALLOCATION_AMOUNT = "amount"
 
-#: How the sale's frozen tax and buyer fees are spread across the instalments.
-CHARGE_ALLOCATION_MODES = ("pro_rata", "manual")
+#: Legacy charge allocation, or explicit per-installment VAT with pro-rata fees.
+CHARGE_ALLOCATION_MODES = ("pro_rata", "manual", "per_installment")
+CHARGE_PER_INSTALLMENT = "per_installment"
 CHARGE_PRO_RATA = "pro_rata"
 CHARGE_MANUAL = "manual"
 
@@ -232,10 +233,9 @@ class PaymentPlanVersion(Base):
     """One governing schedule, and the sale basis it was written against.
 
     The frozen basis is copied from the sale contract when the version is
-    created and never recomputed. Pricing is not consulted and tax is not
-    recalculated: the contract is already the truth about what the buyer owes,
-    and a schedule that re-derived it would eventually disagree with the
-    document the parties signed.
+    created and never recomputed. Legacy modes allocate that frozen tax.
+    Per-installment mode derives schedule VAT from explicitly entered row rates
+    while retaining this original sale basis for reference and staleness checks.
     """
 
     __tablename__ = "payment_plan_versions"
@@ -400,6 +400,8 @@ class PaymentPlanInstallment(Base):
 
     principal_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     principal_fraction: Mapped[Decimal] = mapped_column(RATE, nullable=False)
+    #: Fraction of principal: 0.05 means 5%; null preserves legacy tax allocation.
+    tax_rate_fraction: Mapped[Decimal | None] = mapped_column(RATE, nullable=True)
     tax_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0.00"))
     fee_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0.00"))
 
@@ -433,6 +435,15 @@ class PaymentPlanInstallment(Base):
         CheckConstraint("sequence >= 1", name="sequence_positive"),
         CheckConstraint("principal_amount >= 0", name="principal_nonneg"),
         CheckConstraint("tax_amount >= 0", name="tax_nonneg"),
+        CheckConstraint(
+            "tax_rate_fraction IS NULL OR (tax_rate_fraction >= 0 AND tax_rate_fraction <= 1)",
+            name="tax_rate_range",
+        ),
+        CheckConstraint(
+            "tax_rate_fraction IS NULL OR "
+            "tax_amount = round(principal_amount * tax_rate_fraction, 2)",
+            name="tax_rate_amount",
+        ),
         CheckConstraint("fee_amount >= 0", name="fee_nonneg"),
         CheckConstraint("grace_days >= 0", name="grace_nonneg"),
         CheckConstraint(

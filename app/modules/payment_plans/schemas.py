@@ -186,7 +186,9 @@ class InstallmentWrite(StrictRequest):
     grace_days: Annotated[int, Field(ge=0, le=365)] = 0
     principal_amount: Money | None = None
     principal_fraction: Fraction | None = None
-    #: Only read when the version allocates charges manually.
+    #: Required in per_installment mode: 0.05 means 5% of this row principal.
+    tax_rate_fraction: Fraction | None = None
+    #: Amount inputs are only read in manual mode.
     tax_amount: Money | None = None
     fee_amount: Money | None = None
     owner_user_id: uuid.UUID | None = None
@@ -244,6 +246,7 @@ class InstallmentRead(BaseModel):
     grace_days: int
     principal_amount: DecimalStr
     principal_fraction: DecimalStr
+    tax_rate_fraction: DecimalStr | None = None
     tax_amount: DecimalStr
     fee_amount: DecimalStr
     #: Principal + tax + fee, derived by the server.

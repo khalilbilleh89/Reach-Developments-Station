@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
+from app.core.errors import ValidationError
 from app.db.base import MONEY_EXPONENT
 
 #: The scale a stored fraction carries, matching the RATE column. A fraction is
@@ -42,6 +43,13 @@ ZERO_MONEY = Decimal("0.00")
 def money(value: Decimal) -> Decimal:
     """Quantise an amount to the platform's monetary scale, half up."""
     return value.quantize(MONEY_EXPONENT, rounding=ROUND_HALF_UP)
+
+
+def installment_tax(principal: Decimal, rate: Decimal | None) -> Decimal:
+    """Tax on this principal, with independent half-up cent rounding."""
+    if rate is None or not rate.is_finite() or not Decimal("0") <= rate <= Decimal("1"):
+        raise ValidationError("Each instalment needs a VAT / Tax percentage from 0 to 100.")
+    return money(principal * rate)
 
 
 def fraction(value: Decimal) -> Decimal:

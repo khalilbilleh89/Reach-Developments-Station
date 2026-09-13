@@ -184,6 +184,14 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
 # Exact reviewed ownership: names alone must not certify an arbitrary migration.
 # New revisions register BOTH their owner and their own integrity test(s).
 MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "0026_installment_tax.py": (
+        "payment_plans",
+        ("tests/modules/test_payment_plan_tax.py::test_tax_migration_roundtrip",),
+    ),
+    "0029_merge_installment_tax.py": (
+        "payment_plans",
+        ("tests/test_migrations.py::test_sales_and_common_area_histories_converge",),
+    ),
     "0028_merge_permit_sales.py": (
         "projects",
         ("tests/test_migrations.py::test_sales_and_common_area_histories_converge",),

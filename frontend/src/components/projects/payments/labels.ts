@@ -46,6 +46,7 @@ const ALLOCATION_LABELS: Record<string, string> = {
 };
 
 const CHARGE_LABELS: Record<string, string> = {
+  per_installment: "VAT / Tax % per instalment",
   pro_rata: "Spread pro rata",
   manual: "Entered per instalment",
 };

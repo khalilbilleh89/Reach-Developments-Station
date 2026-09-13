@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0028_merge_permit_sales"
+HEAD_REVISION = "0029_merge_installment_tax"
 
 
 @pytest.mark.parametrize(
@@ -38,6 +38,8 @@ HEAD_REVISION = "0028_merge_permit_sales"
         "0026_common_areas",
         "0027_merge_sales_areas",
         "0027_merge_permit_common",
+        "0028_merge_permit_sales",
+        "0026_installment_tax",
     ],
 )
 def test_sales_and_common_area_histories_converge(postgres: None, starting_revision: str) -> None:

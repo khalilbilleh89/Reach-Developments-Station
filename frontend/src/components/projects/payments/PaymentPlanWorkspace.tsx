@@ -118,7 +118,7 @@ export function PaymentPlanWorkspace({
   const [detail, setDetail] = useState<PaymentPlanDetail | null>(null);
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [allocationMode, setAllocationMode] = useState("percentage");
-  const [chargeMode, setChargeMode] = useState("pro_rata");
+  const [chargeMode, setChargeMode] = useState("per_installment");
   const [requestedSection, setSection] = useRecordTab();
   const section = ["overview", "schedule", "reconciliation", "terms", "history"].includes(requestedSection) ? requestedSection : "overview";
   const router = useRouter(), params = useSearchParams();
@@ -171,7 +171,7 @@ export function PaymentPlanWorkspace({
       setDetail(body);
       if (body.current) {
         setAllocationMode(body.current.version.allocation_mode);
-        setChargeMode(body.current.version.charge_allocation_mode);
+        setChargeMode(body.current.installments.length === 0 ? "per_installment" : body.current.version.charge_allocation_mode);
         setRows(body.current.installments.map(rowFrom));
       }
       setError(null);
@@ -346,6 +346,7 @@ export function PaymentPlanWorkspace({
                   ),
                 }
               : { principal_amount: row.principal_amount }),
+            ...(chargeMode === "per_installment" ? { tax_rate_fraction: row.tax_rate_fraction.trim() === "" ? null : fractionFromPercent(row.tax_rate_fraction) } : {}),
             ...(chargeMode === "manual"
               ? {
                   tax_amount: row.tax_amount || "0.00",
@@ -439,15 +440,15 @@ export function PaymentPlanWorkspace({
   const collectionsStarted = detail.plan.collections_started_at !== null;
 
   // The figures every reader opens a plan for. All four are the version's own
-  // frozen basis and the server's reconciliation of the schedule against it.
+  // contract basis and server-derived schedule totals.
   const facts: WorkspaceFact[] = [
     {
       label: "Contract principal",
       value: money(version?.contract_value_covered ?? null, code),
     },
     {
-      label: "Total buyer payable",
-      value: money(version?.total_buyer_payable_snapshot ?? null, code),
+      label: "Scheduled buyer total",
+      value: money(shownDetail?.reconciliation.scheduled_buyer_total ?? null, code),
     },
     {
       label: "Instalments",
@@ -596,7 +597,7 @@ export function PaymentPlanWorkspace({
           <section>
             <SectionHeader level={2}
               title="Schedule totals"
-              description="The saved instalments must match the SPA amount before approval."
+              description="Principal and buyer fees must cover the contract; VAT / Tax follows the selected calculation mode."
             />
             <ReconciliationStrip
               reconciliation={shownDetail.reconciliation}
@@ -718,12 +719,13 @@ export function PaymentPlanWorkspace({
                       </option>
                     </select>
                   </Field>
-                  <Field label="Tax and buyer fees">
+                  <Field label="Tax and buyer fees" hint="Choose VAT / Tax % per instalment to apply different rates. Enter 0 explicitly for zero VAT. Save to recalculate each row and the plan total.">
                     <select
                       className="input"
                       value={chargeMode}
                       onChange={(event) => setChargeMode(event.target.value)}
                     >
+                      <option value="per_installment">VAT / Tax % per instalment</option>
                       <option value="pro_rata">
                         {chargeLabel("pro_rata")}
                       </option>
@@ -984,8 +986,8 @@ export function PaymentPlanWorkspace({
       {section === "terms" && version ? (
         <section>
           <SectionHeader level={2}
-            title="Basis"
-            description="Frozen from the contract when this version was created. Never recomputed."
+            title="Original contract basis"
+            description="Frozen when this version was created. Per-instalment VAT may change the scheduled tax and buyer total shown in Schedule totals."
           />
           <KeyValueGrid columns={3}>
             <KeyValue
@@ -1004,7 +1006,7 @@ export function PaymentPlanWorkspace({
               value={money(version.buyer_fee_total_snapshot, code)}
             />
             <KeyValue
-              label="Total buyer payable"
+              label="Original contract buyer payable"
               mono
               value={money(version.total_buyer_payable_snapshot, code)}
             />
