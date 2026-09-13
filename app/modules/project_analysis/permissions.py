@@ -16,6 +16,7 @@ READERS = {
     "fundamental": COMMON | {"sales_operations"},
     "financial": COMMON,
     "technical": COMMON | {"design_engineering"},
+    "feasibility": COMMON | {"design_engineering"},
 }
 
 
