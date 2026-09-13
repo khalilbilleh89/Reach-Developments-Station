@@ -92,12 +92,9 @@ export function InventoryTab({
   const [open, setOpen] = useState<"none" | "areas" | "import">("none");
   const [error, setError] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
-  // The unit is the record this business runs on, so it stays the view an
-  // operator lands on. The other three are beside it and equally first-class,
-  // which is the whole correction: they are no longer hidden inside a dialog
-  // called "Add structure".
-  const [viewFields, setViewFields] = useRegisterFields({ view: "units" });
-  const view = (["phases", "buildings", "floors", "units", "stock", "common_areas", "configuration"].includes(viewFields.view) ? viewFields.view : "units") as "phases" | "buildings" | "floors" | "units" | "stock" | "common_areas" | "configuration";
+  // Open the property browser first; preserve explicitly selected register views.
+  const [viewFields, setViewFields] = useRegisterFields({ view: "stock" });
+  const view = (["phases", "buildings", "floors", "units", "stock", "common_areas", "configuration"].includes(viewFields.view) ? viewFields.view : "stock") as "phases" | "buildings" | "floors" | "units" | "stock" | "common_areas" | "configuration";
   const [stockFields,setStockFields]=useRegisterFields({stock_areas:""});
   const setView = (view: string) => setViewFields({ view });
   const [addingUnit, setAddingUnit] = useState(false);

@@ -1,5 +1,34 @@
 # Development UI refinement — six planned PRs
 
+## Superseding visual redesign — white theme
+
+The first six PRs delivered functional refinements but did not meet the owner's
+visual expectations. The owner approved a substantial concept and explicitly
+requires white navigation and content surfaces, dark readable typography and
+restrained blue accents. This is a two-PR implementation, not another six-PR stack.
+
+1. `eng/visual-01-white-workspaces`: white shared shell and summary surfaces,
+   distinct display typography, one expanded desktop navigation hierarchy,
+   Overview entry composition, Land property dossiers with an optional schedule,
+   and Inventory hierarchy browsing/property cards. Based on main after #320/#325.
+2. Starts from and targets PR1: Permits, Consultant, Pre-Launch, record-page
+   consistency and complete visual regression. Retarget PR2 to main only after
+   the whole candidate is locally validated; PR2 becomes combined delivery.
+
+Keep intermediate CI deferred. Update the narrow final frontend CI scope for the
+new delivery candidate before retargeting/Ready; the old classifier currently
+only recognizes the previous delivery branch. Do not skip unrelated backend CI
+or alter protections. No backend application tests for this approved UI scope.
+Human review and merge remain required. Close PR1 only after verified inclusion
+and human merge of PR2. No fabricated images, floor plans, geometry or figures.
+
+Visual acceptance requires actual component screenshots at desktop/mobile,
+navigation and role checks, readable empty/populated/error states, exact monetary
+strings and preserved full-page editing/deletion/unsaved guards. A green build
+alone is not evidence of visual completion.
+
+The sections below retain the earlier roadmap and its evidence for history.
+
 Based on the signed-in Pyla Pearl review of 13 September 2026. Governing policies:
 [ENGINEERING_RULES.md](ENGINEERING_RULES.md), [DELETION_POLICY.md](DELETION_POLICY.md)
 and [UX_PAGE_AUDIT.md](UX_PAGE_AUDIT.md).

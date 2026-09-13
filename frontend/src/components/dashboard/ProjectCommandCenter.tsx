@@ -32,6 +32,7 @@ import {
   CASHFLOW_READERS,
   COLLECTION_READERS,
   CONSTRUCTION_READERS,
+  CONSULTANT_READERS,
   ECONOMICS_READERS,
   INTERNAL_PRICE_READERS,
   PLAN_READERS,
@@ -350,6 +351,11 @@ export function ProjectCommandCenter({
       />
 
       <div className="stack">
+        <div className="development-entry-grid" aria-label="Development at a glance">
+          <button type="button" className="development-entry" onClick={() => onNavigate("inventory")}><span>Inventory</span><strong>{unitTotals ? unitTotals.total : "—"}</strong><small>{unitTotals ? "Units visible within your access" : operational ? "Inventory position unavailable" : "Awaiting project setup"}</small><span className="development-entry-action">Explore properties →</span></button>
+          <button type="button" className="development-entry" onClick={() => onNavigate("permits")}><span>Permit position</span><strong>{project.blocking_permit_count}</strong><small>Permits flagged as blocking</small><span className="development-entry-action">Review statutory approvals →</span></button>
+          {hasAnyRole(roles, CONSULTANT_READERS) ? <button type="button" className="development-entry" onClick={() => onNavigate("consultant")}><span>Project programme</span><strong className="development-entry-date">{project.planned_completion ? businessDate(project.planned_completion) : "Not scheduled"}</strong><small>Planned project completion</small><span className="development-entry-action">Open consultant programme →</span></button> : null}
+        </div>
         {!operational ? (
           <Notice tone="info">
             This project is still in setup. Inventory, pricing, sales and everything downstream
@@ -365,7 +371,7 @@ export function ProjectCommandCenter({
         <div className="overview-position">
           <div className="stack">
             <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
-            <ManagementSummary key={refreshKey} project={id} />
+            <Disclosure title="Management actions"><ManagementSummary key={refreshKey} project={id} /></Disclosure>
           </div>
           <div className="stack">
             {operational && hasPosition ? (
@@ -453,9 +459,7 @@ export function ProjectCommandCenter({
                   </>
                 ) : unitTotals ? (
                   <>
-                    <Position>
-                      <PositionFigure lead label="Visible inventory" value={unitTotals.total} note="All matching register records within your access" />
-                      <PositionFigure label="Available" value={unitTotals.available_count} />
+                    <Position>                      <PositionFigure label="Available" value={unitTotals.available_count} />
                       {dealTotals ? (
                         <PositionFigure
                           label="Contracted"
@@ -476,8 +480,8 @@ export function ProjectCommandCenter({
                       )}
                     </Position>
                     <PositionSupport>
-                      <PositionSupportItem label="Held" value={unitTotals.held_count} />
-                      <PositionSupportItem label="Unreleased" value={unitTotals.unreleased_count} />
+                      {dealTotals ? <PositionSupportItem label="Held" value={unitTotals.held_count} /> : null}
+                      {dealTotals && !dealTotals.mixed_currency ? <PositionSupportItem label="Unreleased" value={unitTotals.unreleased_count} /> : null}
                       {priceTotals ? <PositionSupportItem label="Priced" value={priceTotals.units_priced} /> : null}
                       {plans.status === "ready" ? (
                         <PositionSupportItem label="Payment plans" value={plans.data.total} />

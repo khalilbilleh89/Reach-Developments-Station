@@ -1,7 +1,7 @@
 /*
  * Reach Developments Station — Reach Experience 4.
  *
- * One light workspace, one deep navigation rail, one token layer, no
+ * One light workspace, one white navigation rail, one token layer, no
  * framework. Every screen composes from the tokens below, so one change here
  * changes the whole product. The file is organised top to bottom in the order
  * a screen is built: tokens, base, the application shell, page structure,
@@ -25,29 +25,29 @@
  * further down that wins by being later. `tests/test_product_experience.py`
  * fails the build if a top-level selector appears twice.
  *
- * One light theme. Ink is reserved for navigation and executive positions;
+ * One white theme. Ink is reserved for text and primary actions;
  * working records and registers remain light on every machine.
  */
 
 :root {
   /* ---- Canvas and surfaces ------------------------------------------- */
-  /* Warm mineral canvas, white working surfaces and architectural ink.
+  /* Cool neutral canvas, white working surfaces and readable ink.
    * Each has a distinct job; borders are reserved for data and controls. */
-  --canvas: #f2f2ee;
+  --canvas: #f7f9fc;
   --surface: #ffffff;
-  --surface-secondary: #f7f7f4;
+  --surface-secondary: #f5f7fb;
   --surface-hover: #f3f5f5;
   --surface-selected: #edf2fc;
   --surface-command: #f0f3f5;
   --surface-elevated: #ffffff;
 
-  --command-bg: #1b333e;
-  --command-text: #f4f8f7;
-  --command-muted: #b1c8ce;
-  --command-line: rgb(255 255 255 / 16%);
-  --command-success: #99e0c3;
-  --command-warning: #f1ce8c;
-  --command-danger: #ffb5ac;
+  --command-bg: #ffffff;
+  --command-text: #17272e;
+  --command-muted: #526369;
+  --command-line: #dce1e8;
+  --command-success: #157347;
+  --command-warning: #8a5300;
+  --command-danger: #a8231a;
 
   /* ---- Lines --------------------------------------------------------- */
   --line-soft: #e9eceb;
@@ -78,21 +78,20 @@
   --info-soft: var(--accent-soft);
 
   /* ---- Navigation rail ----------------------------------------------- */
-  /* Deep charcoal-navy. The same ink reappears as the hairline over a command
-   * surface, which is what ties the working area to the navigation. */
-  --nav-bg: #14232e;
-  --nav-bg-hover: rgb(255 255 255 / 6%);
-  --nav-bg-selected: rgb(255 255 255 / 5%);
-  --nav-line: rgb(255 255 255 / 8%);
-  --nav-text: #c8d3d8;
-  --nav-text-strong: #ffffff;
-  --nav-text-muted: #91a6b1;
-  --nav-accent: #a6c8ff;
-  --nav-focus: #d2ddff;
-  --nav-glyph-bg: rgb(255 255 255 / 9%);
-  --nav-glyph-bg-strong: rgb(255 255 255 / 14%);
-  --nav-scrollbar: rgb(255 255 255 / 18%);
-  --ink: var(--nav-bg);
+  /* White navigation uses blue selection and dark readable labels. */
+  --nav-bg: #ffffff;
+  --nav-bg-hover: #f5f7fb;
+  --nav-bg-selected: #edf2fc;
+  --nav-line: #e6eaf0;
+  --nav-text: #4c5d70;
+  --nav-text-strong: #182b43;
+  --nav-text-muted: #607086;
+  --nav-accent: #245cce;
+  --nav-focus: #245cce;
+  --nav-glyph-bg: #edf2fc;
+  --nav-glyph-bg-strong: #e4ebf8;
+  --nav-scrollbar: #cbd3df;
+  --ink: #213852;
 
   /* ---- Scrims -------------------------------------------------------- */
   --scrim: rgb(14 20 34 / 42%);
@@ -109,7 +108,7 @@
 
   /* ---- Radius -------------------------------------------------------- */
   --radius-control: 8px;
-  --radius-card: 16px;
+  --radius-card: 12px;
   --radius-tag: 5px;
   --radius-pill: 999px;
 
@@ -127,6 +126,7 @@
     arial, sans-serif;
   --font-mono:
     ui-monospace, sfmono-regular, "SF Mono", menlo, consolas, monospace;
+  --font-display: Georgia, "Times New Roman", serif;
 
   --text-2xs: 0.6875rem;
   --text-xs: 0.75rem;
@@ -155,7 +155,7 @@
   --leading-body: 1.5;
 
   /* ---- Layout -------------------------------------------------------- */
-  --sidebar-width: 15.5rem;
+  --sidebar-width: 14rem;
   --sidebar-collapsed-width: 4.25rem;
   --sidebar-current: var(--sidebar-width);
   --context-bar-height: 4rem;
@@ -228,8 +228,7 @@ textarea {
   border-radius: 2px;
 }
 
-/* The rail is dark, so its focus ring is drawn in a light tint of the accent
- * rather than the accent itself, which would vanish against navy. */
+/* Blue focus outlines stay visible on the white navigation rail. */
 .sidebar :focus-visible,
 .nav-page :focus-visible {
   outline-color: var(--nav-focus);
@@ -406,6 +405,7 @@ textarea {
   overflow: hidden;
   background-color: var(--nav-bg);
   color: var(--nav-text);
+  border-right: 1px solid var(--nav-line);
   transition: width var(--motion-base) var(--ease);
 }
 
@@ -1401,15 +1401,6 @@ section + section {
 /* The rail's ink, two pixels of it: this block belongs to the same product as
  * the navigation, and it is the answer the page was opened for. */
 .card-command {
-  --accent: var(--nav-accent);
-  --accent-hover: var(--nav-text-strong);
-  --accent-soft: var(--nav-bg);
-  --accent-contrast: var(--nav-bg);
-  --info: var(--nav-accent);
-  --info-soft: var(--nav-bg);
-  --success-soft: var(--nav-bg);
-  --warning-soft: var(--nav-bg);
-  --danger-soft: var(--nav-bg);
   --text-primary: var(--command-text);
   --text-secondary: var(--command-muted);
   --text-muted: var(--command-muted);
@@ -1425,7 +1416,8 @@ section + section {
   overflow: hidden;
   background-color: var(--command-bg);
   color: var(--text-primary);
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--command-line);
+  box-shadow: none;
 }
 
 .card-command::before {
