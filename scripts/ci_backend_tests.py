@@ -348,7 +348,7 @@ def domain_of_migration(path: str) -> str | None:
         return "payment_plans"
     if stem == "0025_prelaunch_master":
         return "cashflow"
-    if stem in {"0023_inventory_options", "0026_common_areas"}:
+    if stem in {"0023_inventory_options", "0026_common_areas", "0030_unit_removal"}:
         return "inventory"
     if stem.endswith("_sales_legal"):
         return "sales"

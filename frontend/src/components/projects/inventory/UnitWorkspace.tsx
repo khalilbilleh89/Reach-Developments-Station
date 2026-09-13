@@ -32,7 +32,8 @@ import { UnitPricingSection } from "@/components/projects/inventory/unit/UnitPri
 import { UnitRelease } from "@/components/projects/inventory/unit/UnitRelease";
 import { UnitProperty } from "./unit/UnitProperty";
 import { UnitSummary } from "@/components/projects/inventory/unit/UnitSummary";
-import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
+import { UnitRemovalAction } from "./UnitRemovalAction";
+import { stockArea } from "./StockView";
 
 /** The unit fields an ordinary edit may carry. Status is absent by construction. */
 
@@ -238,24 +239,27 @@ export function UnitWorkspace({
       : undefined;
   const facts: WorkspaceFact[] = [
     {
-      label: "Net area · Internal + balconies",
-      value: unit.net_area == null ? "Not measured" : `${unit.net_area} ${unit.net_area_unit ?? ""}`,
+      label: "Net area",
+      note: "Internal + balconies",
+      value: unit.net_area == null ? "Not measured" : stockArea(unit.net_area, unit.net_area_unit),
     },
     {
       label: "Internal area",
-      value: unit.internal_area === null ? "Not measured" : `${unit.internal_area} ${unit.weighted_saleable_area_unit ?? ""}`.trim(),
+      value: unit.internal_area === null ? "Not measured" : stockArea(unit.internal_area, unit.weighted_saleable_area_unit),
       tone: unit.internal_area === null ? ("muted" as const) : undefined,
     },
     {
-      label: "Gross area · Net + roof garden + terrace + front garden + porches",
+      label: "Gross area",
+      note: "Net area + outdoor spaces",
       value:
         unit.gross_area === null
           ? "Not measured"
-          : `${unit.gross_area} ${unit.gross_area_unit ?? ""}`.trim(),
+          : stockArea(unit.gross_area, unit.gross_area_unit),
       tone: unit.gross_area === null ? ("muted" as const) : undefined,
     },
     ...(seesListPrice ? [{
-      label: `Price per ${unitPricing?.gross_area_unit ?? "sqm"} · Launch price ÷ gross area`,
+      label: `Price per ${unitPricing?.gross_area_unit ?? "sqm"}`,
+      note: "Launch price ÷ gross area",
       value: unitPricing?.price_per_gross_area == null ? "Unavailable" : money(unitPricing.price_per_gross_area, priceCode),
     }] : []),
   ];
@@ -281,7 +285,8 @@ export function UnitWorkspace({
       headline={headline}
       actions={
         <>
-        {roles.has("system_admin") || roles.has("master_admin") ? <DeleteRecordButton label="unit" onDelete={reason => inventory.deleteRecord(projectId, "units", unitId, reason)} onDeleted={async () => { await onChanged(); router.push(`/projects/?project=${projectId}&section=inventory`); }} /> : null}
+        <UnitRemovalAction projectId={projectId} unitId={unitId} reference={unit.unit_reference} roles={roles}
+          onRemoved={async () => { router.replace(`/projects/?project=${projectId}&section=inventory`); await onChanged(); }} />
         </>
       }
       meta={<Badge tone={unit.is_active ? "success" : "neutral"}>{unit.is_active ? "Active unit" : "Inactive unit"}</Badge>}

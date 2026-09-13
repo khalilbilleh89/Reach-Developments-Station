@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -39,6 +40,8 @@ def delete_record(
     identifier: uuid.UUID,
     reason: str,
 ) -> None:
+    if kind == "units" and not actor.is_master_admin:
+        raise PermissionDeniedError("Only Master Administrator may remove a unit.")
     if not actor.is_system_admin:
         raise PermissionDeniedError("Only an administrator may delete inventory records.")
     if not reason.strip():
@@ -66,11 +69,11 @@ def delete_record(
     )
     if row is None:
         raise NotFoundError("Inventory record not found.")
+    if isinstance(row, Unit) and row.removed_at is not None:
+        return
     if isinstance(row, Unit) and row.commercial_status not in {"unreleased", "available", "held"}:
-        raise ConflictError(
-            "This unit has a sales commitment. Cancel it through Sales; "
-            "its history cannot be deleted."
-        )
+        remove_unit(session, project=project, actor=actor, identifier=identifier, reason=reason)
+        return
     if isinstance(row, UnitAreaSchedule) and row.status != "draft":
         raise ConflictError("Approved measurements are retained. Create a new revision instead.")
     if isinstance(row, AreaType):
@@ -131,8 +134,58 @@ def delete_record(
         session.commit()
     except IntegrityError as exc:
         session.rollback()
+        if kind == "units":
+            remove_unit(session, project=project, actor=actor, identifier=identifier, reason=reason)
+            return
         raise ConflictError(
             "This record is still referenced. Move or delete its child records first. "
             "Pricing, sales, financial and legal history must be retained; "
             "deactivate the record instead."
         ) from exc
+
+
+def remove_unit(
+    session: Session, *, project: Project, actor: ActorContext, identifier: uuid.UUID, reason: str
+) -> None:
+    """Owner-only retained removal, regardless of the commercial commitment.
+
+    This is not contract cancellation or receipt reversal. Current registers
+    share the removal marker; legal and financial evidence keeps its identity.
+    """
+    if not actor.is_master_admin:
+        raise PermissionDeniedError("Only Master Administrator may remove a unit.")
+    if not reason.strip():
+        raise ValidationError("Give a reason for removing this unit.")
+    lock_project(session, project.id)
+    unit = session.scalar(
+        select(Unit)
+        .where(Unit.id == identifier, Unit.project_id == project.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if unit is None:
+        raise NotFoundError("Unit not found.")
+    if unit.removed_at is not None:
+        return
+    before = {"is_active": unit.is_active, "commercial_status": unit.commercial_status}
+    unit.removed_at = datetime.now(UTC)
+    unit.is_active = False
+    record_event(
+        session,
+        action="unit.removed",
+        entity_type="unit",
+        entity_id=unit.id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        reason=reason.strip(),
+        before=before,
+        after={
+            "project_id": str(project.id),
+            "reference": unit.unit_reference,
+            "removed_at": unit.removed_at.isoformat(),
+            "is_active": False,
+            "removed_from": ["inventory", "current_sales"],
+            "linked_history_retained": True,
+        },
+    )
+    session.commit()

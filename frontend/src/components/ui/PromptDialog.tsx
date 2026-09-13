@@ -29,6 +29,7 @@ export function PromptDialog({
   label,
   hint,
   confirmLabel = "Record",
+  destructive = false,
   required = true,
   busy,
   error,
@@ -42,6 +43,7 @@ export function PromptDialog({
   label: string;
   hint?: string;
   confirmLabel?: string;
+  destructive?: boolean;
   required?: boolean;
   busy?: boolean;
   error?: string | null;
@@ -92,7 +94,7 @@ export function PromptDialog({
           <Button onClick={close} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" type="submit" disabled={busy}>
+          <Button variant={destructive ? "danger" : "primary"} type="submit" disabled={busy || (required && !value.trim())}>
             {busy ? "Working…" : confirmLabel}
           </Button>
         </div>

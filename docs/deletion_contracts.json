@@ -317,7 +317,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
     "ui_file": "frontend/src/components/projects/inventory/UnitWorkspace.tsx",
-    "notes": "No sales commitment or retained references; administrator."
+      "notes": "Master Administrator only. Unused units delete physically; linked or committed units are removed from Inventory and current Sales together with history and obligations retained. Reason and unit identity audited."
   },
   {
     "handler": "inventory.create_unit_document",

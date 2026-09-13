@@ -304,6 +304,7 @@ def transactions(
         if permissions.restricts_clients_to_own(actor):
             query = query.where(Client.owner_advisor_user_id == actor.user_id)
         if not history:
+            query = query.where(Unit.removed_at.is_(None))
             if kind == "reservation":
                 query = query.where(
                     model.status.in_(RESERVATION_PREPARING | RESERVATION_COMMITTED),
