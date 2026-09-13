@@ -257,10 +257,19 @@ class PreLaunchExpenseOut(DevelopmentMovementOut):
     reversal_reason: str | None
 
 
+class PreLaunchCategoryOut(Response):
+    category: str
+    recorded_amount: Money
+    confirmed_paid_amount: Money
+    total_amount: Money
+    confirmed_share_percent: Decimal
+
+
 class PreLaunchRegisterOut(Response):
     """Development-facing view of the same governed movement rows."""
 
     expenses: list[PreLaunchExpenseOut]
+    categories: list[PreLaunchCategoryOut]
     recorded_amount: Money
     confirmed_paid_amount: Money
 

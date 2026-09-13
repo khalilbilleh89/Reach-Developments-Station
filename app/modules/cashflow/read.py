@@ -219,7 +219,9 @@ def prelaunch_expense_out(
     blocker = None
     try:
         permissions.require_development_movement_confirmer(
-            actor, recorded_by_user_id=movement.recorded_by_user_id
+            actor,
+            recorded_by_user_id=movement.recorded_by_user_id,
+            prelaunch=movement.category in service.PRELAUNCH_CATEGORIES,
         )
     except PermissionDeniedError as error:
         blocker = str(error)

@@ -1301,3 +1301,16 @@ queries; grouping is linear in the project source rows. This is not a cached
 warehouse or an unbounded cross-project report. Whole-project actual cash is not
 allocated to phases that lack authoritative allocations. Financial and technical
 facts remain separate from commercial commitments and consultant design progress.
+
+## Pre-Launch confirmation and category position
+
+Pre-Launch remains a facade over Cashflow development movements. Its category
+position is calculated by the Cashflow service from the same scoped register;
+the frontend renders recorded, confirmed, total and confirmed-share values.
+Migration `0025_prelaunch_master` retains a database-validated Master authority
+marker for Pre-Launch self-confirmations. Reconciliation reads that historical
+marker rather than today's user role. Ordinary users retain maker/checker
+separation. Consultant Engineering's existing locked update contract also permits
+active agreement corrections without replacing the agreement or its programme.
+See [PRELAUNCH_CONSULTANT_AMENDMENTS.md](PRELAUNCH_CONSULTANT_AMENDMENTS.md) for
+scope, audit and rollback behavior.

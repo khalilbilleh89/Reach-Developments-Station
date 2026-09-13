@@ -32,8 +32,7 @@ import { ConsultantEngineerTab } from "@/components/projects/ConsultantEngineerT
 import { ConstructionTab } from "@/components/projects/ConstructionTab";
 import { ProjectStages } from "@/components/projects/construction/StageWorkspace";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
-import { EditForm, asValue } from "@/components/projects/EditForm";
-import type { EditField } from "@/components/projects/EditForm";
+import { ProjectEdit } from "@/components/projects/ProjectEdit";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
@@ -46,39 +45,7 @@ import { UnitWorkspace } from "@/components/projects/inventory/UnitWorkspace";
 import { PaymentPlanWorkspace } from "@/components/projects/payments/PaymentPlanWorkspace";
 import { SaleWorkspace } from "@/components/projects/sales/SaleWorkspace";
 import { readRecord } from "@/components/shell/recordRoutes";
-import { PROJECT_STATUSES, projectStatusLabel, projectStatusTone } from "./projectStatus";
-
-/** Editable project identity. `code` is absent: it is immutable once issued. */
-function projectFields(project: ProjectDetail): EditField[] {
-  return [
-    { name: "name", label: "Name", group: "Identity" },
-    { name: "developer_entity", label: "Developer entity", group: "Identity" },
-    { name: "project_type_code", label: "Project type", hint: "A configured code.", group: "Identity", width: "medium" },
-    {
-      name: "status",
-      label: "Status",
-      kind: "select",
-      group: "Identity",
-      options: PROJECT_STATUSES.map((value) => ({ value, label: projectStatusLabel(value) })),
-      // Setup is the opening state only: the backend refuses a return to it,
-      // so it is not offered once the project has left it.
-      hint: project.status === "setup" ? undefined : "A project cannot return to setup.",
-    },
-    { name: "city", label: "City", group: "Location", width: "medium" },
-    { name: "location", label: "Location", group: "Location" },
-    { name: "latitude", label: "Latitude", kind: "number", hint: "Decimal degrees.", group: "Location" },
-    { name: "longitude", label: "Longitude", kind: "number", group: "Location" },
-    { name: "planned_start", label: "Planned start", kind: "date", group: "Programme" },
-    { name: "planned_completion", label: "Planned completion", kind: "date", group: "Programme" },
-    {
-      name: "fiscal_year_start_month",
-      label: "Fiscal year starts",
-      kind: "number",
-      hint: "Month number, 1 to 12.",
-      group: "Programme",
-    },
-  ];
-}
+import { projectStatusLabel, projectStatusTone } from "./projectStatus";
 
 /**
  * One project, inside the shell.
@@ -232,33 +199,7 @@ export function ProjectWorkspace({
       return (
         <>
           {editing ? (
-            <Card
-              title="Edit project"
-              description="The code is fixed once issued. Everything else about the project's identity is maintained here."
-            >
-              <EditForm
-                fields={projectFields(project)}
-                initial={{
-                  name: asValue(project.name),
-                  developer_entity: asValue(project.developer_entity),
-                  city: asValue(project.city),
-                  location: asValue(project.location),
-                  latitude: asValue(project.latitude),
-                  longitude: asValue(project.longitude),
-                  project_type_code: asValue(project.project_type_code),
-                  status: asValue(project.status),
-                  fiscal_year_start_month: asValue(project.fiscal_year_start_month),
-                  planned_start: asValue(project.planned_start),
-                  planned_completion: asValue(project.planned_completion),
-                }}
-                onSave={async (changes) => {
-                  await projects.update(projectId, changes);
-                  await changed();
-                  setEditing(false);
-                }}
-                onCancel={() => setEditing(false)}
-              />
-            </Card>
+            <ProjectEdit project={project} onSaved={changed} onClose={() => setEditing(false)} />
           ) : null}
           <ProjectCommandCenter
             project={project}

@@ -48,6 +48,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -546,8 +547,9 @@ class CashflowDevelopmentMovement(Base):
     both modules with nothing to detect it.
 
     Recorded is not paid. A recorded movement is Finance preparing a payment; a
-    confirmed one is cash that has left, and the person who confirms it is never
-    the person who recorded it.
+    confirmed one is cash that has left. Master Administrator may self-confirm
+    Pre-Launch categories with retained authority evidence; other users require
+    a second confirmer.
     """
 
     __tablename__ = "cashflow_development_movements"
@@ -561,6 +563,11 @@ class CashflowDevelopmentMovement(Base):
         nullable=False,
         index=True,
     )
+    # Historical authority at confirmation; role changes do not rewrite cash history.
+    master_self_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
+
     #: The project-scoped human reference, ``DEV-000001``.
     movement_reference: Mapped[str] = mapped_column(String(32), nullable=False)
     category: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -628,8 +635,17 @@ class CashflowDevelopmentMovement(Base):
         # A second person, by identifier. One user holding two roles is still one
         # pair of eyes, which a role comparison would not notice.
         CheckConstraint(
-            "confirmed_by_user_id IS NULL OR confirmed_by_user_id <> recorded_by_user_id",
+            "confirmed_by_user_id IS NULL OR confirmed_by_user_id <> recorded_by_user_id"
+            " OR master_self_confirmed",
             name="confirmer_is_not_recorder",
+        ),
+        CheckConstraint(
+            "NOT master_self_confirmed OR (confirmed_by_user_id IS NOT NULL"
+            " AND confirmed_by_user_id = recorded_by_user_id AND confirmed_at IS NOT NULL"
+            " AND status IN ('confirmed', 'reversed')"
+            " AND category IN ('land_fees', 'design', 'consultants', 'permits', 'utilities',"
+            " 'insurance', 'developer_overhead', 'marketing', 'tax', 'other'))",
+            name="master_confirmation_valid",
         ),
         Index("ix_cf_dev_movements_project_status", "project_id", "status"),
         Index("ix_cf_dev_movements_date", "project_id", "movement_date"),

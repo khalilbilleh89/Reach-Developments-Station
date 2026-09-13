@@ -59,6 +59,12 @@ no new tables or dependencies. Downgrade drops only the new fields: export their
 values before rollback, or prefer rolling application code forward after use.
 Historical sales and buyer records otherwise remain untouched.
 
+Migration `0027_merge_sales_areas` joins the Sales attribution branch with
+`0026_common_areas` (including `0025_prelaunch_master`). It changes no data and
+does not rewrite either parent's history. Databases on either branch upgrade to
+one head; tests verify both paths and model/schema agreement. Downgrading the
+merge alone only separates the heads; parent rollback safeguards still apply.
+
 ## Verification and release
 
 Behavior tests cover attribution snapshots/corrections, removal and resale,
