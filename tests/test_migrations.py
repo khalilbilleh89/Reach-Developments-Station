@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0025_prelaunch_master"
+HEAD_REVISION = "0026_installment_tax"
 
 
 @pytest.mark.parametrize("starting_revision", ["0023_permit_removal", "0023_inventory_options"])
