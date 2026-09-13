@@ -103,3 +103,5 @@ role-specific API integration and independent review remain delivery limitations
 No project imagery, site geometry, monetary trend or dated milestone was invented.
 Financial analysis retains the existing currency-separated monthly cash view;
 additional imagery/charts need appropriate source data and a focused follow-up.
+
+White redesign delivery: #328 targets main and includes #327 at b82d0e3. Full frontend lint and production build passed. Final frontend CI is triggered by this documentation commit after retargeting; draft status remains until independent acceptance.
