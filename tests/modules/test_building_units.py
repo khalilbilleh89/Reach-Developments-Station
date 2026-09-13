@@ -178,8 +178,16 @@ def test_building_unit_can_be_restored_with_active_building(
     )
     assert created.status_code == 201, created.text
     unit_url = f"{url}/units/{created.json()['id']}"
-    removed = owner.delete(unit_url, params={"reason": "Temporarily remove duplicate"})
-    assert removed.status_code == 204, removed.text
+    import uuid
+    from datetime import UTC, datetime
+
+    from app.modules.inventory.models import Unit
+
+    # Restoration applies to retained removals; unpriced units are permanently deleted.
+    unit = db.get(Unit, uuid.UUID(created.json()["id"]))
+    unit.removed_at = datetime.now(UTC)
+    unit.is_active = False
+    db.commit()
     restored = owner.post(f"{unit_url}/restoration", json={"reason": "Confirmed original unit"})
     assert restored.status_code == 200, restored.text
     assert restored.json()["floor_id"] is None

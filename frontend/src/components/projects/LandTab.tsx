@@ -450,7 +450,7 @@ export function LandTab({
         }
       />
 
-      <div className="stack land-workspace">
+      <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
         {notice ? <Notice tone="success">{notice}</Notice> : null}
 

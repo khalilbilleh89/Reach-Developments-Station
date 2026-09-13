@@ -382,7 +382,7 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
         </DataToolbar>
 
         <div className="row-actions" role="group" aria-label="Permit presentation"><Button small aria-pressed={presentation === "approvals"} onClick={() => setPresentation("approvals")}>Approvals</Button><Button small aria-pressed={presentation === "schedule"} onClick={() => setPresentation("schedule")}>Schedule</Button></div>
-        <div className="permit-workspace-register">
+        <div>
           {register === null ? (
             <Loading label="Loading permits…" shape="rows" />
           ) : shown.length === 0 ? (
