@@ -20,6 +20,30 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  development_scope:
+    name: Development UI scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend_only: ${{ steps.scope.outputs.frontend_only }}
+    steps:
+      - name: Check out reviewed tree
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Check complete delivery scope
+        id: scope
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_BASE: ${{ github.event.pull_request.base.ref }}
+          CI_HEAD: ${{ github.event.pull_request.head.ref }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: node scripts/ci_development_ui.mjs
+
   backend_smoke:
     name: Backend Smoke
     runs-on: ubuntu-latest
@@ -85,7 +109,8 @@ jobs:
   backend_fast:
     name: Backend Fast
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == true
+    needs: development_scope
+    if: always() && needs.development_scope.outputs.frontend_only != 'true' && github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == true
     timeout-minutes: 240
     services:
       postgres:
@@ -147,7 +172,8 @@ jobs:
   backend_static:
     name: Backend Static / Structural
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false)
+    needs: development_scope
+    if: always() && needs.development_scope.outputs.frontend_only != 'true' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false))
     timeout-minutes: 30
     services:
       postgres:
@@ -262,8 +288,8 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
-    needs: [backend_static, backend_full]
-    if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false))
+    needs: [development_scope, backend_static, backend_full]
+    if: always() && needs.development_scope.outputs.frontend_only != 'true' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false))
     timeout-minutes: 5
     steps:
       - name: Require structure and every Full shard to succeed

@@ -34,10 +34,35 @@ User-approved stack: PR 1 targets `eng/development-ui-stack`; each subsequent
 implementation PR starts from and targets its predecessor. A seventh consolidated
 delivery PR targets main. Intermediate PRs remain Draft and use local frontend
 checks; frontend GitHub CI is deferred to the completed candidate. The user approved
-no backend tests for this frontend-only stack. Final scoped CI routing remains to
-be implemented and verified before delivery; unrelated CI and protections stay intact.
+no backend tests for this frontend-only stack. `scripts/ci_development_ui.mjs`
+checks the complete diff for the same-repository `eng/development-ui-delivery`
+PR against main. Only frontend source/tests, this plan, and the explicitly named
+CI workflow, classifier and workflow-routing tests qualify. Backend, API,
+migration, dependency and unrelated changes use normal CI. A failed scope check
+does not grant an exemption. Intermediate feature bases remain outside CI triggers.
+Main pushes keep Full Backend and Frontend; repository protections stay intact.
 Any changed final candidate requires revalidation. Obtain
 independent review before Ready; merge remains a human action under the engineering
 rules. Check populated, empty and incomplete states at desktop, panel and mobile
 widths, including selected/hover/focus tab states. Preserve Back behavior, register
 filters, authorization, unsaved-change protection and deletion controls.
+
+## Implementation and review evidence
+
+Implementation stack: #318 foundation → #319 Land → #321 Inventory → #322 Permits
+→ #323 Consultant Engineer → #324 Overview and Pre-Launch. Each draft targets its
+predecessor. Consolidated delivery includes all six; do not merge them separately.
+112 frontend tests, focused lint and production build passed at the sixth head.
+CI scope tests are added on the delivery branch and validated separately from
+backend application tests; no backend application tests ran for this UI scope.
+
+Signed-in production review covered all six modules and their existing tabs.
+Changed local components were checked with explicitly labeled sample data:
+Land's five views, Stock cards/schedule and Import draft navigation, permit
+cards/detail/history, Consultant programme/history/full-page editing, Pre-Launch
+filtering and unsaved editing, and incomplete Feasibility at mobile width.
+These fixtures are not production data and are not shipped. Populated analytics,
+role-specific API integration and independent review remain delivery limitations.
+No project imagery, site geometry, monetary trend or dated milestone was invented.
+Financial analysis retains the existing currency-separated monthly cash view;
+additional imagery/charts need appropriate source data and a focused follow-up.
