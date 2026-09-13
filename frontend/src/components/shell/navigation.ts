@@ -116,7 +116,7 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
       {
         key: "consultant",
         label: "Consultant Engineer",
-        icon: "documents",
+        icon: "blueprint",
         description: "The main consultant agreement, disciplines, design stages and deliverables.",
         visible: (roles) => hasAnyRole(roles, CONSULTANT_READERS),
       },

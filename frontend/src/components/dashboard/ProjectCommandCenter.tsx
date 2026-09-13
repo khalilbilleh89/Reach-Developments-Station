@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/ui/Icon";
 
 import type { ReactNode } from "react";
 
@@ -353,9 +354,9 @@ export function ProjectCommandCenter({
 
       <div className="stack">
         <div className="briefing-overview"><div className="development-entry-grid briefing-kpis" aria-label="Development at a glance">
-          <button type="button" className="development-entry" onClick={() => onNavigate("inventory")}><span>Inventory</span><strong>{unitTotals ? unitTotals.total : "—"}</strong><small>{unitTotals ? "Units visible within your access" : operational ? "Inventory position unavailable" : "Awaiting project setup"}</small><span className="development-entry-action">Explore properties →</span></button>
-          <button type="button" className="development-entry" onClick={() => onNavigate("permits")}><span>Permit position</span><strong>{project.blocking_permit_count}</strong><small>Permits flagged as blocking</small><span className="development-entry-action">Review statutory approvals →</span></button>
-          {hasAnyRole(roles, CONSULTANT_READERS) ? <button type="button" className="development-entry" onClick={() => onNavigate("consultant")}><span>Project programme</span><strong className="development-entry-date">{project.planned_completion ? businessDate(project.planned_completion) : "Not scheduled"}</strong><small>Planned project completion</small><span className="development-entry-action">Open consultant programme →</span></button> : null}
+          <button type="button" className="development-entry" onClick={() => onNavigate("inventory")}><span className="entry-label"><Icon name="inventory" />Inventory</span><strong>{unitTotals ? unitTotals.total : "—"}</strong><small>{unitTotals ? "Units visible within your access" : operational ? "Inventory position unavailable" : "Awaiting project setup"}</small><span className="development-entry-action">Explore properties →</span></button>
+          <button type="button" className="development-entry" onClick={() => onNavigate("permits")}><span className="entry-label"><Icon name="permits" />Permit position</span><strong>{project.blocking_permit_count}</strong><small>Permits flagged as blocking</small><span className="development-entry-action">Review statutory approvals →</span></button>
+          {hasAnyRole(roles, CONSULTANT_READERS) ? <button type="button" className="development-entry" onClick={() => onNavigate("consultant")}><span className="entry-label"><Icon name="calendar" />Project programme</span><strong className="development-entry-date">{project.planned_completion ? businessDate(project.planned_completion) : "Not scheduled"}</strong><small>Planned project completion</small><span className="development-entry-action">Open consultant programme →</span></button> : null}
         </div><ProjectMilestones projectId={id} roles={roles} refreshKey={refreshKey} onNavigate={onNavigate}/></div>
         {!operational ? (
           <Notice tone="info">
@@ -460,7 +461,8 @@ export function ProjectCommandCenter({
                   </>
                 ) : unitTotals ? (
                   <>
-                    <Position>                      <PositionFigure label="Available" value={unitTotals.available_count} />
+                    <Position>
+                      <PositionFigure label="Available" value={unitTotals.available_count} />
                       {dealTotals ? (
                         <PositionFigure
                           label="Contracted"
