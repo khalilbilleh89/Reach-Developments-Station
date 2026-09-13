@@ -202,7 +202,7 @@ test("active consultant agreement edits the same record and keeps a refused save
   assert.ok(!nodes(render()).some(n => n.props?.editor));
 });
 
-test("Pre-Launch renders server category amounts above the register and honors confirmation eligibility", async () => {
+test("Pre-Launch renders server category amounts after the register and honors confirmation eligibility", async () => {
   const calls = [];
   const row = { id: "expense", category: "design", amount: "1.01", movement_date: "2026-09-12", status: "recorded", can_confirm: true };
   const render = mount("projects/PreLaunchTab", "PreLaunchTab", {
@@ -214,7 +214,7 @@ test("Pre-Launch renders server category amounts above the register and honors c
   }, { projectId: "project", roles: new Set(["master_admin"]), currencyCode: "USD" });
   render(); await settle();
   const tree = nodes(render());
-  assert.ok(tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Expenses by category") < tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Pre-Launch expense register"));
+  assert.ok(tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Expenses by category") > tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Pre-Launch expense register"));
   assert.ok(tree.some(n => n.type === "td" && n.props.children === landFormat.money("3.03", "USD")));
   const confirm = tree.find(n => n.type === "Button" && n.props.children === "Confirm");
   assert.equal(confirm.props.disabled, false);
@@ -263,7 +263,8 @@ test("Pre-Launch editor sends only editable fields and retains corrected values 
     onCancel() {}, onSubmit(body) { submitted = body; } };
   const render = mount("projects/PreLaunchTab", "ExpenseDialog", {}, props);
   nodes(render()).find(n => n.type === "MoneyInput").props.onChange("99.99");
-  nodes(render()).find(n => n.type === "FormDialog").props.onSubmit();
+  assert.equal(nodes(render()).find(n => n.type === "DraftBoundary").props.dirty, true);
+  nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(submitted.amount, "99.99");
   assert.equal(submitted.invoice_reference, "INV");
   assert.ok(!("currency_id" in submitted));

@@ -27,7 +27,7 @@ function data(value){
 }
 test("Feasibility renders every requested area family and studio grouping using server values",()=>{
   const html=renderToStaticMarkup(React.createElement(exports.FeasibilityView,{data:data("123.4500")}));
-  for(const label of ["Number of Apartments","Total Buildable Area","Total Garage Area","Grand Total Area","Total Roads &amp; Pavements Area","Average Apartment Common Area","Average Apartment Total Area","Studio (0)","123.4500 m²"]) assert.ok(html.includes(label),label);
+  for(const label of ["Apartments in scope","Total Buildable Area","Total Garage Area","Grand Total Area","Total Roads &amp; Pavements Area","Average Apartment Common Area","Average Apartment Total Area","Studio (0)","123.4500 m²"]) assert.ok(html.includes(label),label);
 });
 test("missing area and undefined efficiency are not rendered as zero",()=>{
   const missing=renderToStaticMarkup(React.createElement(exports.FeasibilityView,{data:data(null)}));
