@@ -419,3 +419,30 @@
  .stock-hierarchy > .eyebrow { display: none; }
  .stock-hierarchy button { flex-shrink: 0; white-space: nowrap; }
 }
+
+/* Development records: evidence, decision and action have separate visual places. */
+.register-result-count { display: flex; align-items: center; gap: 16px; color: var(--text-muted); font-size: var(--text-xs); margin-block: 16px; }
+.permit-next-action > strong { display: flex; align-items: center; gap: 7px; color: var(--accent); }
+.permit-record-review:empty { display: none; }
+.permit-record-review { border-top: 1px solid var(--line-soft); margin-top: 18px; padding-top: 10px; }
+.permit-record-review p { display: flex; gap: 9px; align-items: flex-start; font-size: var(--text-xs); line-height: 1.6; color: var(--warning); }
+.permit-record-review .icon { flex: none; margin-top: 2px; }
+.development-workspace .expense-entry { border: 1px solid var(--line-default); border-radius: 10px; overflow: hidden; padding: 0; }
+.development-workspace .expense-entry > header { padding: 22px; background: var(--dev-blue-wash); border-bottom: 1px solid var(--dev-blue-line); }
+.development-workspace .expense-entry > dl { padding: 18px 22px; margin: 0; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.development-workspace .expense-entry > footer { margin: 0; padding: 16px 22px; background: var(--surface-secondary); border-top: 1px solid var(--line-soft); }
+.expense-entry > .footnote { padding-inline: 22px; }
+.expense-entry-amount > strong { color: var(--accent); }
+.document-references { display: grid; gap: 9px; }
+.document-references > span { display: flex; align-items: flex-start; gap: 7px; overflow-wrap: anywhere; }
+.document-references .icon { flex: none; color: var(--accent); margin-top: 2px; }
+.development-workspace .consultant-record-card { padding: 0; overflow: hidden; }
+.development-workspace .consultant-record-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 20px; background: var(--dev-blue-wash); border-bottom: 1px solid var(--dev-blue-line); }
+.development-workspace .consultant-record-card h3 { color: var(--text-primary); font-size: 1.2rem; line-height: 1.4; }
+.development-workspace .consultant-record-card > dl { padding: 20px; margin: 0; gap: 18px; }
+.development-workspace .consultant-record-card > footer { padding: 14px 20px; border-top: 1px solid var(--line-soft); color: var(--text-muted); font-size: var(--text-xs); }
+@media (max-width: 600px) {
+ .development-workspace .expense-entry > header { padding: 18px; }
+ .development-workspace .expense-entry > dl { padding: 18px; grid-template-columns: 1fr; }
+ .development-workspace .consultant-record-card > header { flex-wrap: wrap; }
+}

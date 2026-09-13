@@ -16,6 +16,7 @@ import { businessDate, money, todayISO } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
+  Icon,
   Button,
   ButtonRow,
   Card,
@@ -400,12 +401,12 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
             {presentation === "approvals" ? <div className="permit-approval-grid">
               {shown.map(permit => <article key={permit.id} className="permit-register-card">
                 <div className="permit-register-card-heading">
-                  <div><span className="eyebrow">Statutory approval</span><h2><button className="button-link" type="button" onClick={() => setSelected(permit)}>{permit.permit_code}</button></h2></div>
+                  <div><span className="eyebrow"><Icon name="permits" />Statutory approval</span><h2><button className="button-link" type="button" onClick={() => setSelected(permit)}>{permit.permit_code}</button></h2></div>
                   <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>{STATUS_LABELS[permit.status] ?? permit.status}</Badge>
                 </div>
                 <p className="subtle">{typeLabel(permit.permit_type_code)} · {permit.authority}</p>
                 <div className="permit-journey"><span className="eyebrow">Workflow position · current status only</span><ol aria-label="Approval journey">{["Preparation","Authority review","Decision","Issued"].map((label,index) => <li key={label} data-current={permitJourneyPosition(permit.status) === index} aria-current={permitJourneyPosition(permit.status) === index ? "step" : undefined}><span aria-hidden="true">{index + 1}</span><strong>{label}</strong></li>)}</ol>{permitJourneyPosition(permit.status) === null ? <p className="footnote">{STATUS_LABELS[permit.status] ?? permit.status} · no active journey step</p> : null}</div>
-                <div className="permit-next-action"><strong>Next action</strong><p>{permit.next_action ?? "No next action recorded"}</p></div>
+                <div className="permit-next-action"><strong><Icon name="chevron" />Next action</strong><p>{permit.next_action ?? "No next action recorded"}</p></div>
                 <KeyValueGrid columns={2}>
                   <KeyValue label="Required by" value={businessDate(permit.planned_issue_date)} />
                   <KeyValue label="Statutory clock" value={slaLabel(permit)} />
@@ -417,9 +418,9 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                   {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
                   {permit.expired_flag ? <Badge tone="danger">Expired</Badge> : null}
                   {!permit.prerequisite_satisfied ? <Badge tone="muted">Prerequisite open</Badge> : null}
-                  {permitReviewNotes(permit).length ? <Badge tone="warning">Review record</Badge> : null}
+
                 </div>
-                <footer className="permit-approval-footer"><Button small onClick={() => setSelected(permit)}>Open approval</Button></footer>
+                <div className="permit-record-review">{permitReviewNotes(permit).map(note => <p key={note}><Icon name="alert" />{note}</p>)}</div><footer className="permit-approval-footer"><Button small onClick={() => setSelected(permit)}>Open approval</Button></footer>
               </article>)}
             </div> : <div className="permit-approval-schedule">
             <TableScroll label="Permit register" fixedFirst>
@@ -532,8 +533,8 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
 }
 
 const SECTIONS = [
-  { key: "permit", label: "Permit" },
-  { key: "history", label: "Status history" },
+  { key: "permit", label: "Permit", icon: "permits" as const },
+  { key: "history", label: "Status history", icon: "history" as const },
 ];
 
 /**

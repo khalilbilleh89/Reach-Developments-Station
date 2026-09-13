@@ -10,6 +10,7 @@ import type { Roles } from "@/lib/roles";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
+  Icon,
   Button,
   ButtonRow,
   Card,
@@ -159,6 +160,7 @@ export function PreLaunchTab({
       <div className="prelaunch-ledger-layout">
       <Card title="Expense register" description="Search descriptions, counterparties, references or categories. Filters apply to the register; position totals remain project-wide." actions={<Button small aria-pressed={schedule} onClick={() => setSchedule(!schedule)}>{schedule ? "Show entries" : "Show schedule"}</Button>}>
         <FieldRow><Field label="Search expenses"><input className="input" type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field><Field label="Expense status"><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option><option value="recorded">Recorded</option><option value="confirmed">Confirmed</option><option value="reversed">Reversed</option><option value="removed">Removed</option></select></Field></FieldRow>
+        {register ? <p className="register-result-count">{expenses.length} matching {expenses.length === 1 ? "entry" : "entries"}{search || status ? <Button small variant="link" onClick={() => { setSearch(""); setStatus(""); }}>Clear filters</Button> : null}</p> : null}
         {register === null ? readError ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
           <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : expenses.length === 0 ? <EmptyState title="No matching expenses" actions={<Button onClick={() => { setSearch(""); setStatus(""); }}>Reset filters</Button>} /> : (
@@ -172,13 +174,13 @@ export function PreLaunchTab({
                 <td>{businessDate(row.movement_date)}</td>
                 <td className="num">{money(row.amount, row.currency_code ?? currencyCode)}</td>
                 <td><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge>{row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}</td>
-                <td>{row.invoice_reference ?? row.evidence_reference ?? "—"}</td>
+                <td><span className="cell-secondary">Invoice: {row.invoice_reference ?? "—"}</span><span className="cell-secondary">Evidence: {row.evidence_reference ?? "—"}</span></td>
                 <td className="cell-prose">{expenseActions(row)}</td>
               </tr>
             ))}</tbody>
           </TableScroll> : <div className="expense-entry-list">{expenses.map(row => <article className="expense-entry" key={row.id}>
-            <header><div><span className="eyebrow">{categoryLabel(row.category)}</span><h3>{row.notes ?? row.movement_reference}</h3><p className="footnote">{row.counterparty_reference ?? "Counterparty not recorded"}</p></div><div className="expense-entry-amount"><strong>{money(row.amount, row.currency_code ?? currencyCode)}</strong><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></div></header>
-            <dl><div><dt>Movement date</dt><dd>{businessDate(row.movement_date)}</dd></div><div><dt>Evidence reference</dt><dd>{row.invoice_reference ?? row.evidence_reference ?? "Not recorded"}</dd></div></dl>
+            <header><div><span className="eyebrow"><Icon name="money" />{categoryLabel(row.category)}</span><h3>{row.notes ?? row.movement_reference}</h3><p className="footnote">{row.counterparty_reference ?? "Counterparty not recorded"}</p></div><div className="expense-entry-amount"><strong>{money(row.amount, row.currency_code ?? currencyCode)}</strong><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></div></header>
+            <dl><div><dt>Movement date</dt><dd>{businessDate(row.movement_date)}</dd></div><div><dt>Movement reference</dt><dd>{row.movement_reference}</dd></div><div><dt>Invoice reference</dt><dd>{row.invoice_reference ?? "Not recorded"}</dd></div><div><dt>Supporting evidence</dt><dd>{row.evidence_reference ?? "Not recorded"}</dd></div></dl>
             {row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}<footer>{expenseActions(row)}</footer>
           </article>)}</div>
         )}

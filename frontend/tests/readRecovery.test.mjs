@@ -204,7 +204,7 @@ test("active consultant agreement edits the same record and keeps a refused save
 
 test("Pre-Launch renders server category amounts after the register and honors confirmation eligibility", async () => {
   const calls = [];
-  const row = { id: "expense", category: "design", amount: "1.01", movement_date: "2026-09-12", status: "recorded", can_confirm: true };
+  const row = { id: "expense", invoice_reference: "INV-17", evidence_reference: "EVID-29", movement_reference: "MOV-08", category: "design", amount: "1.01", movement_date: "2026-09-12", status: "recorded", can_confirm: true };
   const render = mount("projects/PreLaunchTab", "PreLaunchTab", {
     "@/lib/api": { ApiError: Error, prelaunch: {
       register: async () => ({ expenses: [row], recorded_amount: "1.01", confirmed_paid_amount: "2.02", categories: [{ category: "design", recorded_amount: "1.01", confirmed_paid_amount: "2.02", total_amount: "3.03", confirmed_share_percent: "100.00" }] }),
@@ -216,6 +216,7 @@ test("Pre-Launch renders server category amounts after the register and honors c
   const tree = nodes(render());
   assert.ok(tree.findIndex(n => n.props?.className === "expense-category-list") > tree.findIndex(n => n.props?.className === "expense-entry-list"));
   assert.ok(tree.some(n => n.type === "dd" && n.props.children === landFormat.money("3.03", "USD")));
+  for (const reference of ["INV-17", "EVID-29", "MOV-08"]) assert.ok(tree.some(n => n.type === "dd" && n.props.children === reference));
   const confirm = tree.find(n => n.type === "Button" && n.props.children === "Confirm");
   assert.equal(confirm.props.disabled, false);
   await confirm.props.onClick(); await settle();

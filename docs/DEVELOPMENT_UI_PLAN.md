@@ -151,3 +151,11 @@ One PR from main after #331: `eng/property-presentation`.
 Validation: 126 frontend tests and 39 isolated CI-routing tests passed. New tests cover building identity/filter persistence, schedule scope, separate status tones and unknown versus zero quantities. Lint/build and final-head GitHub evidence recorded in the PR. Sample routes removed before build. No backend application tests run.
 
 CI exception remains exact-branch, same-repository and full-diff scoped; previous branches, main pushes and unrelated paths use normal CI. Draft requires independent review under ENGINEERING_RULES.md. Next roadmap phases: Development workspace, then remaining-platform consistency.
+
+## Roadmap phase 2 — Development workspace
+
+Branch `eng/development-workspace-finish` follows merged #332. Permit cards now explain evidence/date inconsistencies; schedule badges remain. Pre-Launch entries show movement, invoice and evidence references separately, with register counts and reset controls. Consultant cards separate status, document/revision fields and actions. White reading surfaces and restrained blue context continue; status colours preserve their meaning.
+
+126 frontend tests pass, including simultaneous invoice/evidence retention. Desktop expense and consultant previews and phone permit preview checked. Temporary fixtures removed. Full lint/build and exact-head GitHub evidence recorded in PR. 39 isolated CI-routing tests pass; no backend application tests run.
+
+The user explicitly authorized inspecting this PR, marking Ready, waiting for checks and merging, then starting phase 3. This overrides the repository's agent-never-merges/default independent-review pause for these two UI PRs only. CI exception remains same-repository, complete-diff and exact branch; main-push CI is unchanged.
