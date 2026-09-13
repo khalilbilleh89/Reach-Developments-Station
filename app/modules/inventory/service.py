@@ -1091,6 +1091,8 @@ def update_unit(
     unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
 
     activity_changed = "is_active" in updates and updates["is_active"] != unit.is_active
+    if unit.removed_at is not None:
+        raise ConflictError("This unit was removed by Master Administrator and cannot be edited.")
     if activity_changed:
         if not activity_reason or not activity_reason.strip():
             raise ValidationError("Give a reason for deactivating or reactivating this unit.")
@@ -2604,7 +2606,7 @@ def _unit_filters(
     Built once so the totals can never describe a different population from the
     rows they are reported alongside.
     """
-    clauses: list[ColumnElement[bool]] = [Unit.project_id == project_id]
+    clauses: list[ColumnElement[bool]] = [Unit.project_id == project_id, Unit.removed_at.is_(None)]
     if commercial_status == "sold":
         clauses.append(Unit.commercial_status.in_(("contract_pending", "contracted")))
     elif commercial_status == "reserved_stock":

@@ -1,0 +1,113 @@
+/* Development-only workspace treatment. Financial modules retain their own layout. */
+.development-workspace {
+  --dev-radius: 14px;
+  --dev-shadow: 0 4px 20px rgb(23 39 46 / 4%);
+  min-width: 0;
+}
+.development-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 0 20px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line-default);
+}
+.development-nav-label {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.development-nav-links { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.development-nav-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: .8rem;
+  font-weight: 550;
+  text-decoration: none;
+}
+.development-nav-links svg { width: 16px; height: 16px; }
+.development-nav-links a:hover { background: var(--surface); color: var(--text-primary); }
+.development-nav-links a[aria-current="page"] {
+  background: var(--surface);
+  border-color: var(--line-default);
+  color: var(--accent);
+  box-shadow: var(--dev-shadow);
+}
+.development-content { min-width: 0; }
+.development-workspace .page-head { padding-bottom: 24px; gap: 20px; }
+.development-workspace .page-title { font-size: clamp(1.65rem, 2.2vw, 2.25rem); letter-spacing: -.035em; }
+.development-workspace .page-subtitle { max-width: 65ch; line-height: 1.6; }
+.development-workspace .card { border-radius: var(--dev-radius); box-shadow: var(--dev-shadow); }
+.development-workspace .card-header { padding: 22px 24px; }
+.development-workspace .card-title { letter-spacing: -.02em; }
+.development-workspace .record-breadcrumb { margin-bottom: 24px; font-size: .8rem; }
+.development-workspace .record-workspace-header {
+  gap: 24px;
+  padding: 28px;
+  background: var(--surface);
+  border: 1px solid var(--line-default);
+  border-radius: var(--dev-radius) var(--dev-radius) 0 0;
+}
+.development-workspace .workspace-identity h1 { font-size: clamp(2rem, 3vw, 2.8rem); letter-spacing: -.045em; }
+.development-workspace .workspace-context { max-width: 70ch; line-height: 1.6; color: var(--text-secondary); }
+.development-workspace .workspace-value strong { font-size: clamp(1.6rem, 2.5vw, 2.4rem); letter-spacing: -.035em; }
+.development-workspace .workspace-actions { align-self: flex-start; }
+.development-workspace .workspace-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 24px;
+  padding: 20px 28px;
+  gap: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line-default);
+  border-top: 0;
+  border-radius: 0 0 var(--dev-radius) var(--dev-radius);
+  box-shadow: var(--dev-shadow);
+}
+.development-workspace .workspace-facts > div { min-width: 0; }
+.development-workspace .workspace-facts dt { font-size: .75rem; color: var(--text-muted); }
+.development-workspace .workspace-facts dd { margin-top: 6px; font-size: 1.05rem; font-weight: 650; }
+.development-workspace .workspace-facts p { margin: 5px 0 0; font-size: .7rem; color: var(--text-muted); }
+.development-workspace .workspace-tabs { margin-bottom: 24px; }
+.development-workspace .record-section {
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line-default);
+  border-radius: var(--dev-radius);
+  box-shadow: var(--dev-shadow);
+}
+.development-workspace .record-overview { gap: 24px; }
+.development-workspace .stock-summary {
+  border-radius: var(--dev-radius);
+  overflow: hidden;
+  border: 1px solid var(--line-default);
+  box-shadow: var(--dev-shadow);
+}
+.development-workspace .stock-register { border-radius: var(--dev-radius); border: 1px solid var(--line-default); background: var(--surface); overflow: hidden; }
+.development-workspace .stock-register-heading { padding: 22px 24px; }
+.development-workspace .table-scroll { scrollbar-gutter: stable; }
+.development-workspace tbody td, .development-workspace tbody th { padding-top: 16px; padding-bottom: 16px; }
+.development-workspace tbody tr:focus-within { background: var(--surface-selected); }
+.development-workspace .field-label { line-height: 1.5; }
+@media (max-width: 1000px) {
+  .development-nav { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .development-workspace .workspace-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .development-nav-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .development-nav-links a { padding: 10px; font-size: .75rem; }
+  .development-workspace .record-workspace-header { padding: 20px; }
+  .development-workspace .workspace-facts { padding: 16px 20px; gap: 16px; }
+  .development-workspace .record-section { padding: 18px; }
+  .development-workspace .record-section .position-value { font-size: 1.8rem; overflow-wrap: anywhere; }
+  .development-workspace .card-header { padding: 18px; }
+  .development-workspace .workspace-actions { width: 100%; }
+  .development-workspace .workspace-actions > .button { width: 100%; }
+}

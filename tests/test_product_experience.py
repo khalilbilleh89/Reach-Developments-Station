@@ -140,7 +140,11 @@ class TestExperience41Evidence:
 
 
 def stylesheet_without_comments() -> str:
-    return re.sub(r"/\*.*?\*/", "", read(STYLESHEET), flags=re.S)
+    layout = FRONTEND / "app" / "layout.tsx"
+    stylesheets = re.findall(r'import "(\./[^\"]+\.css)";', read(layout))
+    assert "./globals.css" in stylesheets
+    css = "\n".join(read(layout.parent / path) for path in stylesheets)
+    return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
 
 
 def top_level_selectors(css: str) -> list[str]:

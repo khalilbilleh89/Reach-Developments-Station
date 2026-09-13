@@ -1,5 +1,7 @@
 "use client";
 
+import { DevelopmentWorkspace } from "./DevelopmentWorkspace";
+
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
@@ -278,7 +280,9 @@ export function ProjectWorkspace({
         crumbs={crumbs}
         utilities={utilities}
       >
-        {body()}
+        <DevelopmentWorkspace projectId={projectId} section={section} roles={roles}>
+          {body()}
+        </DevelopmentWorkspace>
       </AppShell>
     </CurrencyProvider>
   );

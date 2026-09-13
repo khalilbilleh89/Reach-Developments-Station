@@ -48,10 +48,9 @@ def test_delete_empty_unit_floor_building_keeps_audit(
     base = inventory_url(project_id)
     blocked = admin_client.delete(f"{base}/floors/{floor_id}", params={"reason": "Mistake"})
     assert blocked.status_code == 409, blocked.text
+    owner = client_for(make_user(db, email="unit-owner@example.com", roles=("master_admin",)).email)
     for kind, identifier in (("units", unit_id), ("floors", floor_id), ("buildings", building_id)):
-        response = admin_client.delete(
-            f"{base}/{kind}/{identifier}", params={"reason": "Duplicate entry"}
-        )
+        response = owner.delete(f"{base}/{kind}/{identifier}", params={"reason": "Duplicate entry"})
         assert response.status_code == 204, response.text
         assert db.scalar(
             select(AuditEvent.id).where(
@@ -62,7 +61,7 @@ def test_delete_empty_unit_floor_building_keeps_audit(
     assert admin_client.get(f"{base}/units/{unit_id}").status_code == 404
 
 
-def test_delete_priced_unit_rolls_back_measurements(
+def test_system_administrator_cannot_remove_priced_unit(
     admin_client: TestClient,
     project_id: str,
     unit_id: str,
@@ -73,7 +72,7 @@ def test_delete_priced_unit_rolls_back_measurements(
     response = admin_client.delete(
         f"{inventory_url(project_id)}/units/{unit_id}", params={"reason": "Remove"}
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 403, response.text
     assert list(db.scalars(select(UnitAreaSchedule.id))) == before
     assert admin_client.get(f"{inventory_url(project_id)}/units/{unit_id}").status_code == 200
 
@@ -99,7 +98,7 @@ def test_other_users_cannot_delete_and_blank_reason_is_refused(
 ) -> None:
     url = f"{inventory_url(project_id)}/units/{unit_id}"
     assert sales_ops_client.delete(url, params={"reason": "Remove"}).status_code == 403
-    assert admin_client.delete(url, params={"reason": "   "}).status_code == 422
+    assert admin_client.delete(url, params={"reason": "   "}).status_code == 403
 
 
 def test_buyer_with_sales_history_cannot_be_deleted(

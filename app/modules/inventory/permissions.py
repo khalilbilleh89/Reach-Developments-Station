@@ -250,7 +250,9 @@ def require_unit(
     by primary key and checked afterwards, which is the shape that lets one
     project's identifier be substituted into another's path.
     """
-    statement = select(Unit).where(Unit.id == unit_id, Unit.project_id == project.id)
+    statement = select(Unit).where(
+        Unit.id == unit_id, Unit.project_id == project.id, Unit.removed_at.is_(None)
+    )
     unit = session.scalars(
         visible_units(statement, session, project_id=project.id, actor=actor)
     ).first()

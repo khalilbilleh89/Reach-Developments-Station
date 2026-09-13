@@ -494,6 +494,8 @@ class Unit(Base):
     release_batch: Mapped[str | None] = mapped_column(String(64), nullable=True)
     block_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    #: Owner removal hides current inventory and Sales, retaining linked evidence.
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
