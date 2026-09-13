@@ -159,9 +159,10 @@ function mount(file, name, dependencies, props) {
     if (key === "@/components/ui") return ui;
     if (key === "@/components/shell/navigation") return { sectionDescription: () => "", projectHref: () => "/projects/" };
     if (key === "@/lib/roles") return { hasAnyRole: () => false };
-    if (key === "./presentation" || key === "@/components/projects/land/presentation") {
+    if (key === "./presentation" || key === "@/components/projects/land/presentation" || key === "./permits/presentation") {
       const helper = {};
-      const compiled = ts.transpileModule(readFileSync(new URL("../src/components/projects/land/presentation.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+      const helperPath = key === "./permits/presentation" ? "permits" : "land";
+      const compiled = ts.transpileModule(readFileSync(new URL(`../src/components/projects/${helperPath}/presentation.ts`, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
       runInNewContext(`(function(exports) { ${compiled}\n})`)(helper);
       return helper;
     }
