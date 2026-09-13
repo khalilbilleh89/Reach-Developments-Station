@@ -30,3 +30,25 @@ button works and must not be described as doing so.
 Audit and reporting outputs derived from other records are not ordinary editable records.
 Do not add destructive history deletion merely to satisfy a checkbox. Document their retention
 contract and the removal path for their source records.
+
+## Explicit owner-approved unit history purge
+
+The owner has requested an exception for removed units with closed sales and
+reservations. **Inventory → Removed units → Purge unit and linked history** is
+a separate Master Administrator operation. It previews record counts and transaction
+references, requires the exact unit reference, a reason and an acknowledgment of
+irreversible history deletion. Ordinary Delete and Delete permanently retain their
+existing protections.
+
+Only cancelled sales and cancelled, expired or converted reservations are eligible.
+Confirmed receipts/refunds must first be reversed through Collections. An explicit
+ownership map includes inventory details, prices, closed sale/reservation history,
+payment schedules, collection history, commission entries and unit progress/costs.
+It does not expand through arbitrary foreign keys. Shared dependencies block the
+entire purge; audit events, clients, project configuration and saved reports remain.
+Database locks and a fresh full-record fingerprint prevent confirming stale contents.
+All deletions and the `unit.purged` audit event commit together or roll back together.
+The reason, identity, transaction references and record counts remain in audit.
+
+This is a narrow, owner-approved cross-domain maintenance exception implemented in
+`app/modules/inventory/purge.py`, not a general cascade policy or domain write API.

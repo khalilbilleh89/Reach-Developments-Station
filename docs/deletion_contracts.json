@@ -317,7 +317,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/inventory/{kind}/{identifier}",
     "ui_file": "frontend/src/components/projects/inventory/UnitWorkspace.tsx",
-    "notes": "Master Administrator only. Unused units delete physically; linked or committed units are removed from Inventory and current Sales together with history and obligations retained. Removed units can be discovered and restored through Inventory > Removed units, with reason and original identity audited. Explicit permanent=true deletion is available on the unit page and Removed units: deletes eligible rows from SQL and frees references, but returns 409 and rolls back all changes for linked records or commercial commitments; never silently falls back to retained removal. Audit survives permanent deletion."
+    "notes": "Master Administrator only. Unused units delete physically; linked or committed units are removed from Inventory and current Sales together with history and obligations retained. Removed units can be discovered and restored through Inventory > Removed units, with reason and original identity audited. Explicit permanent=true deletion is available on the unit page and Removed units: deletes eligible rows from SQL and frees references, but returns 409 and rolls back all changes for linked records or commercial commitments; never silently falls back to retained removal. Audit survives permanent deletion. Separate Master Administrator purge on Removed units previews and explicitly confirms closed linked history erasure; active transactions, confirmed cash and shared dependencies block the atomic operation."
   },
   {
     "handler": "inventory.create_unit_document",
