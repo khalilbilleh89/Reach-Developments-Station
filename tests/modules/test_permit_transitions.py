@@ -119,10 +119,10 @@ def test_a_historical_backfill_on_the_same_day_is_allowed(
 
 
 @pytest.mark.parametrize("to_status", ["rejected", "on_hold", "withdrawn"])
-def test_stopping_a_permit_requires_a_reason(
+def test_stopping_a_permit_allows_an_optional_reason(
     admin_client: TestClient, permits_url: str, permit_id: str, to_status: str
 ) -> None:
-    """Given a move that halts or refuses the application, then 'why' is required."""
+    """Reason is optional even when the application stops."""
     _walk_to(
         admin_client,
         permits_url,
@@ -132,24 +132,13 @@ def test_stopping_a_permit_requires_a_reason(
     )
 
     without = _move(admin_client, permits_url, permit_id, to_status, "2026-02-01")
-    with_reason = _move(
-        admin_client,
-        permits_url,
-        permit_id,
-        to_status,
-        "2026-02-01",
-        reason="Authority requested further information",
-    )
-
-    assert without.status_code == 422
-    assert "reason is required" in without.json()["detail"]
-    assert with_reason.status_code == 201
+    assert without.status_code == 201
 
 
-def test_restarting_after_a_refusal_requires_a_reason(
+def test_restarting_after_a_refusal_allows_no_reason(
     admin_client: TestClient, permits_url: str, permit_id: str
 ) -> None:
-    """Given a rejected application, then restarting it must be explained."""
+    """Restarting retains an event without requiring an explanation."""
     _walk_to(
         admin_client,
         permits_url,
@@ -161,7 +150,7 @@ def test_restarting_after_a_refusal_requires_a_reason(
 
     without = _move(admin_client, permits_url, permit_id, "preparing", "2026-03-01")
 
-    assert without.status_code == 422
+    assert without.status_code == 201
 
 
 def test_starting_work_needs_no_explanation(

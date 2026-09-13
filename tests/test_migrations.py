@@ -28,10 +28,18 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0027_merge_sales_areas"
+HEAD_REVISION = "0028_merge_permit_sales"
 
 
-@pytest.mark.parametrize("starting_revision", ["0025_sales_agent_details", "0026_common_areas"])
+@pytest.mark.parametrize(
+    "starting_revision",
+    [
+        "0025_sales_agent_details",
+        "0026_common_areas",
+        "0027_merge_sales_areas",
+        "0027_merge_permit_common",
+    ],
+)
 def test_sales_and_common_area_histories_converge(postgres: None, starting_revision: str) -> None:
     """Either feature history upgrades to one head without rewriting shipped revisions."""
     config = _alembic_config()
@@ -61,7 +69,10 @@ def test_sales_and_common_area_histories_converge(postgres: None, starting_revis
         command.upgrade(config, "head")
 
 
-@pytest.mark.parametrize("starting_revision", ["0023_permit_removal", "0023_inventory_options"])
+@pytest.mark.parametrize(
+    "starting_revision",
+    ["0023_permit_removal", "0023_inventory_options", "0026_permit_completed", "0026_common_areas"],
+)
 def test_parallel_permit_and_inventory_histories_converge(
     postgres: None, starting_revision: str
 ) -> None:

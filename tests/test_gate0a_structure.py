@@ -61,10 +61,12 @@ def test_ordinary_settings_has_no_generic_configuration_destinations() -> None:
     assert 'label: "Currencies"' not in settings
 
 
-def test_issued_is_presented_as_obtained_without_changing_the_status() -> None:
+def test_issued_retains_its_label_and_completion_is_a_distinct_status() -> None:
     permits = (ROOT / "frontend/src/components/projects/PermitsTab.tsx").read_text(encoding="utf-8")
     assert 'issued: "Obtained / Issued"' in permits
-    assert '"completed"' not in permits
+    assert 'completed: "Completed"' in permits
+    assert 'issued: ["completed", "expired", "renewed"]' in permits
+    assert "completed: []" in permits
 
 
 def test_new_project_keeps_normalized_contextual_configuration() -> None:

@@ -73,6 +73,7 @@ PERMIT_STATUSES = (
     "resubmission",
     "approved_with_conditions",
     "issued",
+    "completed",
     "expired",
     "renewed",
     "rejected",
