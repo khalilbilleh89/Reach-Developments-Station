@@ -106,6 +106,7 @@
   .development-workspace .record-workspace-header { padding: 20px; }
   .development-workspace .workspace-facts { padding: 16px 20px; gap: 16px; }
   .development-workspace .record-section { padding: 18px; }
+  .development-workspace .record-section .position-value { font-size: 1.8rem; overflow-wrap: anywhere; }
   .development-workspace .card-header { padding: 18px; }
   .development-workspace .workspace-actions { width: 100%; }
   .development-workspace .workspace-actions > .button { width: 100%; }
