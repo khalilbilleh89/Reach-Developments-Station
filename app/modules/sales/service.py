@@ -613,9 +613,11 @@ def update_client(
     somebody's personal data.
     """
     permissions.require_client_writer(actor)
+    project = lock_project(session, project.id)
     client = permissions.require_visible_client(
         session, project=project, client_id=client_id, actor=actor
     )
+    client = _lock_client(session, project_id=project.id, client_id=client.id)
     if "owner_advisor_user_id" in fields:
         _require_advisor(
             session,
@@ -1566,6 +1568,10 @@ def create_reservation(
             project_column=Reservation.project_id,
         ),
         unit_id=unit.id,
+        agent_country=client.agent_country,
+        agent_branch=client.agent_branch,
+        agent_branch_leader=client.agent_branch_leader,
+        agent_name=client.agent_name,
         client_id=client.id,
         unit_price_version_id=active.id,
         status=RESERVATION_DEPOSIT_PENDING if gate_required else RESERVATION_DRAFT,
@@ -2381,7 +2387,9 @@ def _close_reservation(
     project = lock_project(session, project.id)
     unit = inventory_service.lock_unit(session, project_id=project.id, unit_id=reservation.unit_id)
     reservation = _lock_reservation(session, project_id=project.id, reservation_id=reservation.id)
-    if reservation.status not in RESERVATION_COMMITTED:
+    if reservation.status not in RESERVATION_COMMITTED and not (
+        to_status == RESERVATION_CANCELLED and reservation.status in RESERVATION_PREPARING
+    ):
         raise ConflictError("Only a live reservation can be closed this way.")
     sale = session.scalars(
         select(SaleContract).where(
@@ -2391,6 +2399,22 @@ def _close_reservation(
     ).first()
     if sale is not None and sale.status != SALE_DRAFT:
         raise ConflictError(f"Sale contract {sale.sale_number} has taken this reservation over.")
+
+    if sale is not None and to_status == RESERVATION_CANCELLED:
+        sale_before = _snapshot(sale, _SALE_FIELDS)
+        sale.status = SALE_CANCELLED
+        sale.cancelled_at = _now()
+        record_event(
+            session,
+            action="sale_contract.cancelled",
+            entity_type=ENTITY_SALE,
+            entity_id=sale.id,
+            actor_user_id=actor.user_id,
+            correlation_id=actor.correlation_id,
+            reason=reason,
+            before=sale_before,
+            after=_snapshot(sale, _SALE_FIELDS),
+        )
 
     before = _snapshot(reservation, _RESERVATION_FIELDS)
     from_status = reservation.status
@@ -2406,7 +2430,10 @@ def _close_reservation(
         actor=actor,
         reason=reason,
     )
-    if unit.commercial_status == COMMERCIAL_STATUS_RESERVED:
+    if (
+        unit.commercial_status == COMMERCIAL_STATUS_RESERVED
+        and from_status in RESERVATION_COMMITTED
+    ):
         _release_or_hold(
             session,
             project=project,
@@ -2862,6 +2889,10 @@ def create_sale(
         buyer_fee_total=reservation.buyer_fee_total,
         total_contract_price=reservation.total_buyer_payable,
         reservation_quote_snapshot_json=reservation.quote_snapshot_json,
+        agent_country=reservation.agent_country,
+        agent_branch=reservation.agent_branch,
+        agent_branch_leader=reservation.agent_branch_leader,
+        agent_name=reservation.agent_name,
         sales_channel_code=reservation.sales_channel_code,
         sales_branch_code=reservation.sales_branch_code,
         advisor_user_id=reservation.advisor_user_id,

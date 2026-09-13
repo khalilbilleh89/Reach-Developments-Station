@@ -311,8 +311,9 @@ _PROJECT_FIELDS = (
     "project_manager_user_id",
 )
 
-#: ``code`` is absent on purpose: a project code is immutable once issued.
+#: Codes are editable labels; relationships continue to use the stable project UUID.
 _PROJECT_UPDATABLE = (
+    "code",
     "name",
     "developer_entity",
     "country_pack_id",
@@ -678,6 +679,14 @@ def update_project(
     # concurrent access revocation must queue behind it rather than race it.
     project = lock_project(session, project.id)
 
+    if "code" in updates:
+        updates["code"] = normalize_project_code(updates["code"])
+        duplicate = session.scalar(
+            select(Project.id).where(Project.code == updates["code"], Project.id != project.id)
+        )
+        if duplicate is not None:
+            raise ConflictError("A project with that code already exists.")
+
     basis_changes = [
         field
         for field in _BASIS_FIELDS
@@ -751,7 +760,7 @@ def update_project(
 
     for field, value in updates.items():
         setattr(project, field, value)
-    session.flush()
+    _flush(session, constraint=_CODE_CONSTRAINT, detail="A project with that code already exists.")
     record_event(
         session,
         action="project.updated",

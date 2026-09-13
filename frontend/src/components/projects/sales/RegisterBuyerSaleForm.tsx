@@ -1,5 +1,6 @@
 "use client";
 
+import { AgentFields, emptyAgent, agentPayload } from "./AgentFields";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesClient, SalesUnitOption, SalesPricePreview } from "@/lib/api";
@@ -12,6 +13,7 @@ export function RegisterBuyerSaleForm({ projectId, unitId, clientId, unitOption,
   projectId: string; unitId: string; clientId?: string | null; unitOption: SalesUnitOption;
   onSaved: (saleId: string) => void; onCancel: () => void;
 }) {
+  const [agent, setAgent] = useState(emptyAgent);
   const [buyers, setBuyers] = useState<SalesClient[] | null>(null);
   const [price, setPrice] = useState(unitOption.reference_price_ex_tax);
   const [preview, setPreview] = useState<SalesPricePreview | null>(null);
@@ -44,7 +46,7 @@ export function RegisterBuyerSaleForm({ projectId, unitId, clientId, unitOption,
   if (loadError) return <Notice tone="error">{loadError}<Button onClick={() => setAttempt(value => value + 1)}>Retry</Button></Notice>;
   if (!buyers) return <Loading label="Loading buyers and selling price…" />;
   const needsPrice = !preview || !!eligibility;
-  return <DraftBoundary dirty={Boolean(price !== unitOption.reference_price_ex_tax || form.name || form.phone || form.email || form.reason || form.date || form.client !== (clientId ?? "new"))} busy={busy}>
+  return <DraftBoundary dirty={Boolean(Object.values(agent).some(Boolean) || price !== unitOption.reference_price_ex_tax || form.name || form.phone || form.email || form.reason || form.date || form.client !== (clientId ?? "new"))} busy={busy}>
     <form onSubmit={async event => {
       event.preventDefault(); if (saving.current || needsPrice) return;
       saving.current = true;
@@ -53,7 +55,7 @@ export function RegisterBuyerSaleForm({ projectId, unitId, clientId, unitOption,
         const result = await sales.registerBuyer(projectId, {
           sales_price_ex_tax: price, expected_price_version_id: version,
           unit_id: unitId, reason: form.reason.trim(), ...(form.date ? { sale_date: form.date } : {}),
-          ...(form.client === "new" ? { buyer: { display_name: form.name.trim(), sole_purchaser_name: form.name.trim(),
+          ...(form.client === "new" ? { buyer: { ...agentPayload(agent), display_name: form.name.trim(), sole_purchaser_name: form.name.trim(),
             ...(form.email.trim() ? { email: form.email.trim() } : {}), ...(form.phone.trim() ? { phone: form.phone.trim() } : {}) } } : { client_id: form.client }),
         });
         onSaved(result.sale.id);
@@ -75,6 +77,7 @@ export function RegisterBuyerSaleForm({ projectId, unitId, clientId, unitOption,
         <Field label="Phone" optional><input className="input" type="tel" maxLength={64} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></Field>
         <Field label="Email" optional><input className="input" type="email" maxLength={320} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
       </FieldRow> : <p className="field-hint">Existing buyer parties and ownership shares are preserved. Joint buyers must total 100%.</p>}
+      {form.client === "new" ? <AgentFields value={agent} onChange={setAgent} /> : <p className="field-hint">Sales team: {[buyers.find(b => b.id === form.client)?.agent_country, buyers.find(b => b.id === form.client)?.agent_branch, buyers.find(b => b.id === form.client)?.agent_branch_leader, buyers.find(b => b.id === form.client)?.agent_name].filter(Boolean).join(" · ") || "Not recorded — edit in Agent/Buyer."}</p>}
       <Field label="Sale date" optional hint="Leave blank for today."><input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></Field>
       <Field label="Owner confirmation / reason" hint="Records your decision and any release/deposit approval override in the audit trail."><textarea className="input" required maxLength={500} value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} /></Field>
       <FormActions><Button variant="primary" type="submit" disabled={busy || needsPrice || !form.reason.trim() || (form.client === "new" && !form.name.trim())}>{busy ? "Registering…" : "Register buyer & mark sold"}</Button><Button disabled={busy} data-leaves-editor onClick={onCancel}>Cancel</Button></FormActions>

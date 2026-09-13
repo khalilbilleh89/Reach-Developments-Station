@@ -9,17 +9,18 @@ import { RegisterBuyerSaleForm } from "./RegisterBuyerSaleForm";
 import { ReservationForm } from "./ReservationForm";
 import { SalesUnitPicker } from "./SalesUnitPicker";
 
-export function NewReservation({projectId, onCreated, onSaleCreated, allowOwner, onCancel}: {
+export function NewReservation({projectId, onCreated, onSaleCreated, allowOwner, onCancel, clientId}: {
+  clientId?: string;
   allowOwner: boolean; onSaleCreated: (id: string) => void;
   projectId: string; onCreated: (id: string) => void; onCancel: () => void;
 }) {
   const id = useId();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [owner, setOwner] = useState(false);
+  const [owner, setOwner] = useState(Boolean(clientId && allowOwner));
   const [selected, setSelected] = useState<SalesUnitOption | null>(null);
   const changeUnit = () => { setSelected(null); setPickerOpen(true); };
   const codeOf = useCurrencyCode();
-  return <Card title="New Reservation" description="Choose an available unit, agree the price and prepare the buyer’s reservation.">
+  return <Card title={clientId ? "Connect buyer to unit" : "New Reservation"} description="Choose an available unit, agree the price and prepare the buyer’s reservation.">
     {!selected ? <SalesUnitPicker key={projectId} initiallyOpen={pickerOpen} projectId={projectId} onSelect={setSelected} onCancel={onCancel} /> : <>
       <div className="sales-unit-picker">
         <span className="field-label" id={`${id}-label`}>Unit</span>
@@ -33,7 +34,7 @@ export function NewReservation({projectId, onCreated, onSaleCreated, allowOwner,
         <p className="subtle">{[selected.phase_name, selected.building_name, selected.gross_area === null ? null : `${selected.gross_area} ${selected.area_unit ?? ""}`].filter(Boolean).join(" · ")}</p>
       </div>
       {allowOwner ? <Button data-leaves-editor onClick={() => setOwner(!owner)}>{owner ? "Prepare standard reservation" : "Owner: register buyer & mark sold"}</Button> : null}
-      {owner ? <RegisterBuyerSaleForm projectId={projectId} unitId={selected.unit_id} unitOption={selected} onSaved={onSaleCreated} onCancel={() => setOwner(false)} /> : <ReservationForm projectId={projectId} unitId={selected.unit_id} currencyId={selected.currency_id} unitOption={selected} onCreated={onCreated} onCancel={onCancel} onChangeUnit={changeUnit} />}
+      {owner ? <RegisterBuyerSaleForm clientId={clientId} projectId={projectId} unitId={selected.unit_id} unitOption={selected} onSaved={onSaleCreated} onCancel={() => setOwner(false)} /> : <ReservationForm clientId={clientId} projectId={projectId} unitId={selected.unit_id} currencyId={selected.currency_id} unitOption={selected} onCreated={onCreated} onCancel={onCancel} onChangeUnit={changeUnit} />}
     </>}
   </Card>;
 }

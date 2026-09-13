@@ -159,6 +159,7 @@ _DATA_TABLES = (
     "unit_status_events",
     "unit_area_values",
     "unit_area_schedules",
+    "inventory_common_areas",
     "inventory_sub_assets",
     "units",
     "floors",

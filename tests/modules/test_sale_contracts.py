@@ -276,9 +276,13 @@ def test_a_later_tax_change_does_not_restate_a_signed_contract(
     assert after["tax_lines"][0]["rate_fraction"] == "0.160000"
 
 
-def test_a_sale_contract_has_no_delete_route(
+def test_sales_operations_cannot_remove_a_sale_contract(
     sales_ops_client: TestClient, project_id: str, sale_id: str
 ) -> None:
-    response = sales_ops_client.delete(f"{sales_url(project_id)}/contracts/{sale_id}")
+    before = _sale(sales_ops_client, project_id, sale_id)
+    response = sales_ops_client.delete(
+        f"{sales_url(project_id)}/contracts/{sale_id}", params={"reason": "Remove test sale"}
+    )
 
-    assert response.status_code in {404, 405}
+    assert response.status_code == 403, response.text
+    assert _sale(sales_ops_client, project_id, sale_id) == before
