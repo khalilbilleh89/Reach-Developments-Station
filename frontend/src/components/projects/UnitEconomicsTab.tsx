@@ -74,10 +74,10 @@ import {
 } from "./economics/labels";
 
 const TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "units", label: "Units" },
-  { key: "versions", label: "Allocation versions" },
-  { key: "costs", label: "Unit costs" },
+  { key: "overview", icon: "overview" as const, label: "Overview" },
+  { key: "units", icon: "inventory" as const, label: "Units" },
+  { key: "versions", icon: "history" as const, label: "Allocation versions" },
+  { key: "costs", icon: "money" as const, label: "Unit costs" },
 ];
 
 const VERSION_SEQUENCE = ["draft", "submitted", "approved", "active"];
@@ -462,7 +462,7 @@ function UnitsRegister({ rows, code }: { rows: UnitEconomicsRow[]; code: string 
       <Card flush>
         {shown.length === 0 ? (
           <div className="card-body">
-            <EmptyState title="No units match" hint="Widen the filter, or record a cost basis so units can be analysed." />
+            <EmptyState icon="economics" title="No units match" hint="Widen the filter, or record a cost basis so units can be analysed." />
           </div>
         ) : (
           <TableScroll label="Unit economics" fixedFirst>

@@ -290,7 +290,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
             <ReadState answer={agingAnswer} label="Loading the aging…" />
           ) : aging.length === 0 ? (
             <div className="card-body">
-              <EmptyState title="Nothing aged" hint={`No overdue receivables as at ${businessDate(asOf)}.`} />
+              <EmptyState icon="collections" title="Nothing aged" hint={`No overdue receivables as at ${businessDate(asOf)}.`} />
             </div>
           ) : (
             <TableScroll label={`Aging as at ${businessDate(asOf)}`} fixedFirst>

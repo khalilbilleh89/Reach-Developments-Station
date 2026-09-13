@@ -29,12 +29,12 @@ import {
 import type { Roles } from "@/lib/roles";
 
 const SECTIONS = [
-  { key: "overview", label: "Overview" },
-  { key: "monthly", label: "Monthly cashflow" },
-  { key: "forecast", label: "Forecast" },
-  { key: "movements", label: "Development & financing" },
-  { key: "escrow", label: "Escrow" },
-  { key: "management", label: "Management" },
+  { key: "overview", icon: "overview" as const, label: "Overview" },
+  { key: "monthly", icon: "calendar" as const, label: "Monthly cashflow" },
+  { key: "forecast", icon: "economics" as const, label: "Forecast" },
+  { key: "movements", icon: "money" as const, label: "Development & financing" },
+  { key: "escrow", icon: "access" as const, label: "Escrow" },
+  { key: "management", icon: "layers" as const, label: "Management" },
 ];
 
 /**

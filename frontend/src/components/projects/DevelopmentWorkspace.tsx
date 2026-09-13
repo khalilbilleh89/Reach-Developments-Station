@@ -8,12 +8,12 @@ import { Icon } from "@/components/ui";
 
 const DEVELOPMENT = new Set<ProjectSection>(["overview", "land", "permits", "prelaunch", "consultant", "inventory"]);
 
-/** Development has its own visual treatment; other modules keep their existing workspace. */
+/** Development has a property-focused treatment; other project modules share the platform theme. */
 export function DevelopmentWorkspace({projectId, section, roles, children}: {
   projectId: string; section: ProjectSection; roles: Set<string>; children: ReactNode;
 }) {
   const params = useSearchParams();
-  if (!DEVELOPMENT.has(section)) return <>{children}</>;
+  if (!DEVELOPMENT.has(section)) return <div className="platform-workspace">{children}</div>;
   const items = PROJECT_NAVIGATION.flatMap(group => group.items)
     .filter(item => DEVELOPMENT.has(item.key) && (!item.visible || item.visible(roles)));
   return <div className="development-workspace">

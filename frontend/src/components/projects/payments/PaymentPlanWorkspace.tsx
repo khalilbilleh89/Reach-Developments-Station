@@ -417,11 +417,11 @@ export function PaymentPlanWorkspace({
   const isDraft = isCurrent && version?.status === "draft";
   const code = currencyCodeOf(detail.currency_id);
   const sections = [
-    { key: "overview", label: "Overview" },
-    { key: "schedule", label: "Installments & triggers" },
-    { key: "reconciliation", label: "Reconciliation" },
-    { key: "terms", label: "Terms" },
-    { key: "history", label: "Versions & history" },
+    { key: "overview", icon: "overview" as const, label: "Overview" },
+    { key: "schedule", icon: "calendar" as const, label: "Installments & triggers" },
+    { key: "reconciliation", icon: "check" as const, label: "Reconciliation" },
+    { key: "terms", icon: "documents" as const, label: "Terms" },
+    { key: "history", icon: "history" as const, label: "Versions & history" },
   ];
 
   /**
