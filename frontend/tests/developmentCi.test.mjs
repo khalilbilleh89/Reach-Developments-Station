@@ -12,5 +12,3 @@ test('Backend, dependency, migration and unrelated workflow changes prevent the 
 test('Main pushes, forks and other PR branches keep normal CI', () => {
   for (const change of [{name:'push'}, {base:'integration/mvp3'}, {head:'eng/another-change'}, {head:'eng/architectural-property-workspace'}, {head:'eng/development-ui-delivery'}, {head:'eng/visual-02-development-delivery'}, {headRepository:'fork/repo'}, {repository:'other/repo'}]) assert.equal(isDevelopmentUiOnly({...event,...change}, ['frontend/src/app/globals.css']), false);
 });
-
-

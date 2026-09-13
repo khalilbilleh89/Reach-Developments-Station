@@ -32,4 +32,3 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   appendFileSync(env.GITHUB_OUTPUT, `frontend_only=${frontendOnly}\n`);
   console.log(frontendOnly ? 'Approved Development UI delivery: frontend checks only for this PR.' : 'Normal backend and frontend CI policy applies.');
 }
-
