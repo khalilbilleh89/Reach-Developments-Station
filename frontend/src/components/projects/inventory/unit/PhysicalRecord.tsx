@@ -28,11 +28,11 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
   const [busy, setBusy] = useState(false);
   const [label, setLabel] = useState("");
   const [doc, setDoc] = useState({ title: "", url: "", revision: "" });
-  const [measuring, setMeasuring] = useState(masterEditing ?? false);
-  const [featureEditing,setFeatureEditing] = useState(masterEditing ?? false);
-  const [docEditing,setDocEditing] = useState(masterEditing ?? false);
+  const [measuring, setMeasuring] = useState(canWrite && (masterEditing ?? false));
+  const [featureEditing,setFeatureEditing] = useState(canWrite && (masterEditing ?? false));
+  const [docEditing,setDocEditing] = useState(canWrite && (masterEditing ?? false));
   const [measurementBaseline,setMeasurementBaseline] = useState(JSON.stringify([initialDraft?.revision_code ?? "",initialDraft?.source ?? "",initialDraft?.reconciled ?? false,initialMeasurements]));
-  const [assetForm, setAssetForm] = useState(masterEditing ?? false);
+  const [assetForm, setAssetForm] = useState(canWrite && (masterEditing ?? false));
   const [asset, setAsset] = useState({ asset_reference: "", asset_type: "parking", area: "", subtype_code:"" });
   const [revision, setRevision] = useState(initialDraft?.revision_code ?? "");
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);

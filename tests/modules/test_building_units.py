@@ -155,3 +155,32 @@ def test_building_unit_can_be_repriced_after_a_governed_move(
         f"{pricing_url(project_id)}/units/{unit_id}/price-versions", json={}
     )
     assert draft.status_code == 201, draft.text
+
+
+def test_building_unit_can_be_restored_with_active_building(
+    admin_client: TestClient, project_id: str, building_id: str, db: Session
+) -> None:
+    from tests.factories import client_for, make_user
+
+    owner = client_for(
+        make_user(db, email="villa-owner@example.com", roles=("master_admin",)).email
+    )
+    db.rollback()
+    url = inventory_url(project_id)
+    created = admin_client.post(
+        f"{url}/units",
+        json={
+            "building_id": building_id,
+            "unit_number": "V2",
+            "unit_reference": "VILLA-RESTORE",
+            "asset_class": "villa",
+        },
+    )
+    assert created.status_code == 201, created.text
+    unit_url = f"{url}/units/{created.json()['id']}"
+    removed = owner.delete(unit_url, params={"reason": "Temporarily remove duplicate"})
+    assert removed.status_code == 204, removed.text
+    restored = owner.post(f"{unit_url}/restoration", json={"reason": "Confirmed original unit"})
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["floor_id"] is None
+    assert restored.json()["building_id"] == building_id

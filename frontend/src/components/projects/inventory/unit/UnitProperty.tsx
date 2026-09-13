@@ -62,7 +62,7 @@ export function UnitProperty({projectId,unit,areaTypes,schedules,assets,values,c
   return <div className="stack">
     {configError ? <Notice tone="error">Project choices could not be loaded.<Button onClick={()=>setRetry(value=>value+1)}>Retry choices</Button></Notice> : null}
     <SectionHeader level={2} title="Property" actions={canWrite || additional.length ? <Button disabled={!options || configError} data-leaves-editor onClick={()=>setEditing(!editing)}>{editing ? "Done editing" : "Edit property"}</Button> : undefined} />
-    {editing && canWrite ? <EditForm fields={UNIT_FIELDS.map(field=>configuredField(field,options ?? [],unit[field.name as keyof Unit] as string|null))}
+    {editing && canWrite ? <EditForm closeOnSave={false} fields={["Identity","Features"].flatMap(group=>UNIT_FIELDS.filter(field=>field.group===group)).map(field=>configuredField(field,options ?? [],unit[field.name as keyof Unit] as string|null))}
       initial={Object.fromEntries(UNIT_FIELDS.map(field=>[field.name,asValue(unit[field.name as keyof Unit] as never)]))}
       onCancel={()=>setEditing(false)} submitLabel="Save identity and features" onSave={async changes=>{await inventory.updateUnit(projectId,unit.id,changes);await onChanged();}} /> : ["Identity","Features"].map(group=><section key={group}>
       <SectionHeader level={2} title={group} />
@@ -71,7 +71,7 @@ export function UnitProperty({projectId,unit,areaTypes,schedules,assets,values,c
     <PhysicalRecord key={`${unit.id}-${editing}`} masterEditing={editing} canDelete={canDelete} projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} options={options ?? []} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} />
     {values.length ? <section>
       <SectionHeader level={2} title="Additional fields" />
-      {editing && additional.length > 0 ? <EditForm fields={additional.map(value=>({name:value.field_key,label:value.display_label,hint:value.help_text ?? undefined,affix:value.unit_of_measure ?? undefined,
+      {editing && additional.length > 0 ? <EditForm closeOnSave={false} fields={additional.map(value=>({name:value.field_key,label:value.display_label,hint:value.help_text ?? undefined,affix:value.unit_of_measure ?? undefined,
         kind:value.data_type==="boolean" ? "checkbox" : value.data_type==="date" ? "date" : value.data_type==="option" ? "select" : value.data_type==="text" ? "text" : "number",
         options:value.data_type==="option" ? value.options.map(option=>({value:option.code,label:option.label})) : undefined}))}
         initial={Object.fromEntries(additional.map(value=>[value.field_key,asValue(value.value)]))} onCancel={()=>setEditing(false)} submitLabel="Save additional fields"

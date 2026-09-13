@@ -104,3 +104,17 @@ Migration 0031 adds the optional building parent and a database constraint requi
 exactly one parent. Existing units retain their UUIDs and floor links. Downgrade is
 refused while any unit is attached directly to a building, rather than deleting it
 or inventing a floor. Reassign those units deliberately before attempting rollback.
+
+
+### Inventory property amendments
+
+Unit pricing displays separate server-calculated rates for net and gross area, excluding tax.
+Net is internal area plus recorded balcony area. Gross adds the recorded outdoor components;
+with no extra components, gross equals net. Missing internal area, mixed measurement units,
+or duplicate components do not produce a misleading gross rate. Parking/storage stay separate.
+
+Edit selling price starts a replacement price version prefilled from the current record.
+Submission, approval and activation remain explicit; approved history is retained.
+Edit property opens Identity, Features, measurements, attachments and additional-field editors
+together. Saving a section keeps the remaining editors open. Overview uses project configuration
+labels for views and attached asset types and shows recorded roof/front gardens.

@@ -34,6 +34,7 @@ function nodes(tree) {
 test("unit placement follows the selected building and never invents a floor", async () => {
   const requests=[];
   const render=mount("components/projects/inventory/StructureViews.tsx","UnitForm",{
+    "@/lib/format":{businessDate:()=>"2026-09-14"},
     "@/lib/api":{inventory:{createUnit:async(...args)=>requests.push(args)}},
     "@/components/projects/DeleteRecordButton":{DeleteRecordButton:"DeleteRecordButton"},
   },{projectId:"p",buildings:[{id:"villa",code:"V",name:"Villa",phase_id:"phase"},{id:"tower",code:"T",name:"Tower",phase_id:"phase"}],phases:[{id:"phase",code:"P"}],floors:[{id:"f",building_id:"tower",code:"1",label:"First"}],allFloors:[{id:"f",building_id:"tower",code:"1",label:"First"}],defaultFloorId:"",defaultBuildingId:"villa",onCancel:()=>{},onSaved:async()=>{}});

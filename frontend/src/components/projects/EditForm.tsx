@@ -49,6 +49,7 @@ export function EditForm({
   onCancel,
   submitLabel = "Save changes",
   columns = 3,
+  closeOnSave = true,
 }: {
   fields: EditField[];
   initial: EditValues;
@@ -56,6 +57,7 @@ export function EditForm({
   onCancel: () => void;
   submitLabel?: string;
   columns?: 2 | 3 | 4;
+  closeOnSave?: boolean;
 }) {
   const [values, setValues] = useState<EditValues>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export function EditForm({
         changes[field.name] = next === "" ? null : next;
       }
       if (Object.keys(changes).length > 0) await onSave(changes);
-      onCancel();
+      if (closeOnSave) onCancel();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not save the changes.");
     } finally {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -78,15 +78,17 @@ def restore_unit(
     if unit.removed_at is None:
         return unit
     active_hierarchy = session.scalar(
-        select(Floor.id)
-        .join(Building, Building.id == Floor.building_id)
+        select(Building.id)
+        .select_from(Unit)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .join(Phase, Phase.id == Building.phase_id)
         .where(
-            Floor.id == unit.floor_id,
-            Floor.project_id == project.id,
+            Unit.id == unit.id,
+            Unit.project_id == project.id,
             Building.project_id == project.id,
             Phase.project_id == project.id,
-            Floor.is_active.is_(True),
+            (Unit.floor_id.is_(None) | Floor.is_active.is_(True)),
             Building.is_active.is_(True),
             Phase.is_active.is_(True),
         )
