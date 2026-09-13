@@ -39,6 +39,7 @@ import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
 import { LandAnalytics } from "@/components/projects/land/LandAnalytics";
+import { ParcelCollection } from "@/components/projects/land/ParcelCollection";
 import { measurement } from "@/components/projects/land/presentation";
 
 /** Tri-state: null means nobody has established it yet, which is not "no". */
@@ -251,6 +252,7 @@ export function LandTab({
   const [form, setForm] = useState(emptyParcel());
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
+  const [layout, setLayout] = useState<"parcels" | "schedule">("parcels");
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -426,7 +428,7 @@ export function LandTab({
           label: "Ownership share",
           value: selected.ownership_share_fraction
             ? percent(selected.ownership_share_fraction)
-            : "Whole parcel",
+            : "Not recorded",
         },
         { label: "Acquired", value: businessDate(selected.acquisition_date) ?? "Not recorded" },
       ]
@@ -464,7 +466,8 @@ export function LandTab({
           onReset={search ? () => setSearch("") : undefined}
         />
 
-        <Card flush>
+        <div className="land-layout-controls" aria-label="Land presentation"><Button small aria-pressed={layout === "parcels"} onClick={() => setLayout("parcels")}>Parcels</Button><Button small aria-pressed={layout === "schedule"} onClick={() => setLayout("schedule")}>Schedule</Button></div>
+        <div className="land-register-surface">
           {parcels === null ? (
             <Loading label="Loading the land register…" shape="rows" rows={5} />
           ) : rows.length === 0 ? (
@@ -488,23 +491,7 @@ export function LandTab({
             </div>
           ) : (
             <>
-            <div className="land-parcel-list" aria-label="Land parcels">
-              {rows.map(parcel => <article key={parcel.id} className="land-parcel-card">
-                <div className="land-parcel-card-head">
-                  <button type="button" className="button-link" onClick={() => void openParcel(parcel)}>Parcel {parcel.plot_number}</button>
-                  <StatusDot tone={parcel.is_active ? "success" : "muted"}>{parcel.is_active ? "Active" : "Inactive"}</StatusDot>
-                </div>
-                <p className="land-parcel-area">{measurement(parcel.land_area, parcel.area_unit)}</p>
-                <KeyValueGrid columns={2}>
-                  <KeyValue label="Title" value={parcel.title_status ?? "Not established"} />
-                  <KeyValue label="Zoning" value={parcel.zoning ?? "Not established"} />
-                  <KeyValue label="Ownership" value={parcel.ownership_type ?? "Not established"} />
-                  <KeyValue label="Acquired" value={businessDate(parcel.acquisition_date)} />
-                  {canSeeCost ? <KeyValue label="Purchase price" value={money(parcel.purchase_price, parcel.base_currency_code)} /> : null}
-                </KeyValueGrid>
-              </article>)}
-            </div>
-            <div className="land-parcel-table">
+            {layout === "parcels" ? <ParcelCollection parcels={rows} canSeeCost={canSeeCost} onOpen={parcel => void openParcel(parcel)} /> : <div className="land-schedule">
             <TableScroll label="Land register" fixedFirst>
               <thead>
                 <tr>
@@ -593,10 +580,10 @@ export function LandTab({
                 ))}
               </tbody>
             </TableScroll>
-            </div>
+            </div>}
             </>
           )}
-        </Card>
+        </div>
       </div>
 
       {creating ? (
@@ -868,7 +855,7 @@ export function LandTab({
                     value={
                       selected.ownership_share_fraction
                         ? percent(selected.ownership_share_fraction)
-                        : "Whole parcel"
+                        : "Not recorded"
                     }
                   />
                   <KeyValue label="Title status" value={selected.title_status} />

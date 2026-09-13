@@ -1,4 +1,41 @@
-# Development UI refinement — six planned PRs
+# Development visual redesign — white theme
+
+## Superseding visual redesign — white theme
+
+The first six PRs delivered functional refinements but did not meet the owner's
+visual expectations. The owner approved a substantial concept and explicitly
+requires white navigation and content surfaces, dark readable typography and
+restrained blue accents. This is a two-PR implementation, not another six-PR stack.
+
+1. `eng/visual-01-white-workspaces`: white shared shell and summary surfaces,
+   distinct display typography, one expanded desktop navigation hierarchy,
+   Overview entry composition, Land property dossiers with an optional schedule,
+   and Inventory hierarchy browsing/property cards. Based on main after #320/#325.
+2. `eng/visual-02-development-delivery`, initially targets PR1: Permits, Consultant, Pre-Launch, record-page
+   consistency and complete visual regression. Retarget PR2 to main only after
+   the whole candidate is locally validated; PR2 becomes combined delivery.
+
+Keep intermediate CI deferred. The narrow final frontend CI classifier now
+recognizes only `eng/visual-02-development-delivery` for this same-repository
+main PR and the complete allowed UI diff; the previous exception branch expires. Do not skip unrelated backend CI
+or alter protections. No backend application tests for this approved UI scope.
+Human review and merge remain required. Close PR1 only after verified inclusion
+and human merge of PR2. No fabricated images, floor plans, geometry or figures.
+
+Visual acceptance requires actual component screenshots at desktop/mobile,
+navigation and role checks, readable empty/populated/error states, exact monetary
+strings and preserved full-page editing/deletion/unsaved guards. A green build
+alone is not evidence of visual completion.
+
+### New delivery evidence
+
+- PR1 #327 at b82d0e3: white shared shell, Overview, Land dossiers and Inventory.
+- PR2: approval cards with optional schedule, consultant discipline/deliverable/history cards and a recorded-sequence timeline, expense-entry ledger with category summary and retained schedule.
+- Browser checks used actual React components with labeled sample records. Land was inspected with white sidebar/ContextBar, dossier navigation and schedule. Stock floor selection, Overview, approval schedule, all consultant tabs and expense actions were inspected. Land, approval, consultant programme and expense entries were checked at 390px; inspected pages had no document-level horizontal overflow. Sample-only preview routes were removed before production validation.
+- 118 frontend tests pass, including financial redaction, exact parcel selection, actual stock floor selection and server-sourced expense totals/confirmation eligibility. 39 isolated CI-routing checks pass; these are not backend application tests.
+- No deployment or production record mutation has occurred. Independent acceptance, real role/API integration and post-deployment browser verification remain explicit gates. Local fixture screenshots prove presentation, not full production integration.
+
+The sections below retain the earlier roadmap and its evidence for history.
 
 Based on the signed-in Pyla Pearl review of 13 September 2026. Governing policies:
 [ENGINEERING_RULES.md](ENGINEERING_RULES.md), [DELETION_POLICY.md](DELETION_POLICY.md)
@@ -66,3 +103,5 @@ role-specific API integration and independent review remain delivery limitations
 No project imagery, site geometry, monetary trend or dated milestone was invented.
 Financial analysis retains the existing currency-separated monthly cash view;
 additional imagery/charts need appropriate source data and a focused follow-up.
+
+White redesign delivery: #328 targets main and includes #327 at b82d0e3. Full frontend lint and production build passed. Final frontend CI is triggered by this documentation commit after retargeting; draft status remains until independent acceptance.

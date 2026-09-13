@@ -13,7 +13,7 @@ const exceptions = new Set([
 /** A one-roadmap exception, evaluated over the complete PR diff, including deletions. */
 export function isDevelopmentUiOnly(event, paths) {
   return event.name === 'pull_request' && event.base === 'main' &&
-    event.head === 'eng/development-ui-delivery' && event.repository === repository &&
+    event.head === 'eng/visual-02-development-delivery' && event.repository === repository &&
     event.headRepository === repository && paths.length > 0 &&
     paths.every(path => !path.split('/').includes('..') &&
       (path.startsWith('frontend/src/') || path.startsWith('frontend/tests/') || exceptions.has(path)));
@@ -24,7 +24,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const event = { name: env.CI_EVENT, base: env.CI_BASE, head: env.CI_HEAD,
     repository: env.CI_REPOSITORY, headRepository: env.CI_HEAD_REPOSITORY };
   let paths = [];
-  if (event.name === 'pull_request' && event.base === 'main' && event.head === 'eng/development-ui-delivery') {
+  if (event.name === 'pull_request' && event.base === 'main' && event.head === 'eng/visual-02-development-delivery') {
     if (!/^[a-f0-9]{40}$/.test(env.CI_BASE_SHA ?? '') || !/^[a-f0-9]{40}$/.test(env.CI_HEAD_SHA ?? '')) throw new Error('Invalid PR commit identity');
     paths = execFileSync('git', ['diff', '--no-renames', '--name-only', '-z', `${env.CI_BASE_SHA}...${env.CI_HEAD_SHA}`, '--'], { encoding: 'utf8' }).split('\0').filter(Boolean);
   }

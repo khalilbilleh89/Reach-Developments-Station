@@ -75,6 +75,7 @@ export function PreLaunchTab({
   const [reversing, setReversing] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [schedule, setSchedule] = useState(false);
   const [showEmptyCategories, setShowEmptyCategories] = useState(false);
   const expenses = register?.expenses.filter(row =>
     (!status || (status === "removed" ? row.removed_without_confirmation : !row.removed_without_confirmation && row.status === status)) &&
@@ -127,8 +128,20 @@ export function PreLaunchTab({
     }
   };
 
+  const expenseActions = (row: PreLaunchExpense) => (<ButtonRow>
+                  {row.can_edit ? <Button small disabled={busy} onClick={() => { setError(null); setEditing(row); }}>Edit</Button> : null}
+                  {row.can_remove ? <Button small variant="danger" disabled={busy} onClick={() => { setError(null); setRemoving(row); }}>Remove</Button> : null}
+                  {row.status === "recorded" && !row.can_edit && !row.can_remove ? <p className="footnote">{row.removal_blocker ?? row.edit_blocker}</p> : null}
+                  {canConfirm && row.status === "recorded" ? (
+                    <div>
+                      <Button small disabled={busy || !row.can_confirm} onClick={() => void run(() => prelaunch.confirm(projectId, row.id, editableFields(row)))}>Confirm</Button>
+                      {!row.can_confirm ? <p className="footnote">{row.confirmation_blocker ?? "Confirmation is unavailable. Refresh this register to check current eligibility."}</p> : null}
+                    </div>
+                  ) : null}
+                  {canConfirm && row.status === "confirmed" ? <Button small variant="danger" disabled={busy} onClick={() => setReversing(row.id)}>Reverse</Button> : null}
+                </ButtonRow>);
   return (
-    <div className="stack">
+    <div className="stack prelaunch-workspace">
       <PageHeader
         icon="money"
         title="Pre-Launch"
@@ -143,13 +156,13 @@ export function PreLaunchTab({
           <PositionFigure lead label="Confirmed paid amount" value={money(register.confirmed_paid_amount, currencyCode)} note="Included once in project cashflow" />
         </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment. Master Administrator / Boss can confirm their own expenses.</p></Card>
       ) : null}
-      <div className="stack">
-      <Card title="Expense register" description="Search descriptions, counterparties, references or categories. Filters apply to the register; position totals remain project-wide.">
+      <div className="prelaunch-ledger-layout">
+      <Card title="Expense register" description="Search descriptions, counterparties, references or categories. Filters apply to the register; position totals remain project-wide." actions={<Button small aria-pressed={schedule} onClick={() => setSchedule(!schedule)}>{schedule ? "Show entries" : "Show schedule"}</Button>}>
         <FieldRow><Field label="Search expenses"><input className="input" type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field><Field label="Expense status"><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option><option value="recorded">Recorded</option><option value="confirmed">Confirmed</option><option value="reversed">Reversed</option><option value="removed">Removed</option></select></Field></FieldRow>
         {register === null ? readError ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
           <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : expenses.length === 0 ? <EmptyState title="No matching expenses" actions={<Button onClick={() => { setSearch(""); setStatus(""); }}>Reset filters</Button>} /> : (
-          <TableScroll label="Pre-Launch expense register" fixedFirst>
+          schedule ? <TableScroll label="Pre-Launch expense register" fixedFirst>
             <thead><tr><th scope="col">Description</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Amount</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
             <tbody>{expenses.map((row) => (
               <tr key={row.id}>
@@ -160,34 +173,18 @@ export function PreLaunchTab({
                 <td className="num">{money(row.amount, row.currency_code ?? currencyCode)}</td>
                 <td><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge>{row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}</td>
                 <td>{row.invoice_reference ?? row.evidence_reference ?? "—"}</td>
-                <td className="cell-prose"><ButtonRow>
-                  {row.can_edit ? <Button small disabled={busy} onClick={() => { setError(null); setEditing(row); }}>Edit</Button> : null}
-                  {row.can_remove ? <Button small variant="danger" disabled={busy} onClick={() => { setError(null); setRemoving(row); }}>Remove</Button> : null}
-                  {row.status === "recorded" && !row.can_edit && !row.can_remove ? <p className="footnote">{row.removal_blocker ?? row.edit_blocker}</p> : null}
-                  {canConfirm && row.status === "recorded" ? (
-                    <div>
-                      <Button small disabled={busy || !row.can_confirm} onClick={() => void run(() => prelaunch.confirm(projectId, row.id, editableFields(row)))}>Confirm</Button>
-                      {!row.can_confirm ? <p className="footnote">{row.confirmation_blocker ?? "Confirmation is unavailable. Refresh this register to check current eligibility."}</p> : null}
-                    </div>
-                  ) : null}
-                  {canConfirm && row.status === "confirmed" ? <Button small variant="danger" disabled={busy} onClick={() => setReversing(row.id)}>Reverse</Button> : null}
-                </ButtonRow></td>
+                <td className="cell-prose">{expenseActions(row)}</td>
               </tr>
             ))}</tbody>
-          </TableScroll>
+          </TableScroll> : <div className="expense-entry-list">{expenses.map(row => <article className="expense-entry" key={row.id}>
+            <header><div><span className="eyebrow">{categoryLabel(row.category)}</span><h3>{row.notes ?? row.movement_reference}</h3><p className="footnote">{row.counterparty_reference ?? "Counterparty not recorded"}</p></div><div className="expense-entry-amount"><strong>{money(row.amount, row.currency_code ?? currencyCode)}</strong><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></div></header>
+            <dl><div><dt>Movement date</dt><dd>{businessDate(row.movement_date)}</dd></div><div><dt>Evidence reference</dt><dd>{row.invoice_reference ?? row.evidence_reference ?? "Not recorded"}</dd></div></dl>
+            {row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}<footer>{expenseActions(row)}</footer>
+          </article>)}</div>
         )}
       </Card>
       {register ? <Card title="Expenses by category" description="Current recorded and confirmed expenses. Removed and reversed entries are excluded." actions={<Button small aria-pressed={showEmptyCategories} onClick={() => setShowEmptyCategories(!showEmptyCategories)}>{showEmptyCategories ? "Hide empty categories" : "Include empty categories"}</Button>}>
-        <TableScroll label="Expenses by category">
-          <thead><tr><th scope="col">Category</th><th scope="col" className="num">Recorded</th><th scope="col" className="num">Confirmed paid</th><th scope="col" className="num">Total expenses</th><th scope="col" className="num">Share of confirmed paid</th></tr></thead>
-          <tbody>{register.categories.filter(category => showEmptyCategories || nonzero(category.recorded_amount) || nonzero(category.confirmed_paid_amount)).map((category) => <tr key={category.category}>
-            <th scope="row">{categoryLabel(category.category)}</th>
-            <td className="num">{money(category.recorded_amount, currencyCode)}</td>
-            <td className="num">{money(category.confirmed_paid_amount, currencyCode)}</td>
-            <td className="num">{money(category.total_amount, currencyCode)}</td>
-            <td className="num">{nonzero(register.confirmed_paid_amount) ? `${category.confirmed_share_percent}%` : "No confirmed payments"}</td>
-          </tr>)}</tbody>
-        </TableScroll>
+        <div className="expense-category-list">{register.categories.filter(category => showEmptyCategories || nonzero(category.recorded_amount) || nonzero(category.confirmed_paid_amount)).map(category => <section key={category.category}><h3>{categoryLabel(category.category)}</h3><dl><div><dt>Recorded</dt><dd>{money(category.recorded_amount, currencyCode)}</dd></div><div><dt>Confirmed paid</dt><dd>{money(category.confirmed_paid_amount, currencyCode)}</dd></div><div><dt>Total expenses</dt><dd>{money(category.total_amount, currencyCode)}</dd></div><div><dt>Share of confirmed paid</dt><dd>{nonzero(register.confirmed_paid_amount) ? category.confirmed_share_percent + "%" : "No confirmed payments"}</dd></div></dl></section>)}</div>
         <p className="footnote">Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
       </Card> : null}
       </div>

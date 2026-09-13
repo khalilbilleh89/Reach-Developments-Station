@@ -68,4 +68,9 @@ test("floor browsing keeps identical labels in distinct buildings separate and s
  assert.ok(textOf(tree).includes("Available"));
  assert.ok(textOf(tree).includes("Unreleased"));
  assert.ok(!textOf(tree).includes("Launch price · ex tax"));
+ const hierarchy=nodes(tree).find(n=>n.type==="nav" && n.props["aria-label"]==="Floors on this inventory page");
+ nodes(hierarchy).filter(n=>n.type==="button")[1].props.onClick();
+ assert.equal(nodes(render()).filter(n=>n.type==="RecordLink").length,1);
+ nodes(hierarchy).filter(n=>n.type==="button")[0].props.onClick();
+ assert.equal(nodes(render()).filter(n=>n.type==="RecordLink").length,2);
 });
