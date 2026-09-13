@@ -32,6 +32,9 @@ const PATHS = {
   blueprint: "M3 2.5h10v11H3ZM3 7h6M9 2.5v7h4M6 10v3.5",
   history: "M2 7a6 6 0 1 1 1.5 5M2 2.5V7h4.5M8 4.5V8l2.5 1.5",
   layers: "M8 2 14 5 8 8 2 5ZM2 8l6 3 6-3M2 11l6 3 6-3",
+  bed: "M2 13V5M2 10h12v3M2 7h4v3M6 6h6a2 2 0 0 1 2 2v2",
+  bath: "M2 8h12M3 8v2a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V8M4 13v1M12 13v1M3 8V3a1.5 1.5 0 0 1 3 0v1",
+  parking: "M3 2h10v12H3ZM6.5 11V5h2a2 2 0 0 1 0 4h-2",
   // Places
   projects: "M2.5 5.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1Z",
   overview: "M2.5 2.5h4.5v4.5H2.5ZM9 2.5h4.5V6H9ZM9 8h4.5v5.5H9ZM2.5 9.5H7v4H2.5Z",

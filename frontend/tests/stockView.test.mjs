@@ -89,3 +89,26 @@ test("building stack labels stale prices and inactive or unknown status honestly
  const tree=mount(source,"StockTable",deps,{projectId:"p",register:{total:2,units:[{...unit,id:"u1",is_active:false},{...unit,id:"u2",commercial_status:null}]},prices:{...prices,rows:[{...prices.rows[0],repricing_required:true}]},seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}})();
  assert.ok(textOf(tree).includes("Inactive")); assert.ok(textOf(tree).includes("Not recorded")); assert.ok(textOf(tree).includes("Price needs review")); assert.ok(!textOf(tree).includes("100000.00"));
 });
+
+test("building selection isolates identical labels and survives changing presentation", () => {
+ const render=mount(source,"StockTable",deps,{projectId:"p",register:{total:5,units:[{...unit,id:"a",phase_id:"p1",building_id:"a",floor_id:"one",commercial_status:"available"},{...unit,id:"b",phase_id:"p2",building_id:"b",floor_id:"two",commercial_status:"unreleased"}]},prices:null,seesPrice:false,priceError:null,expanded:false,onExpanded:()=>{}});
+ let tree=render();
+ const nav=nodes(tree).find(n=>n.props?.["aria-label"]==="Buildings on this inventory page");
+ nodes(nav).filter(n=>n.type==="button")[2].props.onClick();
+ tree=render(); assert.deepEqual(nodes(tree).filter(n=>n.type==="RecordLink").map(n=>n.props.id),["b"]);
+ nodes(tree).find(n=>n.type==="Button" && textOf(n)==="Property cards").props.onClick();
+ tree=render(); assert.deepEqual(nodes(tree).filter(n=>n.type==="RecordLink").map(n=>n.props.id),["b"]);
+ nodes(tree).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick();
+ assert.equal(nodes(render()).filter(n=>n.type==="RecordLink").length,2);
+});
+
+test("property cards separate commercial availability from delivery blockers and preserve missing quantities", () => {
+ const render=mount(source,"StockTable",deps,{projectId:"p",register:{total:1,units:[{...unit,commercial_status:"available",delivery_status:"handover_blocked",parking_count:null}]},prices,seesPrice:false,priceError:null,expanded:false,onExpanded:()=>{}});
+ nodes(render()).find(n=>n.type==="Button" && textOf(n)==="Property cards").props.onClick();
+ const tree=render();
+ const badges=nodes(tree).filter(n=>n.type==="Badge");
+ assert.ok(badges.some(n=>textOf(n)==="Available" && n.props.tone==="success"));
+ assert.ok(badges.some(n=>textOf(n)==="Handover blocked" && n.props.tone==="danger"));
+ assert.match(textOf(tree), /—\s+parking/); assert.match(textOf(tree), /0 sqm/);
+ assert.ok(!textOf(tree).includes("100000.00"));
+});
