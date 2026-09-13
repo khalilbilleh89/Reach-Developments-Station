@@ -487,6 +487,24 @@ export function LandTab({
               />
             </div>
           ) : (
+            <>
+            <div className="land-parcel-list" aria-label="Land parcels">
+              {rows.map(parcel => <article key={parcel.id} className="land-parcel-card">
+                <div className="land-parcel-card-head">
+                  <button type="button" className="button-link" onClick={() => void openParcel(parcel)}>Parcel {parcel.plot_number}</button>
+                  <StatusDot tone={parcel.is_active ? "success" : "muted"}>{parcel.is_active ? "Active" : "Inactive"}</StatusDot>
+                </div>
+                <p className="land-parcel-area">{measurement(parcel.land_area, parcel.area_unit)}</p>
+                <KeyValueGrid columns={2}>
+                  <KeyValue label="Title" value={parcel.title_status ?? "Not established"} />
+                  <KeyValue label="Zoning" value={parcel.zoning ?? "Not established"} />
+                  <KeyValue label="Ownership" value={parcel.ownership_type ?? "Not established"} />
+                  <KeyValue label="Acquired" value={businessDate(parcel.acquisition_date)} />
+                  {canSeeCost ? <KeyValue label="Purchase price" value={money(parcel.purchase_price, parcel.base_currency_code)} /> : null}
+                </KeyValueGrid>
+              </article>)}
+            </div>
+            <div className="land-parcel-table">
             <TableScroll label="Land register" fixedFirst>
               <thead>
                 <tr>
@@ -575,6 +593,8 @@ export function LandTab({
                 ))}
               </tbody>
             </TableScroll>
+            </div>
+            </>
           )}
         </Card>
       </div>

@@ -5329,6 +5329,13 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .land-utilities > div { padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); }
 .land-utilities dt { font-weight: 650; margin-bottom: var(--space-3); }
 .land-cost-breakdown { margin: var(--space-4) 0; font-size: .875rem; }
+.land-parcel-list { display: none; }
+.land-parcel-card { padding: var(--space-5); border-bottom: 1px solid var(--line-default); }
+.land-parcel-card:last-child { border-bottom: 0; }
+.land-parcel-card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.land-parcel-card-head .button-link { font-size: 1.1rem; font-weight: 650; overflow-wrap: anywhere; text-align: left; }
+.land-parcel-area { font-size: 1.6rem; font-weight: 600; margin: var(--space-4) 0; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .land-parcel-list { display: block; } .land-parcel-table { display: none; } }
 .land-cost-breakdown > div { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line-soft); }
 .land-cost-breakdown dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
 .land-cost-breakdown > div:last-child { font-weight: 650; border-color: var(--line-strong); }
