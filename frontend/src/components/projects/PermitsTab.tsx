@@ -211,8 +211,8 @@ type Filter = "" | "blocking" | "critical" | "overdue";
  * criticality of their own: the flags are the server's, the statutory clock
  * is the server's, and the register only draws them where a project manager
  * looks first. Status is deliberately not an editable field anywhere here. It
- * moves through "Change status", which records why and when, because the
- * history is the record of what the authority actually did.
+ * follows saved actual milestone dates, with optional manual exception changes.
+ * Both paths retain the history of what the authority actually did.
  */
 export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost = false, currencyCode = null }: { projectId: string; canWrite: boolean; canDelete?: boolean; canSeeCost?: boolean; currencyCode?: string | null }) {
   const [register, setRegister] = useState<PermitRegister | null>(null);
@@ -506,7 +506,7 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
 
       </> : null}
       {creating && canWrite ? <PermitCreatePage projectId={projectId} types={types} parcels={parcels}
-        permits={register?.permits ?? []} statuses={STATUS_LABELS} canSeeCost={canSeeCost}
+        permits={register?.permits ?? []} canSeeCost={canSeeCost}
         currencyCode={currencyCode} onCancel={() => setCreating(false)}
         onCreated={async created => { setCreating(false); setSelected(created); setNotice(`Permit ${created.permit_code} added.`); await load(); await loadTypes(); }} /> : null}
 
@@ -663,6 +663,7 @@ function PermitFile({
                   const updated = await projects.updatePermit(projectId, permit.id, changes);
                   onNotice(`${updated.permit_code} updated.`);
                   await onChanged(updated);
+                  await loadHistory();
                 }}
                 onCancel={() => setEditing(false)}
               />
@@ -691,6 +692,7 @@ function PermitFile({
           ) : null}
 
           <section className="permit-date-groups">
+            <p className="subtle">Saving actual milestone dates updates status automatically. Issue date means Completed; no separate status change is needed. Planned, forecast and expiry dates do not change status.</p>
             <SectionHeader title="Submission" />
             <KeyValueGrid columns={3}>
               <KeyValue label="Planned submission" mono value={businessDate(permit.planned_submission_date)} />
@@ -740,7 +742,8 @@ function PermitFile({
           </section>
 
           {canWrite && moves.length > 0 ? (
-            <section>
+            <details>
+              <summary>Other status changes (optional)</summary>
               <SectionHeader
                 title="Change status"
                 description="Recorded with the date it took effect and kept in the history. You may add a reason, but it is optional."
@@ -790,7 +793,7 @@ function PermitFile({
                   </FormActions>
                 </form>
               </DraftBoundary>
-            </section>
+            </details>
           ) : null}
         </>
       ) : null}
