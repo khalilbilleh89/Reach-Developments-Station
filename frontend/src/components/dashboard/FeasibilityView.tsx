@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { AreaMeasure, Feasibility } from "@/lib/api/analysis";
 import { businessDate } from "@/lib/format";
 import { Disclosure, Notice, Position, PositionFigure, SectionHeader, TableScroll } from "@/components/ui";
@@ -18,18 +19,20 @@ function Measures({title,labels,values}:{title:string;labels:Record<string,strin
   })}</tbody></TableScroll></section>;
 }
 
-export function FeasibilityView({data}:{data:Feasibility}) {
+export function FeasibilityView({data,projectId}:{data:Feasibility;projectId?:string}) {
+  const missing = Object.entries(totalLabels).filter(([key]) => data.totals[key].value === null);
   return <div className="stack">
     <SectionHeader title="Area feasibility" description={`Current inventory snapshot · ${businessDate(data.context.snapshot_as_of)} · All areas in m²`} />
-    <Position><PositionFigure lead label="Number of Apartments" value={data.apartments} note="Active apartment inventory, including unreleased and sold units" />
-      <PositionFigure label="Apartment covered area" value={area(data.totals.covered.value)} note="Including balconies" />
-      <PositionFigure label="Buildable area" value={area(data.totals.buildable.value)} note="Apartment interiors + common area" />
+    <Position compact><PositionFigure lead label="Apartments in scope" value={data.apartments} note="Active apartments, including unreleased and sold" />
+      <PositionFigure label="Apartment covered area" value={data.totals.covered.value === null ? "Pending" : area(data.totals.covered.value)} note={data.totals.covered.value === null ? "Source measurements incomplete" : "Including balconies"} />
+      <PositionFigure label="Buildable area" value={data.totals.buildable.value === null ? "Pending" : area(data.totals.buildable.value)} note={data.totals.buildable.value === null ? "Source measurements incomplete" : "Apartment interiors + common area"} />
     </Position>
     {!data.apartments ? <Notice tone="info">No active apartments in this inventory scope.</Notice> : null}
     {data.other_units ? <Notice tone="info">{data.other_units} other property units are excluded from apartment figures and included in building/grand totals where their measurements are complete.</Notice> : null}
+    {missing.length ? <section className="analysis-inputs"><SectionHeader title="Complete the area inputs" description="Review approved unit schedules and shared measurements to establish the missing totals." />{projectId ? <Link href={`/projects/?project=${encodeURIComponent(projectId)}&section=inventory`}>Review unit schedules and Common Areas →</Link> : null}<Disclosure title={`${missing.length} incomplete area totals`}><ul>{missing.map(([key,label]) => <li key={key}>{label}</li>)}</ul></Disclosure></section> : null}
     <section><SectionHeader title="Sellable & buildable area efficiency" /><TableScroll label="Area efficiency ratios"><thead><tr><th scope="col">Indicator</th><th scope="col" className="num">Ratio</th><th scope="col">Area basis</th></tr></thead><tbody>{data.efficiencies.map(row=><tr key={row.label}><th scope="row">{row.label}</th><td className="num">{row.percentage===null ? "Unavailable" : `${row.percentage}%`}</td><td><p>{row.formula}</p><p>{area(row.numerator)} / {area(row.denominator)}</p>{row.reason ? <p>{row.reason}</p> : null}</td></tr>)}</tbody></TableScroll></section>
     <Measures title="Project area totals" labels={totalLabels} values={data.totals}/>
-    <Measures title="Average apartment areas" labels={Object.fromEntries(Object.entries(apartmentLabels).map(([key,label])=>[key,`Average Apartment ${label}`]))} values={data.averages}/>
+    <Disclosure title="Average apartment areas"><Measures title="Average apartment areas" labels={Object.fromEntries(Object.entries(apartmentLabels).map(([key,label])=>[key,`Average Apartment ${label}`]))} values={data.averages}/></Disclosure>
     <section><SectionHeader title="Unit type → bedrooms" description="Apartment area totals grouped by the recorded unit type and bedroom count."/>
       {data.groups.length ? <TableScroll fixedFirst label="Apartment area totals by unit type and bedrooms"><thead><tr><th scope="col">Unit type</th><th scope="col">Bedrooms</th><th scope="col" className="num">Apartments</th>{Object.values(apartmentLabels).map(label=><th scope="col" className="num" key={label}>{label} m²</th>)}</tr></thead><tbody>{data.groups.map(row=><tr key={`${row.unit_type}:${row.bedrooms}`}><th scope="row">{row.unit_type}</th><td>{row.bedrooms===null ? "Not recorded" : row.bedrooms===0 ? "Studio (0)" : row.bedrooms}</td><td className="num">{row.apartments}</td>{Object.keys(apartmentLabels).map(key=><td key={key} className="num" title={row.areas[key].reason ?? row.areas[key].formula}>{area(row.areas[key].value)}</td>)}</tr>)}</tbody></TableScroll> : <p>No apartment groups recorded.</p>}
     </section>

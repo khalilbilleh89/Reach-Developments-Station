@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, projects, settings } from "@/lib/api";
 import type { DocumentReference, LandParcel, PlanningControl, ReferenceValue } from "@/lib/api";
 import { businessDate, fractionFromPercent, money, percent, percentInput } from "@/lib/format";
-import { sectionDescription } from "@/components/shell/navigation";
+import { projectHref, sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
   Button,
@@ -39,6 +39,7 @@ import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
 import { LandAnalytics } from "@/components/projects/land/LandAnalytics";
+import { measurement } from "@/components/projects/land/presentation";
 
 /** Tri-state: null means nobody has established it yet, which is not "no". */
 function utility(value: boolean | null): string {
@@ -486,6 +487,24 @@ export function LandTab({
               />
             </div>
           ) : (
+            <>
+            <div className="land-parcel-list" aria-label="Land parcels">
+              {rows.map(parcel => <article key={parcel.id} className="land-parcel-card">
+                <div className="land-parcel-card-head">
+                  <button type="button" className="button-link" onClick={() => void openParcel(parcel)}>Parcel {parcel.plot_number}</button>
+                  <StatusDot tone={parcel.is_active ? "success" : "muted"}>{parcel.is_active ? "Active" : "Inactive"}</StatusDot>
+                </div>
+                <p className="land-parcel-area">{measurement(parcel.land_area, parcel.area_unit)}</p>
+                <KeyValueGrid columns={2}>
+                  <KeyValue label="Title" value={parcel.title_status ?? "Not established"} />
+                  <KeyValue label="Zoning" value={parcel.zoning ?? "Not established"} />
+                  <KeyValue label="Ownership" value={parcel.ownership_type ?? "Not established"} />
+                  <KeyValue label="Acquired" value={businessDate(parcel.acquisition_date)} />
+                  {canSeeCost ? <KeyValue label="Purchase price" value={money(parcel.purchase_price, parcel.base_currency_code)} /> : null}
+                </KeyValueGrid>
+              </article>)}
+            </div>
+            <div className="land-parcel-table">
             <TableScroll label="Land register" fixedFirst>
               <thead>
                 <tr>
@@ -549,7 +568,7 @@ export function LandTab({
                       {parcel.zoning ?? <span className="muted">Not established</span>}
                     </td>
                     <td className="num">
-                      {parcel.land_area}
+                      {measurement(parcel.land_area)}
                       <span className="cell-secondary">{parcel.area_unit}</span>
                     </td>
                     <td className="figure">{businessDate(parcel.acquisition_date)}</td>
@@ -574,6 +593,8 @@ export function LandTab({
                 ))}
               </tbody>
             </TableScroll>
+            </div>
+            </>
           )}
         </Card>
       </div>
@@ -772,11 +793,8 @@ export function LandTab({
         <RecordPage
           eyebrow="Land asset"
           icon="land"
-          title={selected.plot_number}
-          subtitle={
-            [selected.zoning, selected.title_status].filter(Boolean).join(" · ") ||
-            "Classification not yet established"
-          }
+          title={`Parcel ${selected.plot_number}`}
+          subtitle={selected.title_deed_number ? `Title deed ${selected.title_deed_number}` : "Title deed not recorded"}
           meta={
             <>
               {selected.is_active ? (
@@ -787,15 +805,10 @@ export function LandTab({
               {planning?.variance_required ? (
                 <Badge tone="warning">Variance required</Badge>
               ) : null}
-              {selected.ownership_share_fraction ? (
-                <StatusDot tone="info">
-                  {percent(selected.ownership_share_fraction)} share
-                </StatusDot>
-              ) : null}
             </>
           }
           headline={{
-            value: `${selected.land_area} ${selected.area_unit}`,
+            value: measurement(selected.land_area, selected.area_unit),
             label: "Land area, as recorded",
           }}
           facts={facts}
@@ -845,9 +858,9 @@ export function LandTab({
           ) : null}
 
           {section === "overview" ? (
-            <div className="record-columns">
+            <div className="record-columns land-overview">
               <section className="record-section">
-                <SectionHeader title="Tenure" />
+                <SectionHeader title="Title & ownership" description="Recorded legal identity and planning classification." />
                 <KeyValueGrid columns={2}>
                   <KeyValue label="Ownership" value={selected.ownership_type} />
                   <KeyValue
@@ -952,8 +965,11 @@ export function LandTab({
 
               {planning && !editingPlanning ? (
                 <>
+                  <div className="land-envelope">
                   <KeyValueGrid columns={3}>
-                    <KeyValue label="Permitted uses" value={planning.permitted_uses} />
+                    <KeyValue label="Maximum GFA" value={measurement(planning.maximum_gfa, selected.area_unit)} />
+                    <KeyValue label="Maximum floors" value={planning.maximum_floors?.toString() ?? "Not recorded"} />
+                    <KeyValue label="Maximum height · recorded units" value={measurement(planning.maximum_height)} />
                     <KeyValue
                       label="Site coverage"
                       value={
@@ -962,19 +978,18 @@ export function LandTab({
                           : null
                       }
                     />
-                    <KeyValue label="Floor area ratio" value={planning.far_ratio} />
-                    <KeyValue label="Maximum GFA" value={planning.maximum_gfa} />
-                    <KeyValue
-                      label="Maximum floors"
-                      value={planning.maximum_floors?.toString() ?? null}
-                    />
-                    <KeyValue label="Maximum height" value={planning.maximum_height} />
-                    <KeyValue label="Front setback" value={planning.front_setback} />
-                    <KeyValue label="Side setback" value={planning.side_setback} />
-                    <KeyValue label="Rear setback" value={planning.rear_setback} />
-                    <KeyValue label="Minimum plot area" value={planning.minimum_plot_area} />
-                    <KeyValue label="Minimum frontage" value={planning.minimum_frontage} />
-                    <KeyValue label="Density" value={planning.density} />
+                    <KeyValue label="Floor area ratio" value={measurement(planning.far_ratio)} />
+                    <KeyValue label="Permitted uses" value={planning.permitted_uses} />
+                  </KeyValueGrid>
+                  </div>
+                  <SectionHeader title="Setbacks & minimums" description="Linear dimensions retain the units of the recorded planning decision." />
+                  <KeyValueGrid columns={3}>
+                    <KeyValue label="Front setback" value={measurement(planning.front_setback)} />
+                    <KeyValue label="Side setback" value={measurement(planning.side_setback)} />
+                    <KeyValue label="Rear setback" value={measurement(planning.rear_setback)} />
+                    <KeyValue label="Minimum plot area" value={measurement(planning.minimum_plot_area, selected.area_unit)} />
+                    <KeyValue label="Minimum frontage" value={measurement(planning.minimum_frontage)} />
+                    <KeyValue label="Density" value={measurement(planning.density)} />
                   </KeyValueGrid>
                   {planning.parking_requirement ? (
                     <>
@@ -1232,16 +1247,21 @@ export function LandTab({
               <section>
                 <SectionHeader
                   title="Utilities"
-                  description="Not established is a different answer from not available."
+                  description="Recorded availability. Supporting notes do not confirm a connection."
                 />
-                <KeyValueGrid columns={3}>
-                  <KeyValue label="Power" value={utility(selected.power_available)} />
-                  <KeyValue label="Water" value={utility(selected.water_available)} />
-                  <KeyValue label="Sewer" value={utility(selected.sewer_available)} />
-                  <KeyValue label="Stormwater" value={utility(selected.stormwater_available)} />
-                  <KeyValue label="Telecom" value={utility(selected.telecom_available)} />
-                </KeyValueGrid>
-                {selected.utility_notes ? <p className="footnote">{selected.utility_notes}</p> : null}
+                <dl className="land-utilities">
+                  {([
+                    ["Power", selected.power_available], ["Water", selected.water_available],
+                    ["Sewer", selected.sewer_available], ["Stormwater", selected.stormwater_available],
+                    ["Telecom", selected.telecom_available],
+                  ] as const).map(([label, available]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd><StatusDot tone={available === null ? "muted" : available ? "success" : "warning"}>{utility(available)}</StatusDot></dd>
+                    </div>
+                  ))}
+                </dl>
+                {selected.utility_notes ? <div className="land-supporting-note"><h4>Supporting utility notes</h4><p>{selected.utility_notes}</p></div> : null}
               </section>
               <section>
                 <SectionHeader title="Encumbrances" />
@@ -1263,7 +1283,8 @@ export function LandTab({
             <section>
               <SectionHeader
                 title="Documents"
-                description="Where this parcel's papers live. The register records the reference; it does not hold the file."
+                description="Title deeds, surveys and planning decisions linked to this parcel. Files open at their recorded source."
+                actions={<a className="button" href={projectHref(projectId, "documents")}>Open project documents</a>}
               />
               {documentsError ? <><Notice tone="error">Supporting documents could not be loaded.</Notice><Button onClick={() => { setDocumentsError(false); void projects.documents(projectId, selected.id ? {parcel_id: selected.id} : {}).then(setDocuments).catch(() => setDocumentsError(true)); }}>Retry documents</Button></> : documents === null ? (
                 <Loading label="Loading documents…" shape="rows" rows={3} />

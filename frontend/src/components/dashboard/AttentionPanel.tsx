@@ -48,6 +48,7 @@ export function AttentionPanel({
 }) {
   const shown = items.filter((item) => item.count > 0);
   const flagged = shown.length > 0;
+  if (!loading && !flagged && !problems.length) return <div className="attention-clear attention-clear-compact"><Icon name="check" /><span>Nothing flagged in the sources available to you.</span></div>;
   return (
     <Card
       title="Needs attention"

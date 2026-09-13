@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useAnswer } from "@/lib/answer";
 import { projectAnalysis } from "@/lib/api/analysis";
 import type { Availability, Context, Demand, Fundamental, Financial, Technical, Feasibility, Money, Ranking, Ratio, Section } from "@/lib/api/analysis";
@@ -24,7 +25,7 @@ function Basis({ value }: { value: Availability }) {
       <StatusDot tone={value.availability === "available" ? "success" : value.availability === "partial" ? "warning" : "muted"}>
         {value.availability === "available" ? "Available" : value.availability === "partial" ? "Partial coverage" : "Unavailable"}
       </StatusDot>
-      <span>Sample: {value.sample_size}</span>
+      <span>{value.sample_size} records in sample</span>
     </div>
     {value.availability !== "available" && value.reason ? <p className="source-basis-reason">{value.reason}</p> : null}
     <Disclosure title="Source & coverage">
@@ -80,7 +81,7 @@ function FundamentalView({ data }: { data: Fundamental }) {
       <Basis value={data.sales_basis} />
       <Disclosure title={<> Monthly selling demand </>}><TableScroll fixedFirst label="Monthly selling demand"><thead><tr><th scope="col">Month</th><th scope="col" className="num">Activations</th><th scope="col" className="num">Cancellations</th><th scope="col" className="num">Net absorption</th><th scope="col" className="num">New contracted value</th></tr></thead><tbody>{data.monthly_sales.map((row) => <tr key={row.month}><th scope="row">{businessDate(row.month)}</th><td className="num">{row.activations}</td><td className="num">{row.cancellations}</td><td className="num">{row.net_absorption}</td><td className="num">{amounts(row.contracted_value)}</td></tr>)}</tbody></TableScroll></Disclosure>
     </section>
-    <Disclosure title={<> Independent unit status dimensions · {p.total_units} total records </>}><Counts label="Commercial" values={p.commercial} /><Counts label="Legal" values={p.legal} /><Counts label="Delivery" values={p.delivery} /><p>These are current record dimensions, not a single combined status.</p></Disclosure>
+    <Disclosure title={<> Inventory scope & status dimensions · {p.total_units} total records </>}><p>{p.eligible_units} units are eligible for absorption analysis. Eligibility excludes inactive, held, unreleased and withdrawn units. Overview register counts follow your inventory access and filters.</p><Counts label="Commercial" values={p.commercial} /><Counts label="Legal" values={p.legal} /><Counts label="Delivery" values={p.delivery} /><p>These are current record dimensions, not a single combined status.</p></Disclosure>
     <RankingTable title="Sales branches" rows={data.branches} /><RankingTable title="Salespeople" rows={data.salespeople} /><Basis value={data.ranking_basis} />
     <DemandTable title="Property type demand" rows={data.property_types} /><DemandTable title="View demand" rows={data.views} /><Basis value={data.view_basis} />
     <Disclosure title={<> Observed view premiums </>}>{data.observed_premiums.length ? data.observed_premiums.map((row) => <section key={`${row.property_type}-${row.view}`}><h4>{row.property_type} · {row.view}</h4><p>{row.percentage === null ? "Unavailable" : `${row.percentage}% observed premium`} · View sample {row.sample_size}, baseline sample {row.baseline_sample}</p><p>{row.baseline} {row.currency && row.area_unit ? `${row.view_price_per_gross_area ?? "Unavailable"} vs ${row.baseline_price_per_gross_area ?? "Unavailable"} ${row.currency}/${row.area_unit}` : null}</p><Basis value={row} /></section>) : <p>No comparable structured view cohorts recorded.</p>}</Disclosure>
@@ -117,9 +118,9 @@ function FinancialView({ data }: { data: Financial }) {
     <Disclosure title={<> Refund and financing detail included in net cash </>}><TableScroll fixedFirst label="Refunds and financing"><thead><tr><th scope="col">Month / currency</th><th scope="col" className="num">Customer refunds</th><th scope="col" className="num">Financing in</th><th scope="col" className="num">Financing out</th></tr></thead><tbody>{data.monthly.map((row) => <tr key={`${row.month}-${row.currency}`}><th scope="row">{businessDate(row.month)} · {row.currency}</th><td className="num">{money(row.customer_refunds, row.currency)}</td><td className="num">{money(row.financing_inflow, row.currency)}</td><td className="num">{money(row.financing_outflow, row.currency)}</td></tr>)}</tbody></TableScroll></Disclosure>
   </div>;
 }
-function TechnicalView({ data }: { data: Technical }) {
+function TechnicalView({ data, projectId }: { data: Technical; projectId: string }) {
   return <div className="stack"><ContextNote context={data.context} /><div className="analysis-position">
-    <section className="analysis-primary"><SectionHeader title="Recorded technical product profile" description="The current product mix recorded for this development." /><Counts values={data.product_types} label="Property types" /><Basis value={data.basis} /></section>
+    <section className="analysis-primary"><SectionHeader title="Recorded technical product profile" description="The current product mix recorded for this development." />{Object.keys(data.product_types).length ? <CountComposition label="Property types" note="Current recorded unit classifications" rows={Object.entries(data.product_types).map(([label,count]) => ({label:display(label),count}))} /> : <Notice tone="info">No product mix is recorded. <Link href={`/projects/?project=${encodeURIComponent(projectId)}&section=inventory`}>Open inventory</Link> to review units and their classifications.</Notice>}<Basis value={data.basis} /></section>
     <aside className="analysis-outlook"><SectionHeader title="Features and attachments" /><Position compact><PositionFigure lead label="Recorded feature coverage" value={data.feature_coverage.percentage === null ? "Unavailable" : `${data.feature_coverage.percentage}%`} note={`${data.feature_coverage.numerator ?? "—"} / ${data.feature_coverage.denominator ?? "—"} units`} /></Position><Counts label="Attachments" values={data.attachments} /><Basis value={data.feature_coverage} /></aside>
     </div><Disclosure title={<> Physical area ranges </>}><Basis value={data.area_coverage} /><TableScroll fixedFirst label="Approved physical areas"><thead><tr><th scope="col">Component</th><th scope="col">Measure</th><th scope="col" className="num">Minimum</th><th scope="col" className="num">Maximum</th><th scope="col" className="num">Average</th><th scope="col" className="num">Sample</th></tr></thead><tbody>{data.areas.map((row) => <tr key={`${row.component}-${row.unit_of_measure}`}><th scope="row">{display(row.component)}</th><td>{row.unit_of_measure}</td><td className="num">{row.minimum}</td><td className="num">{row.maximum}</td><td className="num">{row.average}</td><td className="num">{row.sample_size}</td></tr>)}</tbody></TableScroll><p>Gross uses all six approved physical components. Parking and storage are separate attachments.</p></Disclosure><Disclosure title="Recorded features"><Counts label="Recorded features" values={data.features} /></Disclosure><Disclosure title={<> Permits · Obtained / Issued </>}><Basis value={data.permit_basis} /><Counts label="Statutory permit status" values={data.permits} /></Disclosure><Disclosure title={<> Consultant design context </>}><Basis value={data.consultant_basis} />{Object.entries(data.consultant).map(([key, value]) => <p key={key}>{display(key)}: {value ?? "Not recorded"}</p>)}</Disclosure><Disclosure title={<> Physical construction progress </>}><Basis value={data.construction_basis} /><TableScroll fixedFirst label="Construction stages"><thead><tr><th scope="col">Stage</th><th scope="col" className="num">Completed units</th><th scope="col" className="num">Units in scope</th></tr></thead><tbody>{data.construction_stages.map((row) => <tr key={row.name}><th scope="row">{row.name}</th><td className="num">{row.completed_units}</td><td className="num">{row.denominator}</td></tr>)}</tbody></TableScroll></Disclosure></div>;
 }
@@ -128,7 +129,7 @@ function AnalysisAnswer({ projectId, section, query }: { projectId: string; sect
   if (answer.status === "denied") return <Notice tone="info">Not authorized: whole-project access and the appropriate Analysis role are required.</Notice>;
   if (answer.status === "failed") return <Notice tone="info">Analysis could not be loaded. {answer.message}</Notice>;
   if (answer.status !== "ready") return <Loading label="Loading analysis" />;
-  return section === "feasibility" ? <FeasibilityView data={answer.data as Feasibility} /> : section === "fundamental" ? <FundamentalView data={answer.data as Fundamental} /> : section === "financial" ? <FinancialView data={answer.data as Financial} /> : <TechnicalView data={answer.data as Technical} />;
+  return section === "feasibility" ? <FeasibilityView data={answer.data as Feasibility} projectId={projectId} /> : section === "fundamental" ? <FundamentalView data={answer.data as Fundamental} /> : section === "financial" ? <FinancialView data={answer.data as Financial} /> : <TechnicalView data={answer.data as Technical} projectId={projectId} />;
 }
 export function ProjectAnalysis({ projectId, roles }: { projectId: string; roles: Roles }) {
   const enabled = (Object.keys(labels) as Section[]).filter((key) => hasAnyRole(roles, readers[key]));

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { commonAreas } from "@/lib/api/commonAreas";
 import type { CommonArea } from "@/lib/api/commonAreas";
 import { inventory } from "@/lib/api";
-import { Button, Loading, Notice, RecordPage, SectionHeader, TableScroll } from "@/components/ui";
+import { Button, EmptyState, Loading, Notice, RecordPage, SectionHeader, TableScroll } from "@/components/ui";
 import { EditForm } from "../EditForm";
 import type { EditField } from "../EditForm";
 import { DeleteRecordButton } from "../DeleteRecordButton";
@@ -49,11 +49,11 @@ export function CommonAreas({ projectId, canWrite }: { projectId: string; canWri
     {name:"source_reference",label:"Source reference",hint:"Drawing, schedule or measurement reference",width:"full"}];
   return <section className="stack">
     <SectionHeader title="Shared area register" description="Measured shared and site areas feeding Overview → Feasibility." actions={canWrite ? <Button disabled={!!error || rows===null} onClick={()=>setEditing("new")}>Add area</Button> : undefined} />
-    <Notice tone="info">Record each physical area once. Garage includes the full measured garage area, not another sum of parking attachments. Community areas exclude common building areas and roads/pavements. Enter separate apartment allocation rows instead of repeating a project common-area total.</Notice>
+    <details className="inventory-measurement-guide"><summary>How to record shared measurements</summary><p>Record each physical area once. Garage includes the full measured garage area, not another sum of parking attachments. Community areas exclude common building areas and roads/pavements. Enter separate apartment allocation rows instead of repeating a project common-area total.</p></details>
     {error ? <Notice tone="error">{error}<Button onClick={()=>void load()}>Retry</Button></Notice> : rows===null ? <Loading label="Loading common areas" /> : rows.length ?
       <TableScroll label="Common Areas register"><thead><tr><th scope="col">Area</th><th scope="col">Category</th><th scope="col" className="num">Area m²</th><th scope="col">Allocation</th><th scope="col">Source</th><th scope="col">Actions</th></tr></thead><tbody>{rows.map(area=><tr key={area.id}>
         <th scope="row">{area.label}</th><td>{categories.find(item=>item.value===area.category)?.label}</td><td className="num">{area.area_sqm}</td><td>{area.apartment_id ? apartments.find(item=>item.value===area.apartment_id)?.label ?? "Apartment allocation" : "Project"}</td><td>{area.source_reference}</td><td>{canWrite ? <><Button onClick={()=>setEditing(area)}>Edit</Button><DeleteRecordButton label={area.label} description="Removes this measurement from current Feasibility totals. Its source values and deletion reason remain in the audit trail." onDelete={reason=>commonAreas.remove(projectId,area.id,reason)} onDeleted={load} /></> : "Read only"}</td>
-      </tr>)}</tbody></TableScroll> : <Notice tone="info">No common areas recorded. Feasibility will show missing inputs until measurements are added.</Notice>}
+      </tr>)}</tbody></TableScroll> : <EmptyState icon="inventory" title="No shared measurements yet" hint="Add measured common areas, garages and site areas to complete Feasibility inputs." actions={canWrite ? <Button variant="primary" onClick={() => setEditing("new")}>Add area</Button> : undefined} />}
     {editing ? <RecordPage title={row ? `Edit ${row.label}` : "Add common area"} onClose={()=>setEditing(null)}><EditForm fields={fields} initial={initial} submitLabel="Save area" onCancel={()=>setEditing(null)} onSave={async changes=>{
       const values:Record<string,unknown>={...initial,...changes};values.apartment_id=values.apartment_id || null;
       if(row) await commonAreas.update(projectId,row.id,values);else await commonAreas.create(projectId,values);

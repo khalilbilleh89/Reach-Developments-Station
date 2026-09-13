@@ -16,7 +16,9 @@ import {
   EmptyState,
   Field,
   FieldRow,
-  FormDialog,
+  RecordPage,
+  DraftBoundary,
+  FormActions,
   Loading,
   Position,
   PositionFigure,
@@ -71,6 +73,14 @@ export function PreLaunchTab({
   const [removing, setRemoving] = useState<PreLaunchExpense | null>(null);
   const submitting = useRef(false);
   const [reversing, setReversing] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [showEmptyCategories, setShowEmptyCategories] = useState(false);
+  const expenses = register?.expenses.filter(row =>
+    (!status || (status === "removed" ? row.removed_without_confirmation : !row.removed_without_confirmation && row.status === status)) &&
+    [row.notes, row.movement_reference, row.counterparty_reference, row.invoice_reference, categoryLabel(row.category)].some(value => value?.toLowerCase().includes(search.toLowerCase().trim()))
+  ) ?? [];
+  const nonzero = (value: string) => /[1-9]/.test(value);
   const canRecord = hasAnyRole(roles, PRELAUNCH_RECORDERS);
   const canConfirm = hasAnyRole(roles, CASHFLOW_CONFIRMERS);
 
@@ -133,26 +143,15 @@ export function PreLaunchTab({
           <PositionFigure lead label="Confirmed paid amount" value={money(register.confirmed_paid_amount, currencyCode)} note="Included once in project cashflow" />
         </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment. Master Administrator / Boss can confirm their own expenses.</p></Card>
       ) : null}
-      {register ? <Card title="Expenses by category" description="Current recorded and confirmed expenses. Removed and reversed entries are excluded.">
-        <TableScroll label="Expenses by category">
-          <thead><tr><th scope="col">Category</th><th scope="col" className="num">Recorded</th><th scope="col" className="num">Confirmed paid</th><th scope="col" className="num">Total expenses</th><th scope="col" className="num">Share of confirmed paid</th></tr></thead>
-          <tbody>{register.categories.map((category) => <tr key={category.category}>
-            <th scope="row">{categoryLabel(category.category)}</th>
-            <td className="num">{money(category.recorded_amount, currencyCode)}</td>
-            <td className="num">{money(category.confirmed_paid_amount, currencyCode)}</td>
-            <td className="num">{money(category.total_amount, currencyCode)}</td>
-            <td className="num">{category.confirmed_share_percent}%</td>
-          </tr>)}</tbody>
-        </TableScroll>
-        <p className="footnote">Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
-      </Card> : null}
-      <Card flush>
+      <div className="stack">
+      <Card title="Expense register" description="Search descriptions, counterparties, references or categories. Filters apply to the register; position totals remain project-wide.">
+        <FieldRow><Field label="Search expenses"><input className="input" type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field><Field label="Expense status"><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option><option value="recorded">Recorded</option><option value="confirmed">Confirmed</option><option value="reversed">Reversed</option><option value="removed">Removed</option></select></Field></FieldRow>
         {register === null ? readError ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
           <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
-        ) : (
+        ) : expenses.length === 0 ? <EmptyState title="No matching expenses" actions={<Button onClick={() => { setSearch(""); setStatus(""); }}>Reset filters</Button>} /> : (
           <TableScroll label="Pre-Launch expense register" fixedFirst>
             <thead><tr><th scope="col">Description</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Amount</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
-            <tbody>{register.expenses.map((row) => (
+            <tbody>{expenses.map((row) => (
               <tr key={row.id}>
                 <th scope="row" className="cell-prose">{row.notes ?? row.movement_reference}</th>
                 <td>{categoryLabel(row.category)}</td>
@@ -178,6 +177,20 @@ export function PreLaunchTab({
           </TableScroll>
         )}
       </Card>
+      {register ? <Card title="Expenses by category" description="Current recorded and confirmed expenses. Removed and reversed entries are excluded." actions={<Button small aria-pressed={showEmptyCategories} onClick={() => setShowEmptyCategories(!showEmptyCategories)}>{showEmptyCategories ? "Hide empty categories" : "Include empty categories"}</Button>}>
+        <TableScroll label="Expenses by category">
+          <thead><tr><th scope="col">Category</th><th scope="col" className="num">Recorded</th><th scope="col" className="num">Confirmed paid</th><th scope="col" className="num">Total expenses</th><th scope="col" className="num">Share of confirmed paid</th></tr></thead>
+          <tbody>{register.categories.filter(category => showEmptyCategories || nonzero(category.recorded_amount) || nonzero(category.confirmed_paid_amount)).map((category) => <tr key={category.category}>
+            <th scope="row">{categoryLabel(category.category)}</th>
+            <td className="num">{money(category.recorded_amount, currencyCode)}</td>
+            <td className="num">{money(category.confirmed_paid_amount, currencyCode)}</td>
+            <td className="num">{money(category.total_amount, currencyCode)}</td>
+            <td className="num">{nonzero(register.confirmed_paid_amount) ? `${category.confirmed_share_percent}%` : "No confirmed payments"}</td>
+          </tr>)}</tbody>
+        </TableScroll>
+        <p className="footnote">Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
+      </Card> : null}
+      </div>
       {adding ? <ExpenseDialog currencyId={currencyId} currencyCode={currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setAdding(false); }} onSubmit={(body) => { void run(() => prelaunch.record(projectId, body)); }} /> : null}
       {editing ? <ExpenseDialog key={editing.id} initial={editing} currencyId={currencyId} currencyCode={editing.currency_code ?? currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setEditing(null); }} onSubmit={(changes) => { void run(() => prelaunch.update(projectId, editing.id, { expected: editableFields(editing), changes })); }} /> : null}
       {removing ? <PromptDialog title="Remove this recorded expense" label="Reason" hint={`${removing.notes ?? removing.movement_reference} · ${money(removing.amount, removing.currency_code ?? currencyCode)}. This unconfirmed entry will leave recorded totals and remain in history. Confirmed cash is unchanged.`} confirmLabel="Remove expense" busy={busy} error={error} onCancel={() => { if (!busy) setRemoving(null); }} onSubmit={(reason) => { void run(() => prelaunch.remove(projectId, removing.id, { expected: editableFields(removing), reason })); }} /> : null}
@@ -194,12 +207,16 @@ function ExpenseDialog({ initial, currencyId, currencyCode, busy, error, onCance
   const [counterparty, setCounterparty] = useState(initial?.counterparty_reference ?? "");
   const [reference, setReference] = useState(initial?.invoice_reference ?? "");
   const [evidence, setEvidence] = useState(initial?.evidence_reference ?? "");
-  return <FormDialog title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} description="This records an entry. It becomes cash after confirmation. Master Administrator / Boss may self-confirm; other users need a different authorised confirmer." confirmLabel={initial ? "Save changes" : "Record expense"} busy={busy} disabled={!description.trim() || !amount || !date} onCancel={onCancel} onSubmit={() => onSubmit({ category, amount, movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description })}>
+  const dirty = category !== (initial?.category ?? "permits") || description !== (initial?.notes ?? "") || amount !== (initial?.amount ?? "") || date !== (initial?.movement_date ?? "") || counterparty !== (initial?.counterparty_reference ?? "") || reference !== (initial?.invoice_reference ?? "") || evidence !== (initial?.evidence_reference ?? "");
+  const submit = () => onSubmit({ category, amount, movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description });
+  return <RecordPage title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} eyebrow="Pre-Launch" subtitle="Record an expense and its payment evidence" onClose={onCancel}><DraftBoundary dirty={dirty} busy={busy}><form onSubmit={event => { event.preventDefault(); if (!busy && description.trim() && amount && date) submit(); }}>
+    <p className="footnote">This records an entry. It becomes cash after confirmation. Master Administrator / Boss may self-confirm; other users need a different authorised confirmer.</p>
     {error ? <Notice tone="error">{error}</Notice> : null}
     <FormSection title="Expense"><Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
     <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Amount"><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>
     </FormSection><FormSection title="Payment and evidence"><FieldRow><Field label="Payment / movement date"><input className="input" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Counterparty / authority" optional><input className="input" value={counterparty} onChange={(event) => setCounterparty(event.target.value)} /></Field></FieldRow>
     <FieldRow><Field label="Reference" optional><input className="input" value={reference} onChange={(event) => setReference(event.target.value)} /></Field><Field label="Evidence / proof" optional><input className="input" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field></FieldRow>
     </FormSection>
-  </FormDialog>;
+    <FormActions><Button variant="primary" type="submit" disabled={busy || !description.trim() || !amount || !date}>{busy ? "Saving…" : initial ? "Save changes" : "Record expense"}</Button><Button data-leaves-editor disabled={busy} onClick={onCancel}>Cancel</Button></FormActions>
+  </form></DraftBoundary></RecordPage>;
 }

@@ -44,11 +44,12 @@ def setting(job: str, key: str) -> str | None:
     return found.group(1).strip() if found else None
 
 
-def condition(job: str, event: str, base: str, draft: bool) -> bool:
+def condition(job: str, event: str, base: str, draft: bool, ui_only: bool = False) -> bool:
     expression = setting(job, "if")
     if expression is None:
         return True
     values = {
+        "needs.development_scope.outputs.frontend_only": repr("true" if ui_only else "false"),
         "github.event_name": repr(event),
         "github.event.pull_request.base.ref": repr(base),
         "github.event.pull_request.draft": str(draft),
@@ -69,8 +70,11 @@ def condition(job: str, event: str, base: str, draft: bool) -> bool:
                 if isinstance(node.op, ast.And)
                 else any(read(v) for v in node.values)
             )
-        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
-            return read(node.left) == read(node.comparators[0])
+        if isinstance(node, ast.Compare) and len(node.ops) == 1:
+            if isinstance(node.ops[0], ast.Eq):
+                return read(node.left) == read(node.comparators[0])
+            if isinstance(node.ops[0], ast.NotEq):
+                return read(node.left) != read(node.comparators[0])
         raise AssertionError(f"Unhandled workflow expression: {ast.dump(node)}")
 
     return bool(read(tree.body))
@@ -91,6 +95,17 @@ def condition(job: str, event: str, base: str, draft: bool) -> bool:
 )
 def test_lane_routing(event: str, base: str, draft: bool, expected: set[str]) -> None:
     assert {job for job in JOBS if condition(job, event, base, draft)} == expected
+
+
+@pytest.mark.parametrize("draft", (True, False))
+def test_approved_ui_delivery_skips_backend_entry_and_aggregator(draft: bool) -> None:
+    for job in ("backend_fast", "backend_static", "backend"):
+        assert not condition(job, "pull_request", "main", draft, ui_only=True)
+    # Full remains dependent on successful structural checks, so a skipped
+    # structural job cannot start database shards.
+    assert setting("backend_full", "needs") == "backend_static"
+    assert "always()" not in (setting("backend_full", "if") or "")
+    assert condition("frontend", "pull_request", "main", draft, ui_only=True)
 
 
 def test_main_health_and_integration_triggers() -> None:
@@ -176,7 +191,7 @@ def test_shards_are_independent_complete_and_not_fail_fast() -> None:
 def test_actual_aggregator_command_refuses_any_non_success(structural: str, shards: str) -> None:
     content = block("backend")
     assert setting("backend", "name") == "Backend"
-    assert "needs: [backend_static, backend_full]" in content
+    assert "needs: [development_scope, backend_static, backend_full]" in content
     assert (setting("backend", "if") or "").startswith("always() &&")
     assert "needs.backend_static.result" in content and "needs.backend_full.result" in content
     command = re.search(r"run: python -c '(.+)'", content)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, projects } from "@/lib/api";
 import type { LandAnalytics as Analytics, LandParcel } from "@/lib/api";
+import { measurement } from "./presentation";
 import { fractionFromPercent, money, percent, percentInput } from "@/lib/format";
 import { Button, DraftBoundary, Field, FieldRow, FormActions, KeyValue, KeyValueGrid, Loading, Notice, SectionHeader, TableScroll } from "@/components/ui";
 
@@ -31,7 +32,7 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
   const existingYear = data?.market_years.some(row => String(row.year) === year);
   return <DraftBoundary dirty={Boolean(year || rate || changedGdv)} busy={busy}>
     <div className="stack">
-      <SectionHeader title="Analytics" />
+      <SectionHeader title="Land economics" description="Acquisition costs and development assumptions for this parcel." />
       {error ? <Notice tone="error">{error}<Button onClick={() => setAttempt(value => value + 1)}>Retry analytics</Button></Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
       {!data && !error ? <Loading label="Calculating land analytics…" /> : null}
@@ -39,8 +40,8 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
         <KeyValueGrid columns={2}>
           <KeyValue label="Purchase price" value={price(parcel.purchase_price)} />
           <KeyValue label="Total acquisition cost" value={price(parcel.total_acquisition_cost)} />
-          <KeyValue label="Total land area (sqm)" value={data.land_area_sqm} />
-          <KeyValue label="Max buildable area (sqm)" value={data.max_buildable_area_sqm ?? "Record Maximum GFA in Planning"} />
+          <KeyValue label="Total land area" value={measurement(data.land_area_sqm, "sqm")} />
+          <KeyValue label="Max buildable area" value={data.max_buildable_area_sqm === null ? "Record Maximum GFA in Planning" : measurement(data.max_buildable_area_sqm, "sqm")} />
           <KeyValue label="Land cost per sqm · purchase price / land area" value={price(data.purchase_cost_per_sqm)} />
           <KeyValue label="Land cost per buildable sqm · purchase price / max buildable area" value={price(data.purchase_cost_per_buildable_sqm)} />
           <KeyValue label="All-in cost per sqm · total acquisition cost / land area" value={price(data.acquisition_cost_per_sqm)} />

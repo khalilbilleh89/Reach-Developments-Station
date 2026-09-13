@@ -454,7 +454,7 @@ export function ProjectCommandCenter({
                 ) : unitTotals ? (
                   <>
                     <Position>
-                      <PositionFigure lead label="Units" value={unitTotals.total} />
+                      <PositionFigure lead label="Visible inventory" value={unitTotals.total} note="All matching register records within your access" />
                       <PositionFigure label="Available" value={unitTotals.available_count} />
                       {dealTotals ? (
                         <PositionFigure

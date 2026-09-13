@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ApiError, inventory } from "@/lib/api";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 import type { Building, Floor, Phase } from "@/lib/api";
+import { businessDate } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -144,8 +145,8 @@ export function PhasesView({
                   <td>
                     <Badge tone={phaseTone(phase.status)}>{statusLabel(phase.status)}</Badge>
                   </td>
-                  <td>{phase.planned_start ?? "—"}</td>
-                  <td>{phase.planned_completion ?? "—"}</td>
+                  <td>{businessDate(phase.planned_start)}</td>
+                  <td>{businessDate(phase.planned_completion)}</td>
                   <td>{phase.is_active ? "Yes" : "No"}</td>
                   <td className="row-go" aria-hidden="true">
                     <Icon name="chevron" />
@@ -186,11 +187,11 @@ export function PhasesView({
           }
         >
           <KeyValueGrid>
-            <KeyValue label="Planned start" value={selected.planned_start ?? "Not stated"} />
+            <KeyValue label="Planned start" value={businessDate(selected.planned_start)} />
             {canAdmin ? <DeleteRecordButton label="phase" onDelete={reason => inventory.deleteRecord(projectId, "phases", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
             <KeyValue
               label="Planned completion"
-              value={selected.planned_completion ?? "Not stated"}
+              value={businessDate(selected.planned_completion)}
             />
             <KeyValue label="Notes" value={selected.notes ?? "None"} />
           </KeyValueGrid>

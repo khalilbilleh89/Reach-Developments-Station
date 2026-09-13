@@ -1535,12 +1535,11 @@ section + section {
   border-radius: var(--radius-control);
 }
 
-.tab:hover {
+.tab:not(.tab-active):hover {
   color: var(--text-primary);
 }
 
 .tab-active {
-
   color: var(--text-inverse);
   font-weight: 650;
   background-color: var(--ink);
@@ -2814,6 +2813,10 @@ input[type="file"].input {
   padding: 0;
 }
 
+.kv > div {
+  min-width: 0;
+}
+
 .kv-term {
   margin: 0;
   color: var(--text-muted);
@@ -3916,7 +3919,7 @@ input[type="file"].input {
   flex-wrap: wrap;
   gap: var(--space-4);
   align-items: flex-start;
-  padding: var(--space-6) var(--space-6) 0;
+  padding: var(--space-5) var(--space-5) 0;
 }
 
 .record-glyph {
@@ -4062,8 +4065,8 @@ input[type="file"].input {
   display: grid;
   flex-wrap: wrap;
   gap: var(--space-4);
-  margin: var(--space-5) 0 0;
-  padding: var(--space-5) var(--space-6);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--line-soft);
   background-color: var(--surface);
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
@@ -4102,7 +4105,7 @@ input[type="file"].input {
 }
 
 .record-page-sections {
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-5);
   border-top: 1px solid var(--line-soft);
 }
 
@@ -4191,7 +4194,7 @@ input[type="file"].input {
   gap: var(--space-4) var(--space-5);
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
   padding-bottom: 0;
   border-bottom: 0;
 }
@@ -4402,7 +4405,7 @@ input[type="file"].input {
 }
 
 .analysis-context {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   border-left: 3px solid var(--line-strong);
   background-color: var(--surface-secondary);
 }
@@ -4488,6 +4491,10 @@ input[type="file"].input {
   font-size: var(--text-xs);
   font-weight: 500;
 }
+
+.attention-clear-compact { padding: var(--space-3) var(--space-4); margin: 0; border: 1px solid var(--line-soft); border-radius: var(--radius-card); font-size: var(--text-sm); }
+.analysis-inputs { padding: var(--space-4); background: var(--surface-secondary); border-left: 3px solid var(--line-strong); border-radius: var(--radius-card); }
+.analysis-inputs ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-2) var(--space-5); padding-left: var(--space-4); font-size: var(--text-sm); }
 
 /* Money by currency: one block per denomination, never added across them. */
 .currency-block + .currency-block {
@@ -5321,6 +5328,67 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .agent-fields { border: 0; padding: 0; margin: 1.2rem 0; min-width: 0; }
 .agent-fields > legend { font-weight: 600; padding: 0 0 .8rem; }
 .stock-unit-mix > span { color: var(--text-muted); padding: 0 .2rem; }
+.land-overview > .record-section { min-width: 0; padding: var(--space-5); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); }
+.land-utilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--space-3); margin: var(--space-4) 0; }
+.land-utilities > div { padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); }
+.land-utilities dt { font-weight: 650; margin-bottom: var(--space-3); }
+.land-cost-breakdown { margin: var(--space-4) 0; font-size: .875rem; }
+.land-parcel-list { display: none; }
+.unit-release-requirements { margin: var(--space-3) 0; padding-left: var(--space-5); }
+.consultant-programme { list-style: none; margin: var(--space-4) 0; padding: 0; }
+.consultant-programme > li { display: flex; gap: var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--line-default); }
+.consultant-stage-number { display: grid; place-items: center; flex: 0 0 2rem; height: 2rem; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); font-weight: 650; }
+.consultant-stage-body { flex: 1; min-width: 0; }
+.consultant-stage-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.consultant-stage-heading h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.permit-card-list { display: none; }
+.permit-register-card { padding: var(--space-5); border-bottom: 1px solid var(--line-default); }
+.permit-register-card:last-child { border-bottom: 0; }
+.permit-register-card-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.permit-register-card-heading .button-link { font-size: 1.05rem; font-weight: 650; text-align: left; overflow-wrap: anywhere; }
+.permit-next-action { margin: var(--space-4) 0; padding-left: var(--space-3); border-left: 3px solid var(--line-strong); font-size: .875rem; }
+.permit-next-action p { margin: var(--space-2) 0; line-height: 1.6; overflow-wrap: anywhere; }
+.permit-date-groups > .kv { padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); margin-bottom: var(--space-5); }
+@media (max-width: 760px) { .permit-card-list { display: block; } .permit-register-table { display: none; } }
+.inventory-measurement-guide { color: var(--text-secondary); font-size: .875rem; padding: var(--space-3) 0; }
+.inventory-measurement-guide summary { cursor: pointer; font-weight: 600; }
+.inventory-measurement-guide p { max-width: 75ch; line-height: 1.6; }
+.stock-view-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.stock-floor-groups { display: grid; gap: var(--space-5); padding: var(--space-5); }
+.stock-floor-group h3 { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-3); font-size: .95rem; }
+.stock-floor-group h3 span { color: var(--text-muted); font-size: .75rem; font-weight: 400; }
+.stock-property-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--space-3); }
+.stock-property-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); overflow-wrap: anywhere; }
+.stock-property-identity { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.stock-property-identity a { font-size: 1.1rem; font-weight: 650; }
+.stock-property-card > p { margin: var(--space-3) 0; font-size: .85rem; }
+.stock-property-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-4) 0; }
+.stock-property-card dt, .stock-property-price small { font-size: .72rem; color: var(--text-muted); }
+.stock-property-card dd { margin: var(--space-1) 0 0; font-variant-numeric: tabular-nums; }
+.stock-property-price { border-top: 1px solid var(--line-soft); padding-top: var(--space-3); font-weight: 650; }
+.stock-property-price small { display: block; margin-top: var(--space-1); font-weight: 400; }
+.inventory-import-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0 0 var(--space-5); gap: var(--space-3); }
+.inventory-import-steps li { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border-bottom: 2px solid var(--line-default); color: var(--text-secondary); font-size: .85rem; }
+.inventory-import-steps li[aria-current="step"] { color: var(--accent); border-color: var(--accent); background: var(--surface); }
+.inventory-import-steps strong { display: grid; place-items: center; min-width: 1.6rem; height: 1.6rem; border: 1px solid currentColor; border-radius: 50%; }
+@media (max-width: 760px) { .inventory-import-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.unit-release-requirements li { padding: var(--space-2) 0; line-height: 1.5; overflow-wrap: anywhere; }
+.land-parcel-card { padding: var(--space-5); border-bottom: 1px solid var(--line-default); }
+.land-parcel-card:last-child { border-bottom: 0; }
+.land-parcel-card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.land-parcel-card-head .button-link { font-size: 1.1rem; font-weight: 650; overflow-wrap: anywhere; text-align: left; }
+.land-parcel-area { font-size: 1.6rem; font-weight: 600; margin: var(--space-4) 0; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .land-parcel-list { display: block; } .land-parcel-table { display: none; } }
+.land-cost-breakdown > div { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line-soft); }
+.land-cost-breakdown dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.land-cost-breakdown > div:last-child { font-weight: 650; border-color: var(--line-strong); }
+.land-cost-method > summary { cursor: pointer; padding: var(--space-3) 0; color: var(--text-secondary); font-size: .85rem; }
+.land-envelope { padding: var(--space-4) var(--space-5); margin-bottom: var(--space-5); background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--radius-control); }
+.land-utilities dd { margin: 0; font-size: .85rem; }
+.land-supporting-note { border-left: 3px solid var(--line-strong); padding: var(--space-3) var(--space-4); background: var(--surface); overflow-wrap: anywhere; }
+.land-supporting-note h4 { margin: 0 0 var(--space-2); font-size: .85rem; }
+.land-supporting-note p { margin: 0; color: var(--text-secondary); line-height: 1.7; white-space: pre-line; }
+@media (max-width: 520px) { .land-overview > .record-section { padding: var(--space-4); } }
 .stock-register .stock-gross { background: var(--surface-command); font-weight: 650; }
 .stock-register .stock-price { font-weight: 600; white-space: nowrap; }
 .stock-note { color: var(--text-muted); font-size: .71rem; line-height: 1.6; margin: .8rem 1.4rem; }

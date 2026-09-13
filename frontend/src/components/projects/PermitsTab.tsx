@@ -44,6 +44,7 @@ import {
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 import { PermitCreatePage } from "./PermitCreatePage";
+import { permitReviewNotes } from "./permits/presentation";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 
@@ -393,20 +394,43 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
               />
             </div>
           ) : (
+            <>
+            <div className="permit-card-list">
+              {shown.map(permit => <article key={permit.id} className="permit-register-card">
+                <div className="permit-register-card-heading">
+                  <button className="button-link" type="button" onClick={() => setSelected(permit)}>{permit.permit_code}</button>
+                  <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>{STATUS_LABELS[permit.status] ?? permit.status}</Badge>
+                </div>
+                <p className="subtle">{typeLabel(permit.permit_type_code)} · {permit.authority}</p>
+                <div className="permit-next-action"><strong>Next action</strong><p>{permit.next_action ?? "No next action recorded"}</p></div>
+                <KeyValueGrid columns={2}>
+                  <KeyValue label="Required by" value={businessDate(permit.planned_issue_date)} />
+                  <KeyValue label="Statutory clock" value={slaLabel(permit)} />
+                </KeyValueGrid>
+                <div className="row-actions">
+                  {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
+                  {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
+                  {permit.expired_flag ? <Badge tone="danger">Expired</Badge> : null}
+                  {!permit.prerequisite_satisfied ? <Badge tone="muted">Prerequisite open</Badge> : null}
+                  {permitReviewNotes(permit).length ? <Badge tone="warning">Review record</Badge> : null}
+                </div>
+              </article>)}
+            </div>
+            <div className="permit-register-table">
             <TableScroll label="Permit register" fixedFirst>
               <thead>
                 <tr>
                   <th scope="col">Permit</th>
-                  <th scope="col">Authority</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Next action</th>
                   <th scope="col">Required by</th>
+                  <th scope="col">Authority</th>
                   <th scope="col">Forecast / received</th>
                   <th scope="col" className="num">
                     Days in stage
                   </th>
                   <th scope="col">Statutory clock</th>
                   <th scope="col">Flags</th>
-                  <th scope="col">Next action</th>
                 </tr>
               </thead>
               <tbody>
@@ -424,18 +448,17 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                         <IdentityCell name={permit.permit_code} meta={typeLabel(permit.permit_type_code)} />
                       </button>
                     </th>
-                    <td className="cell-prose">
-                      {permit.authority}
-                      {permit.authority_reference ? (
-                        <span className="cell-secondary mono">{permit.authority_reference}</span>
-                      ) : null}
-                    </td>
                     <td>
                       <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>
                         {STATUS_LABELS[permit.status] ?? permit.status}
                       </Badge>
                     </td>
+                    <td className="cell-prose">{permit.next_action ?? "No next action recorded"}</td>
                     <td className="figure">{businessDate(permit.planned_issue_date)}</td>
+                    <td className="cell-prose">
+                      {permit.authority}
+                      {permit.authority_reference ? <span className="cell-secondary mono">{permit.authority_reference}</span> : null}
+                    </td>
                     <td className="figure">
                       {permit.issue_date
                         ? businessDate(permit.issue_date)
@@ -461,14 +484,16 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                         {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
                         {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
                         {permit.expired_flag ? <Badge tone="danger">Expired</Badge> : null}
+                        {permitReviewNotes(permit).length ? <Badge tone="warning">Review record</Badge> : null}
                         {!permit.prerequisite_satisfied ? <Badge tone="muted">Prerequisite open</Badge> : null}
                       </div>
                     </td>
-                    <td className="cell-prose">{permit.next_action ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </TableScroll>
+            </div>
+            </>
           )}
         </Card>
       </div>
@@ -616,6 +641,7 @@ function PermitFile({
 
       {section === "permit" ? (
         <>
+          {permitReviewNotes(permit).map(note => <Notice key={note} tone="warning">Review this record: {note} Dates do not change workflow status automatically.</Notice>)}
           {editing ? (
             <Card title="Edit permit">
               <EditForm
@@ -658,15 +684,21 @@ function PermitFile({
             </Card>
           ) : null}
 
-          <section>
-            <SectionHeader title="Dates" />
+          <section className="permit-date-groups">
+            <SectionHeader title="Submission" />
             <KeyValueGrid columns={3}>
               <KeyValue label="Planned submission" mono value={businessDate(permit.planned_submission_date)} />
               <KeyValue label="Forecast submission" mono value={businessDate(permit.forecast_submission_date)} />
               <KeyValue label="Submitted" mono value={businessDate(permit.actual_submission_date)} />
+            </KeyValueGrid>
+            <SectionHeader title="Authority review" />
+            <KeyValueGrid columns={3}>
               <KeyValue label="Accepted for review" mono value={businessDate(permit.accepted_for_review_date)} />
               <KeyValue label="Comments received" mono value={businessDate(permit.comments_received_date)} />
               <KeyValue label="Resubmitted" mono value={businessDate(permit.resubmission_date)} />
+            </KeyValueGrid>
+            <SectionHeader title="Issue & renewal" />
+            <KeyValueGrid columns={3}>
               <KeyValue label="Planned issue" mono value={businessDate(permit.planned_issue_date)} />
               <KeyValue label="Forecast issue" mono value={businessDate(permit.forecast_issue_date)} />
               <KeyValue label="Issued" mono value={businessDate(permit.issue_date)} />
@@ -761,7 +793,7 @@ function PermitFile({
         historyError ? <><Notice tone="error">Permit history could not be loaded.</Notice><Button onClick={() => void loadHistory()}>Retry history</Button></> : history === null ? (
           <Loading label="Loading history…" lines={3} />
         ) : history.length === 0 ? (
-          <EmptyState title="Nothing recorded yet" hint="Every status change is kept here with its effective date and reason." />
+          <EmptyState title="No recorded status transitions" hint="Existing application and issue dates may predate this history. This does not mean no permit activity occurred. Future status changes appear here with their effective date and reason." />
         ) : (
           // A permit's history is a sequence, and a four-column table of it
           // reads as a spreadsheet of a story. Newest first, because the
