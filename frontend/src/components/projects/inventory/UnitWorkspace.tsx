@@ -313,6 +313,7 @@ export function UnitWorkspace({
       {activeSection === "overview" ? (
         <UnitSummary
           unit={unit}
+          projectId={projectId}
           pricing={pricingAnswer}
           onOpenTab={setSection}
         />
@@ -343,7 +344,7 @@ export function UnitWorkspace({
 
       {activeSection === "pricing" ? (
         <>
-          {canPrice ? <SellingPriceForm projectId={projectId} unitId={unitId} currencyCode={currencyCodeOf(unitPricing?.direct_price_currency_id)} onChanged={async () => { await load(); await onChanged(); }} /> : null}
+          {canPrice ? <SellingPriceForm isMasterAdmin={roles.has("master_admin")} currentAmount={unitPricing?.history[0]?.reference_price_ex_tax ?? unitPricing?.active_price?.reference_price_ex_tax ?? null} projectId={projectId} unitId={unitId} currencyCode={currencyCodeOf(unitPricing?.direct_price_currency_id)} onChanged={async () => { await load(); await onChanged(); }} /> : null}
           <UnitPricingSection
             answer={pricingAnswer}
             canPrice={canPrice}

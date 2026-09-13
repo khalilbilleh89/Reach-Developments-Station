@@ -1816,17 +1816,10 @@ def _text(value: object) -> object:
     return value
 
 
-def hierarchy_of(session: Session, unit: Unit) -> tuple[Phase, Building, Floor]:
-    """The floor, building and phase a unit sits in.
-
-    Read through the floor every time rather than from a column on the unit:
-    PR-MVP-03 deliberately stores the hierarchy once, and a price that read a
-    denormalised copy would be pricing a second answer to the same question.
-    """
-    floor = session.get(Floor, unit.floor_id)
-    if floor is None:  # pragma: no cover - a unit cannot exist without its floor
-        raise NotFoundError("Floor not found.")
-    building = session.get(Building, floor.building_id)
+def hierarchy_of(session: Session, unit: Unit) -> tuple[Phase, Building, Floor | None]:
+    """Resolve a unit through its single parent; building-level villas have no floor."""
+    floor = session.get(Floor, unit.floor_id) if unit.floor_id else None
+    building = session.get(Building, floor.building_id if floor else unit.building_id)
     if building is None:  # pragma: no cover - guaranteed by a composite foreign key
         raise NotFoundError("Building not found.")
     phase = session.get(Phase, building.phase_id)
@@ -1923,7 +1916,7 @@ def descriptive_snapshot(session: Session, *, unit: Unit) -> dict[str, Any]:
         "asset_class": unit.asset_class,
         "phase_code": phase.code,
         "building_code": building.code,
-        "floor_code": floor.code,
+        "floor_code": floor.code if floor else None,
     }
 
 
@@ -1977,7 +1970,7 @@ def pricing_basis(
             "phase_code": phase.code,
             "building_id": str(building.id),
             "building_code": building.code,
-            "floor_id": str(floor.id),
+            "floor_id": str(floor.id) if floor else None,
         },
         "area_schedule": {
             "id": str(schedule.id),
@@ -3371,8 +3364,8 @@ def price_register(
     """
     statement = (
         select(Unit)
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .where(Unit.project_id == project.id, Unit.is_active.is_(True))
     )
     if visible_units is not None:
@@ -3704,6 +3697,7 @@ def gross_price_presentation(
         else []
     )
     gross = measured["gross_area"]
+    net = measured["net_area"]
     return {
         "price_per_gross_area": (
             _per_area(active.reference_price_ex_tax, gross)
@@ -3713,4 +3707,10 @@ def gross_price_presentation(
             else None
         ),
         "gross_area_unit": measured["gross_area_unit"],
+        "price_per_net_area": _per_area(active.reference_price_ex_tax, net)
+        if active is not None and not repricing_required(unit, active=active) and net is not None
+        else None,
+        "net_area_unit": measured["net_area_unit"],
+        "net_area": net,
+        "gross_area": gross,
     }

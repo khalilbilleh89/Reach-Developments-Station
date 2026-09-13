@@ -8,9 +8,9 @@ project that renumbers ``A-101`` to ``A1-101`` must not lose its history.
 
 Two structural rules shape most of this file.
 
-**Hierarchy truth is stored once.** A Unit knows its Floor. Building and Phase
-are reached through the Floor, never duplicated onto the Unit, because two
-copies of the same fact are two things to disagree. ``project_id`` is the one
+**Hierarchy truth is stored once.** A unit belongs to a floor or directly to a
+building without floors. Exactly one parent is stored; the building of a
+floor-level unit and the phase are derived through that parent. ``project_id`` is the one
 deliberate exception: it is the security scope every query filters on, and it is
 held to the hierarchy by composite foreign keys rather than by hope — each level
 carries a ``UNIQUE (id, project_id)`` so its child can reference the pair.
@@ -432,7 +432,7 @@ class Unit(Base):
     ``unit_reference`` is the editable business label; correcting it must never
     disturb identity, which is the whole reason the two are separate columns.
 
-    Phase and Building are absent by design: they are reached through the floor.
+    A unit belongs either to a floor or directly to a building, never both.
     """
 
     __tablename__ = "units"
@@ -441,7 +441,8 @@ class Unit(Base):
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
-    floor_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    floor_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
+    building_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     #: Unique on its floor: "101" recurs in every building of every project.
     unit_number: Mapped[str] = mapped_column(String(32), nullable=False)
     #: Unique in the project and shown to people. Editable, and audited.
@@ -516,6 +517,14 @@ class Unit(Base):
         ),
         UniqueConstraint("project_id", "unit_reference"),
         UniqueConstraint("floor_id", "unit_number"),
+        ForeignKeyConstraint(
+            ["building_id", "project_id"],
+            ["buildings.id", "buildings.project_id"],
+            name="building",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("(floor_id IS NULL) <> (building_id IS NULL)", name="one_parent"),
+        UniqueConstraint("building_id", "unit_number"),
         UniqueConstraint("id", "project_id", name="unit_project"),
         CheckConstraint("length(unit_number) > 0", name="number_not_blank"),
         CheckConstraint("length(unit_reference) > 0", name="reference_not_blank"),

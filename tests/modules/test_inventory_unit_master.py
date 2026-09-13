@@ -11,14 +11,24 @@ from tests.factories import client_for, make_user
 from tests.modules.conftest import PROJECTS, inventory_url, unit_payload
 
 
-def test_gross_requires_six_explicit_compatible_measurements() -> None:
+def test_gross_adds_recorded_extras_to_net_with_compatible_measurements() -> None:
     lines = [
         {"physical_component": key, "raw_area": Decimal(value), "unit_of_measure": "sqm"}
         for key, value in zip(COMPONENTS, ("100.1234", "20", "30", "40", "5", "0"), strict=True)
     ]
     assert gross_measurement(lines)["gross_area"] == Decimal("195.1234")
-    assert gross_measurement(lines[:-1])["gross_area"] is None
-    assert gross_measurement(lines[:-1])["gross_missing_components"] == ["porches"]
+    assert gross_measurement(lines[:-1])["gross_area"] == Decimal("195.1234")
+    assert gross_measurement(lines[:-1])["gross_missing_components"] == []
+    assert (
+        gross_measurement(lines[:1])["gross_area"]
+        == gross_measurement(lines[:1])["net_area"]
+        == Decimal("100.1234")
+    )
+    assert (
+        gross_measurement(lines[:2])["gross_area"]
+        == gross_measurement(lines[:2])["net_area"]
+        == Decimal("120.1234")
+    )
     assert gross_measurement([*lines, lines[0]])["gross_area"] is None
     mixed = [*lines[:-1], {**lines[-1], "unit_of_measure": "sqft"}]
     assert gross_measurement(mixed)["gross_area"] is None

@@ -47,12 +47,12 @@ export function configuredField(field:EditField,options:InventoryOption[],curren
   return {...field,kind:"select",options:[{value:"",label:"Not assigned"},...choices],hint:choices.length ? undefined : "Add choices in Inventory Configuration."};
 }
 
-/** Each section edits exactly the fields displayed within that section. */
+/** One edit action opens the complete physical property record. */
 export function UnitProperty({projectId,unit,areaTypes,schedules,assets,values,canWrite,canApprove,canDelete=false,onChanged}: {
   projectId:string;unit:Unit;areaTypes:AreaType[];schedules:AreaSchedule[];assets:SubAsset[];
   values:CustomValue[];canDelete?:boolean; canWrite:boolean;canApprove:boolean;onChanged:()=>Promise<void>;
 }) {
-  const [editing,setEditing]=useState<string | null>(null);
+  const [editing,setEditing]=useState(false);
   const [configuration,setConfiguration]=useState<{projectId:string;options:InventoryOption[]} | null>(null);
   const [configError,setConfigError]=useState(false);
   const [retry,setRetry]=useState(0);
@@ -61,24 +61,21 @@ export function UnitProperty({projectId,unit,areaTypes,schedules,assets,values,c
   const additional=values.filter(value=>value.is_editable);
   return <div className="stack">
     {configError ? <Notice tone="error">Project choices could not be loaded.<Button onClick={()=>setRetry(value=>value+1)}>Retry choices</Button></Notice> : null}
-    {["Identity","Features"].map(group=>{
-      const fields=UNIT_FIELDS.filter(field=>field.group===group).map(field=>({...configuredField(field,options ?? [],unit[field.name as keyof Unit] as string|null),group:undefined}));
-      return <section key={group}>
-        <SectionHeader level={2} title={group} actions={canWrite ? <Button small disabled={!options || configError} data-leaves-editor onClick={()=>setEditing(editing===group ? null : group)}>{editing===group ? "Close editor" : `Edit ${group.toLowerCase()}`}</Button> : undefined} />
-        {editing===group ? <EditForm key={group} fields={fields} initial={Object.fromEntries(fields.map(field=>[field.name,asValue(unit[field.name as keyof Unit] as never)]))}
-          submitLabel={`Save ${group.toLowerCase()}`} onSave={async changes=>{await inventory.updateUnit(projectId,unit.id,changes);setEditing(null);await onChanged();}} onCancel={()=>setEditing(null)} /> : <KeyValueGrid columns={3}>
-          {fields.map(field=><KeyValue key={field.name} label={field.label} value={typeof unit[field.name as keyof Unit]==="boolean" ? unit[field.name as keyof Unit] ? "Yes" : "No" : String(options?.find(option=>option.category===CONFIGURED_FIELDS[field.name] && option.code===unit[field.name as keyof Unit])?.label ?? unit[field.name as keyof Unit] ?? "—")} />)}
-        </KeyValueGrid>}
-      </section>;
-    })}
-    <PhysicalRecord canDelete={canDelete} projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} options={options ?? []} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} />
+    <SectionHeader level={2} title="Property" actions={canWrite || additional.length ? <Button disabled={!options || configError} data-leaves-editor onClick={()=>setEditing(!editing)}>{editing ? "Done editing" : "Edit property"}</Button> : undefined} />
+    {editing && canWrite ? <EditForm fields={UNIT_FIELDS.map(field=>configuredField(field,options ?? [],unit[field.name as keyof Unit] as string|null))}
+      initial={Object.fromEntries(UNIT_FIELDS.map(field=>[field.name,asValue(unit[field.name as keyof Unit] as never)]))}
+      onCancel={()=>setEditing(false)} submitLabel="Save identity and features" onSave={async changes=>{await inventory.updateUnit(projectId,unit.id,changes);await onChanged();}} /> : ["Identity","Features"].map(group=><section key={group}>
+      <SectionHeader level={2} title={group} />
+      <KeyValueGrid columns={3}>{UNIT_FIELDS.filter(field=>field.group===group).map(field=><KeyValue key={field.name} label={field.label} value={typeof unit[field.name as keyof Unit]==="boolean" ? unit[field.name as keyof Unit] ? "Yes" : "No" : String(options?.find(option=>option.category===CONFIGURED_FIELDS[field.name] && option.code===unit[field.name as keyof Unit])?.label ?? unit[field.name as keyof Unit] ?? "—")} />)}</KeyValueGrid>
+    </section>)}
+    <PhysicalRecord key={`${unit.id}-${editing}`} masterEditing={editing} canDelete={canDelete} projectId={projectId} unit={unit} areaTypes={areaTypes} schedules={schedules} assets={assets} options={options ?? []} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} />
     {values.length ? <section>
-      <SectionHeader level={2} title="Additional fields" actions={additional.length ? <Button small data-leaves-editor onClick={()=>setEditing(editing==="additional" ? null : "additional")}>{editing==="additional" ? "Close editor" : "Edit additional fields"}</Button> : undefined} />
-      {editing==="additional" ? <EditForm fields={additional.map(value=>({name:value.field_key,label:value.display_label,hint:value.help_text ?? undefined,affix:value.unit_of_measure ?? undefined,
+      <SectionHeader level={2} title="Additional fields" />
+      {editing && additional.length > 0 ? <EditForm fields={additional.map(value=>({name:value.field_key,label:value.display_label,hint:value.help_text ?? undefined,affix:value.unit_of_measure ?? undefined,
         kind:value.data_type==="boolean" ? "checkbox" : value.data_type==="date" ? "date" : value.data_type==="option" ? "select" : value.data_type==="text" ? "text" : "number",
         options:value.data_type==="option" ? value.options.map(option=>({value:option.code,label:option.label})) : undefined}))}
-        initial={Object.fromEntries(additional.map(value=>[value.field_key,asValue(value.value)]))} submitLabel="Save additional fields"
-        onSave={async changes=>{await inventory.writeUnitValues(projectId,unit.id,changes);setEditing(null);await onChanged();}} onCancel={()=>setEditing(null)} /> : <KeyValueGrid columns={3}>
+        initial={Object.fromEntries(additional.map(value=>[value.field_key,asValue(value.value)]))} onCancel={()=>setEditing(false)} submitLabel="Save additional fields"
+        onSave={async changes=>{await inventory.writeUnitValues(projectId,unit.id,changes);await onChanged();}} /> : <KeyValueGrid columns={3}>
         {values.map(value=><KeyValue key={value.definition_id} label={value.display_label} value={value.value==null ? null : `${String(value.value)}${value.unit_of_measure ? ` ${value.unit_of_measure}` : ""}`} />)}
       </KeyValueGrid>}
     </section> : null}

@@ -171,10 +171,11 @@ export function UnitPricingSection({
                 value={money(active.reference_price_ex_tax, activeCode)}
                 size="lg"
               />
+              <Metric label={`Price / net ${unitPricing.net_area_unit === "sqm" ? "m²" : unitPricing.net_area_unit ?? "area unit"}`} value={money(unitPricing.price_per_net_area, activeCode)} note={`Net area: ${unitPricing.net_area ?? "Not measured"} ${unitPricing.net_area_unit ?? ""} · Ex tax`} size="sm" />
               <Metric
-                label={`Per gross ${unitPricing.gross_area_unit ?? "area unit"}`}
+                label={`Price / gross ${unitPricing.gross_area_unit === "sqm" ? "m²" : unitPricing.gross_area_unit ?? "area unit"}`}
                 value={money(unitPricing.price_per_gross_area, activeCode)}
-                note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : "Ex tax"}
+                note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : `Gross area: ${unitPricing.gross_area ?? "Not measured"} ${unitPricing.gross_area_unit ?? ""} · Ex tax`}
                 size="sm"
               />
               <Metric

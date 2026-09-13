@@ -4774,24 +4774,25 @@ def apply_delivery(
         building_id=building_id,
     )
 
-    # A unit hangs off a floor, a floor off a building, a building off a phase.
-    # Every scope below reaches the unit through that chain rather than through
-    # a denormalised column, because there is no such column and inventing one
-    # here would be a second answer to where a unit sits.
-    in_building = select(Unit.id).join(Floor, Floor.id == Unit.floor_id)
+    # Resolve either parent so building-level villas participate in the same scope.
+    in_building = select(Unit.id).outerjoin(Floor, Floor.id == Unit.floor_id)
     statement = select(Unit).where(Unit.project_id == project.id)
     if unit_id is not None:
         statement = statement.where(Unit.id == unit_id)
     elif building_id is not None:
         statement = statement.where(
-            Unit.id.in_(in_building.where(Floor.building_id == building_id))
+            Unit.id.in_(
+                in_building.where(
+                    (Floor.building_id == building_id) | (Unit.building_id == building_id)
+                )
+            )
         )
     else:
         statement = statement.where(
             Unit.id.in_(
-                in_building.join(Building, Building.id == Floor.building_id).where(
-                    Building.phase_id == phase_id, Building.project_id == project.id
-                )
+                in_building.join(
+                    Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id)
+                ).where(Building.phase_id == phase_id, Building.project_id == project.id)
             )
         )
     allowed = visible_phase_ids(session, project_id=project.id, actor=actor)
@@ -4799,8 +4800,8 @@ def apply_delivery(
         statement = statement.where(
             Unit.id.in_(
                 select(Unit.id)
-                .join(Floor, Floor.id == Unit.floor_id)
-                .join(Building, Building.id == Floor.building_id)
+                .outerjoin(Floor, Floor.id == Unit.floor_id)
+                .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
                 .where(Building.phase_id.in_(allowed), Building.project_id == project.id)
             )
         )

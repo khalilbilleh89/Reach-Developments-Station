@@ -25,20 +25,20 @@ COMPONENTS = ("internal", "balcony", "roof_garden", "front_garden", "terrace", "
 
 
 def gross_measurement(lines: list[dict[str, Any]]) -> dict[str, Any]:
-    """Sum the six explicit components, never factors or attached assets.
+    """Net is internal plus any balcony; gross adds recorded outdoor areas.
 
-    Missing measurements are unknown, not zero. An operator records zero for
-    an absent component. Refuse to add mixed measurement units or duplicate
-    components from legacy/replaced types on the same revision.
+    Optional components absent from the approved schedule do not add area.
+    Internal measurement is required. Mixed units and duplicate components
+    still refuse a total, and attached parking/storage never join this sum.
     """
     measured = [line for line in lines if line.get("physical_component") in COMPONENTS]
-    missing = [
-        key for key in COMPONENTS if not any(line["physical_component"] == key for line in measured)
-    ]
+    missing = (
+        [] if any(line["physical_component"] == "internal" for line in measured) else ["internal"]
+    )
     units = {line["unit_of_measure"] for line in measured}
     duplicate = len(measured) != len({line["physical_component"] for line in measured})
     reason = (
-        "Record all six components; use zero where an area does not apply."
+        "Record the internal area to calculate net and gross area."
         if missing
         else "Components use different measurement units."
         if len(units) != 1
@@ -49,9 +49,9 @@ def gross_measurement(lines: list[dict[str, Any]]) -> dict[str, Any]:
     net_lines = [line for line in measured if line["physical_component"] in ("internal", "balcony")]
     net_units = {line["unit_of_measure"] for line in net_lines}
     net_complete = (
-        len(net_lines) == 2
-        and {line["physical_component"] for line in net_lines} == {"internal", "balcony"}
+        not missing
         and len(net_units) == 1
+        and len(net_lines) == len({line["physical_component"] for line in net_lines})
     )
     return {
         "net_area": sum((line["raw_area"] for line in net_lines), Decimal("0"))

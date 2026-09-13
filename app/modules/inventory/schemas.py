@@ -236,7 +236,8 @@ class _UnitFacts(StrictRequest):
 
 
 class UnitCreateRequest(_UnitFacts):
-    floor_id: uuid.UUID
+    building_id: uuid.UUID | None = None
+    floor_id: uuid.UUID | None = None
     unit_number: Annotated[str, Field(min_length=1, max_length=32)]
     unit_reference: Reference
     sequence: int = Field(default=0, ge=0)
@@ -252,6 +253,7 @@ class UnitUpdateRequest(_UnitFacts):
     still unreleased.
     """
 
+    building_id: uuid.UUID | None = None
     floor_id: uuid.UUID | None = None
     unit_number: Annotated[str, Field(min_length=1, max_length=32)] | None = None
     unit_reference: Reference | None = None
@@ -313,7 +315,7 @@ class UnitSummary(BaseModel):
     project_id: uuid.UUID
     unit_reference: str
     unit_number: str
-    floor_id: uuid.UUID
+    floor_id: uuid.UUID | None = None
     floor_code: str | None = None
     building_id: uuid.UUID | None = None
     building_code: str | None = None

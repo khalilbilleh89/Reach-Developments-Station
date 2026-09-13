@@ -1057,6 +1057,8 @@ export function UnitForm({
   buildings,
   phases,
   defaultFloorId,
+  defaultBuildingId,
+  allFloors,
   onCancel,
   onSaved,
 }: {
@@ -1065,6 +1067,8 @@ export function UnitForm({
   buildings: Building[];
   phases: Phase[];
   defaultFloorId: string;
+  defaultBuildingId: string;
+  allFloors: Floor[];
   onCancel: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -1073,6 +1077,7 @@ export function UnitForm({
     // Phase → Building → Floor → View units and then being asked which floor
     // is the screen forgetting what it just did.
     floor_id: floors.some(floor => floor.id === defaultFloorId) ? defaultFloorId : (floors.length === 1 ? floors[0].id : ""),
+    building_id: defaultBuildingId || floors.find(f => f.id === defaultFloorId)?.building_id || (buildings.length === 1 ? buildings[0].id : ""),
     unit_number: "",
     unit_reference: "",
     asset_class: "apartment",
@@ -1082,12 +1087,16 @@ export function UnitForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const buildingFloors = allFloors.filter(f => f.building_id === values.building_id);
+  const requiresFloor = buildingFloors.length > 0;
+  const selectableFloors = floors.filter(f => f.building_id === values.building_id);
+
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
       await inventory.createUnit(projectId, {
-        floor_id: values.floor_id,
+        ...(requiresFloor ? { floor_id: values.floor_id } : { building_id: values.building_id }),
         unit_number: values.unit_number,
         unit_reference: values.unit_reference,
         asset_class: values.asset_class,
@@ -1108,7 +1117,7 @@ export function UnitForm({
       confirmLabel="Create unit"
       busy={busy}
       disabled={
-        values.floor_id === "" ||
+        values.building_id === "" || (requiresFloor && values.floor_id === "") ||
         values.unit_number.trim() === "" ||
         values.unit_reference.trim() === ""
       }
@@ -1116,29 +1125,21 @@ export function UnitForm({
       onSubmit={() => void save()}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {floors.length === 0 ? (
-        <Notice tone="warning">
-          No active floor is available in this selection. Choose another phase or building,
-          add a floor, or import the structure from the Excel template.
-        </Notice>
-      ) : null}
+      <Field label="Building">
+        <select className="input" value={values.building_id} onChange={event => setValues({ ...values, building_id: event.target.value, floor_id: "" })}>
+          <option value="">Choose a building</option>
+          {buildings.map(building => <option key={building.id} value={building.id}>{phases.find(p => p.id === building.phase_id)?.code} / {building.code} — {building.name}</option>)}
+        </select>
+      </Field>
+      {values.building_id && !requiresFloor ? <Notice tone="info">This building has no floors. The unit will be attached directly to it.</Notice> : null}
       <FieldRow columns={2}>
-        <Field label="Floor">
-          {/* Only the floors the server already returned for this project and
-              this operator. Nothing forbidden is fetched and then hidden. */}
-          <select
-            className="input"
-            value={values.floor_id}
-            onChange={(event) => setValues({ ...values, floor_id: event.target.value })}
-          >
+        {requiresFloor ? <Field label="Floor">
+          <select className="input" value={values.floor_id} onChange={event => setValues({ ...values, floor_id: event.target.value })}>
             <option value="">Choose a floor</option>
-            {floors.map((floor) => (
-              <option key={floor.id} value={floor.id}>
-                {phases.find(p => p.id === buildings.find(b => b.id === floor.building_id)?.phase_id)?.code} / {buildings.find(b => b.id === floor.building_id)?.code} / {floor.code} — {floor.label}
-              </option>
-            ))}
+            {selectableFloors.map(floor => <option key={floor.id} value={floor.id}>{floor.code} — {floor.label}</option>)}
           </select>
-        </Field>
+          {selectableFloors.length === 0 ? <Notice tone="warning">This building has floors, but none are active. Activate a floor before adding a unit.</Notice> : null}
+        </Field> : null}
         <Field label="Asset class">
           <select
             className="input"
@@ -1154,7 +1155,7 @@ export function UnitForm({
         </Field>
       </FieldRow>
       <FieldRow columns={2}>
-        <Field label="Unit number" hint="Unique on its floor.">
+        <Field label="Unit number" hint="Unique within its floor, or within the building when there are no floors.">
           <input
             className="input"
             value={values.unit_number}

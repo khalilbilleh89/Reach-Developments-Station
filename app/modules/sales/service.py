@@ -4849,7 +4849,7 @@ def sales_register(
     if commercial_status is not None:
         units = units.where(Unit.commercial_status == commercial_status)
     if building_id is not None or phase_id is not None:
-        units = units.where(Unit.floor_id.in_(_floor_ids(phase_id, building_id)))
+        units = units.where(Unit.id.in_(_hierarchy_unit_ids(phase_id, building_id)))
 
     visible_clients = permissions.visible_clients(
         select(Client).where(Client.project_id == project.id), actor=actor
@@ -5105,7 +5105,7 @@ def transaction_history(
         if permissions.restricts_clients_to_own(actor):
             statement = statement.where(Client.owner_advisor_user_id == actor.user_id)
         if phase_id is not None:
-            statement = statement.where(Unit.floor_id.in_(_floor_ids(phase_id, None)))
+            statement = statement.where(Unit.id.in_(_hierarchy_unit_ids(phase_id, None)))
         if status:
             statement = statement.where(model.status == status)
         if created_from:
@@ -5135,11 +5135,15 @@ def transaction_history(
     return [dict(row) for row in rows], total
 
 
-def _floor_ids(
+def _hierarchy_unit_ids(
     phase_id: uuid.UUID | None, building_id: uuid.UUID | None
 ) -> Select[tuple[uuid.UUID]]:
     """Floors under one phase or building, as a subquery for the unit filter."""
-    statement = select(Floor.id).join(Building, Building.id == Floor.building_id)
+    statement = (
+        select(Unit.id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
+    )
     if building_id is not None:
         statement = statement.where(Building.id == building_id)
     if phase_id is not None:

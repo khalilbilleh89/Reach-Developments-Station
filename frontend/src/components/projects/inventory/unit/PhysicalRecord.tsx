@@ -14,10 +14,13 @@ export const PHYSICAL_COMPONENTS = [
 ] as const;
 
 /** One unit's physical file. Amounts and completeness are always server answers. */
-export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, options = [], canWrite, canApprove, canDelete = false, onChanged }: {
+export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, options = [], canWrite, canApprove, canDelete = false, masterEditing, onChanged }: {
+  masterEditing?: boolean;
   projectId: string; unit: Unit; areaTypes: AreaType[]; schedules: AreaSchedule[];
   assets: SubAsset[]; options?: InventoryOption[]; canDelete?: boolean; canWrite: boolean; canApprove: boolean; onChanged: () => Promise<void>;
 }) {
+  const initialDraft = schedules.find(schedule=>schedule.status === "draft");
+  const initialMeasurements = Object.fromEntries((initialDraft?.lines ?? unit.area_lines).map(line=>[line.area_type_id,line.raw_area]));
   const [features, setFeatures] = useState<UnitFeature[]>([]);
   const [documents, setDocuments] = useState<UnitDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -25,17 +28,17 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
   const [busy, setBusy] = useState(false);
   const [label, setLabel] = useState("");
   const [doc, setDoc] = useState({ title: "", url: "", revision: "" });
-  const [measuring, setMeasuring] = useState(false);
-  const [featureEditing,setFeatureEditing] = useState(false);
-  const [docEditing,setDocEditing] = useState(false);
-  const [measurementBaseline,setMeasurementBaseline] = useState("");
-  const [assetForm, setAssetForm] = useState(false);
+  const [measuring, setMeasuring] = useState(masterEditing ?? false);
+  const [featureEditing,setFeatureEditing] = useState(masterEditing ?? false);
+  const [docEditing,setDocEditing] = useState(masterEditing ?? false);
+  const [measurementBaseline,setMeasurementBaseline] = useState(JSON.stringify([initialDraft?.revision_code ?? "",initialDraft?.source ?? "",initialDraft?.reconciled ?? false,initialMeasurements]));
+  const [assetForm, setAssetForm] = useState(masterEditing ?? false);
   const [asset, setAsset] = useState({ asset_reference: "", asset_type: "parking", area: "", subtype_code:"" });
-  const [revision, setRevision] = useState("");
-  const [draftId, setDraftId] = useState<string | null>(null);
-  const [measurements, setMeasurements] = useState<Record<string, string>>({});
-  const [reconciled, setReconciled] = useState(false);
-  const [source, setSource] = useState("");
+  const [revision, setRevision] = useState(initialDraft?.revision_code ?? "");
+  const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
+  const [measurements, setMeasurements] = useState<Record<string, string>>(initialMeasurements);
+  const [reconciled, setReconciled] = useState(initialDraft?.reconciled ?? false);
+  const [source, setSource] = useState(initialDraft?.source ?? "");
 
   useEffect(() => {
     let current = true;
@@ -67,7 +70,7 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
   return <div className="stack">
     {error ? <Notice tone="error">{error}</Notice> : null}
     <section>
-      <SectionHeader level={2} title="Physical measurements" actions={canWrite ? <Button small data-leaves-editor disabled={busy} onClick={() => startMeasurement()}>Edit measurements</Button> : undefined} />
+      <SectionHeader level={2} title="Physical measurements" actions={canWrite && masterEditing === undefined ? <Button small data-leaves-editor disabled={busy} onClick={() => startMeasurement()}>Edit measurements</Button> : undefined} />
       <KeyValueGrid columns={3}>
         {PHYSICAL_COMPONENTS.map(([key, title]) => {
           const lines = unit.area_lines.filter(line => line.physical_component === key);
@@ -78,16 +81,17 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
       </KeyValueGrid>
       <p className="subtle">Net area = total internal areas + balcony areas. Gross area = Net area + Roof Garden + Terrace + Front Garden + Porches. Parking and storage are excluded. These are unweighted physical totals.</p>
       {unit.gross_area_reason ? <Notice tone="info">{unit.gross_area_reason}</Notice> : null}
-      {canWrite && schedules.some(s => s.status === "draft") ? <div className="button-row">{schedules.filter(s => s.status === "draft").map(s => <Button key={s.id} small data-leaves-editor disabled={busy} onClick={() => startMeasurement(s)}>Edit draft {s.revision_code}</Button>)}</div> : null}
+      {canWrite && masterEditing === undefined && schedules.some(s => s.status === "draft") ? <div className="button-row">{schedules.filter(s => s.status === "draft").map(s => <Button key={s.id} small data-leaves-editor disabled={busy} onClick={() => startMeasurement(s)}>Edit draft {s.revision_code}</Button>)}</div> : null}
       {schedules.length ? <ul className="chip-list">{schedules.map(schedule=><li className="chip" key={schedule.id}><span>{schedule.revision_code} · {schedule.status}</span>{canApprove && schedule.status === "draft" ? <Button small data-leaves-editor disabled={busy} onClick={()=>void save(()=>inventory.approveAreaSchedule(projectId,unit.id,schedule.id))}>Approve measurement {schedule.revision_code}</Button> : null}{canDelete && schedule.status === "draft" && !measuring ? <DeleteRecordButton label={`measurement ${schedule.revision_code}`} description="Delete this draft measurement and its entered area values. Approved revisions are retained. The audit trail is retained." onDelete={reason=>inventory.deleteRecord(projectId,"area-schedules",schedule.id,reason)} onDeleted={onChanged} /> : null}</li>)}</ul> : null}
       {measuring && areaTypes.some(t => !t.is_active && measurements[t.id] !== undefined) ? <Notice tone="warning">Retired area types are omitted from the saved draft. Record any replacement measurement using an active type.</Notice> : null}
       {measuring ? <PropertyForm onDiscard={()=>setMeasuring(false)} busy={busy} dirty={measurementBaseline !== JSON.stringify([revision,source,reconciled,measurements])} onSubmit={event => { event.preventDefault(); void save(async () => {
         const payload = { source: source || null, reconciled, values: Object.entries(measurements).filter(([,value]) => value !== "").filter(([id]) => areaTypes.some(t => t.id === id && t.is_active)).map(([area_type_id, raw_area]) => ({ area_type_id, raw_area })) };
         if (draftId) await inventory.updateAreaSchedule(projectId, unit.id, draftId, payload);
-        else await inventory.createAreaSchedule(projectId, unit.id, { ...payload, revision_code: revision });
-        setMeasuring(false);
+        else { const created = await inventory.createAreaSchedule(projectId, unit.id, { ...payload, revision_code: revision }); setDraftId(created.id); }
+        setMeasurementBaseline(JSON.stringify([revision,source,reconciled,measurements]));
+        setMeasuring(masterEditing ?? false);
       }); }}>
-        <FormSection title={draftId ? `Edit ${revision}` : "New measured revision"} description="An approved revision is preserved. Save a draft, reconcile it against its source drawing, then have it approved. Enter zero for an area that does not apply; leave unknown measurements blank.">
+        <FormSection title={draftId ? `Edit ${revision}` : "New measured revision"} description="An approved revision is preserved. Save a draft, reconcile it against its source drawing, then have it approved. Internal area is required for totals. Optional areas left blank add nothing; record each additional area that applies.">
           <FieldRow columns={3}>
             <Field label="Revision code"><input className="input" required maxLength={32} disabled={draftId !== null || busy} value={revision} onChange={e => setRevision(e.target.value)} /></Field>
             <Field label="Source drawing"><input className="input" maxLength={120} disabled={busy} value={source} onChange={e => setSource(e.target.value)} /></Field>
@@ -100,13 +104,13 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
       </PropertyForm> : null}
     </section>
     <section>
-      <SectionHeader level={2} title="Additional features" actions={canWrite ? <Button small data-leaves-editor disabled={busy} onClick={()=>setFeatureEditing(!featureEditing)}>{featureEditing ? "Close editor" : "Edit additional features"}</Button> : undefined} />
+      <SectionHeader level={2} title="Additional features" actions={canWrite && masterEditing === undefined ? <Button small data-leaves-editor disabled={busy} onClick={()=>setFeatureEditing(!featureEditing)}>{featureEditing ? "Close editor" : "Edit additional features"}</Button> : undefined} />
       <p className="subtle">Descriptive features can be added freely. Priced attributes remain in the governed unit fields.</p>
       {!loaded ? <p>{error ? "Features unavailable." : "Loading features…"}</p> : features.length === 0 ? <p className="subtle">No additional features recorded.</p> : <ul className="chip-list">{features.map(f => <li key={f.id} className="chip"><span>{f.label}{f.is_active ? "" : " · retired"}</span>{canWrite && featureEditing && f.is_active ? <Button small disabled={busy} onClick={() => void save(() => inventory.retireUnitFeature(projectId, unit.id, f.id))}>Retire</Button> : null}</li>)}</ul>}
       {canWrite && featureEditing ? <PropertyForm onDiscard={()=>{setLabel("");setFeatureEditing(false);}} busy={busy} dirty={label !== ""} onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.addUnitFeature(projectId, unit.id, { label }); setLabel(""); }); }}><Field label="New feature"><input className="input" required maxLength={200} disabled={busy} value={label} onChange={e => setLabel(e.target.value)} /></Field><FormActions><Button type="submit" disabled={busy}>Add feature</Button><Button disabled={busy} onClick={()=>{setLabel("");setFeatureEditing(false);}}>Cancel</Button></FormActions></PropertyForm> : null}
     </section>
     <section>
-      <SectionHeader level={2} title="Plans and specifications" actions={canWrite ? <Button small data-leaves-editor disabled={busy} onClick={()=>setDocEditing(!docEditing)}>{docEditing ? "Close editor" : "Edit plans and specifications"}</Button> : undefined} />
+      <SectionHeader level={2} title="Plans and specifications" actions={canWrite && masterEditing === undefined ? <Button small data-leaves-editor disabled={busy} onClick={()=>setDocEditing(!docEditing)}>{docEditing ? "Close editor" : "Edit plans and specifications"}</Button> : undefined} />
       <p className="subtle">Link the unit plans and specifications in your document system. Access to the linked file is controlled there.</p>
       {!loaded ? <p>{error ? "Documents unavailable." : "Loading documents…"}</p> : documents.length === 0 ? <p className="subtle">No unit documents linked.</p> : <ul>{documents.map(d => <li key={d.id}><a href={d.url} target="_blank" rel="noopener noreferrer">{d.title}</a>{d.revision ? ` · ${d.revision}` : ""}{d.is_active ? "" : " · retired"}{canWrite && docEditing && d.is_active ? <Button small disabled={busy} onClick={() => void save(() => inventory.retireUnitDocument(projectId, unit.id, d.id))}>Retire</Button> : null}</li>)}</ul>}
       {canWrite && docEditing ? <PropertyForm onDiscard={()=>{setDoc({title:"",url:"",revision:""});setDocEditing(false);}} busy={busy} dirty={Object.values(doc).some(Boolean)} onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.addUnitDocument(projectId, unit.id, { ...doc, revision: doc.revision || null }); setDoc({ title: "", url: "", revision: "" }); }); }}><FieldRow columns={3}>
@@ -116,8 +120,8 @@ export function PhysicalRecord({ projectId, unit, areaTypes, schedules, assets, 
       </FieldRow><FormActions><Button type="submit" disabled={busy}>Link document</Button><Button disabled={busy} onClick={()=>{setDoc({title:"",url:"",revision:""});setDocEditing(false);}}>Cancel</Button></FormActions></PropertyForm> : null}
     </section>
     <section>
-      <SectionHeader level={2} title="Parking and storage" actions={canWrite ? <Button small data-leaves-editor disabled={busy} onClick={() => setAssetForm(!assetForm)}>{assetForm ? "Close editor" : "Edit parking and storage"}</Button> : undefined} />
-      {canWrite && assetForm ? <PropertyForm onDiscard={()=>{setAsset({asset_reference:"",asset_type:"parking",area:"",subtype_code:""});setAssetForm(false);}} busy={busy} dirty={asset.asset_reference !== "" || asset.area !== "" || asset.subtype_code !== "" || asset.asset_type !== "parking"} onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.createSubAsset(projectId, { ...asset, subtype_code:asset.subtype_code || null, area: asset.area || null, linked_unit_id: unit.id, floor_id: unit.floor_id, transfer_mode: "attached" }); setAssetForm(false); setAsset({ asset_reference: "", asset_type: "parking", area: "", subtype_code:"" }); }); }}>
+      <SectionHeader level={2} title="Parking and storage" actions={canWrite && masterEditing === undefined ? <Button small data-leaves-editor disabled={busy} onClick={() => setAssetForm(!assetForm)}>{assetForm ? "Close editor" : "Edit parking and storage"}</Button> : undefined} />
+      {canWrite && assetForm ? <PropertyForm onDiscard={()=>{setAsset({asset_reference:"",asset_type:"parking",area:"",subtype_code:""});setAssetForm(false);}} busy={busy} dirty={asset.asset_reference !== "" || asset.area !== "" || asset.subtype_code !== "" || asset.asset_type !== "parking"} onSubmit={e => { e.preventDefault(); void save(async () => { await inventory.createSubAsset(projectId, { ...asset, subtype_code:asset.subtype_code || null, area: asset.area || null, linked_unit_id: unit.id, floor_id: unit.floor_id, transfer_mode: "attached" }); setAssetForm(masterEditing ?? false); setAsset({ asset_reference: "", asset_type: "parking", area: "", subtype_code:"" }); }); }}>
         <FieldRow columns={3}><Field label="Asset reference"><input className="input" required maxLength={64} disabled={busy} value={asset.asset_reference} onChange={e => setAsset({ ...asset, asset_reference: e.target.value })} /></Field><Field label="Asset type"><select className="input" disabled={busy} value={asset.asset_type} onChange={e => setAsset({ ...asset, asset_type: e.target.value })}><option value="parking">Parking</option><option value="storage">Storage</option></select></Field><Field label="Parking / storage type"><select className="input" disabled={busy} value={asset.subtype_code} onChange={e=>setAsset({...asset,subtype_code:e.target.value})}><option value="">Not assigned</option>{options.filter(option=>option.category==="sub_asset_subtype" && option.is_active).map(option=><option key={option.id} value={option.code}>{option.label}</option>)}</select></Field><Field label="Area (optional)"><input className="input" inputMode="decimal" disabled={busy} value={asset.area} onChange={e => setAsset({ ...asset, area: e.target.value })} /></Field></FieldRow><FormActions><Button type="submit" disabled={busy}>Attach asset</Button><Button disabled={busy} onClick={()=>{setAsset({asset_reference:"",asset_type:"parking",area:"",subtype_code:""});setAssetForm(false);}}>Cancel</Button></FormActions>
       </PropertyForm> : null}
       {assets.filter(a => a.is_active && ["parking", "storage"].includes(a.asset_type)).map(a => <div key={a.id} className="button-row"><span>{a.asset_reference} · {a.asset_type}{a.subtype_code ? ` · ${options.find(option=>option.category==="sub_asset_subtype" && option.code===a.subtype_code)?.label ?? a.subtype_code}` : ""}</span>{canWrite && assetForm ? <Button small disabled={busy} onClick={() => void save(() => inventory.updateSubAsset(projectId, a.id, { linked_unit_id: null }))}>Detach</Button> : null}{canDelete && !assetForm ? <DeleteRecordButton label={a.asset_reference} description="Delete this parking or storage record. Assets on priced or released units must be reviewed and detached first. The audit trail is retained." onDelete={reason=>inventory.deleteRecord(projectId,"sub-assets",a.id,reason)} onDeleted={onChanged} /> : null}</div>)}

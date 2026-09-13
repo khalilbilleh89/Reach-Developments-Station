@@ -90,8 +90,12 @@ def context(
 def units(session: Session, ctx: out.Context) -> list[inventory.Unit]:
     query = (
         select(inventory.Unit)
-        .join(inventory.Floor, inventory.Floor.id == inventory.Unit.floor_id)
-        .join(inventory.Building, inventory.Building.id == inventory.Floor.building_id)
+        .outerjoin(inventory.Floor, inventory.Floor.id == inventory.Unit.floor_id)
+        .join(
+            inventory.Building,
+            inventory.Building.id
+            == func.coalesce(inventory.Unit.building_id, inventory.Floor.building_id),
+        )
         .where(inventory.Unit.project_id == ctx.project_id)
     )
     if ctx.filters["phase_id"]:

@@ -428,7 +428,7 @@ export type UnitSummary = {
   project_id: string;
   unit_reference: string;
   unit_number: string;
-  floor_id: string;
+  floor_id: string | null;
   floor_code: string | null;
   building_id: string | null;
   building_code: string | null;
@@ -803,6 +803,10 @@ export interface RemovedUnit {
 }
 
 export interface UnitPricing {
+  price_per_net_area: string | null;
+  net_area_unit: string | null;
+  net_area: string | null;
+  gross_area: string | null;
   direct_price_currency_id: string;
   price_per_gross_area: string | null;
   gross_area_unit: string | null;
@@ -2987,7 +2991,7 @@ export interface SalesPricePreview extends SalesPriceFacts {
 }
 export interface SalesUnitOption {
   unit_id: string; unit_reference: string; phase_name: string; building_name: string;
-  floor_name: string; unit_type: string | null; unit_price_version_id: string;
+  floor_name: string | null; unit_type: string | null; unit_price_version_id: string;
   commercial_availability: string; gross_area: string | null; area_unit: string | null;
   reference_price_ex_tax: string; currency_id: string;
 }

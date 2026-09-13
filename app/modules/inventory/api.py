@@ -569,15 +569,27 @@ def create_unit(
 ) -> UnitDetail:
     require_inventory_structure_writer(actor)
     require_operational_project(project)
-    floor = service.get_floor(session, project_id=project.id, floor_id=payload.floor_id)
-    phase = service.phase_of_floor(session, floor)
-    require_phase(session, project=project, phase_id=phase.id, actor=actor)
+    if (payload.floor_id is None) == (payload.building_id is None):
+        raise ValidationError("Choose a floor, or a building without floors.")
+    floor = (
+        service.get_floor(session, project_id=project.id, floor_id=payload.floor_id)
+        if payload.floor_id
+        else None
+    )
+    building = service.get_building(
+        session,
+        project_id=project.id,
+        building_id=floor.building_id if floor else payload.building_id,
+    )
+    require_phase(session, project=project, phase_id=building.phase_id, actor=actor)
     values = payload.model_dump(exclude_unset=True)
-    values.pop("floor_id")
+    values.pop("floor_id", None)
+    values.pop("building_id", None)
     unit = service.create_unit(
         session,
         project=project,
         floor=floor,
+        building=None if floor else building,
         actor_user_id=actor.user_id,
         correlation_id=actor.correlation_id,
         **values,
