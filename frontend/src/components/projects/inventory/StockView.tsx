@@ -4,7 +4,7 @@ import type { LaunchRegister, UnitRegister, UnitSummary } from "@/lib/api";
 import { Badge, Button, EmptyState, Icon, RecordLink, TableScroll } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { money } from "@/lib/format";
-import { statusLabel } from "./statusLabels";
+import { statusLabel, statusTone } from "./statusLabels";
 
 /** Display exact decimal strings without insignificant trailing zeroes. */
 export function stockArea(value:string|null|undefined,unit:string|null|undefined):string {
@@ -33,7 +33,8 @@ export function StockTable({projectId,register,prices,seesPrice,priceError,expan
   expanded:boolean;onExpanded:()=>void;
 }) {
   const codeOf=useCurrencyCode();
-  const [layout, setLayout] = useState<"browse" | "table">("browse");
+  const [layout, setLayout] = useState<"stack" | "browse" | "table">("stack");
+  const [lens, setLens] = useState<"commercial_status" | "delivery_status">("commercial_status");
   const [chosenFloor, setChosenFloor] = useState<string | null>(null);
   const priceByUnit=new Map(prices?.rows.map(price=>[price.unit_id,price]) ?? []);
   const floors = new Map<string, { label: string; units: UnitSummary[] }>();
@@ -45,9 +46,24 @@ export function StockTable({projectId,register,prices,seesPrice,priceError,expan
   }
   const activeFloor = chosenFloor && floors.has(chosenFloor) ? chosenFloor : null;
   return <section className="stock-register" aria-label="Stock schedule">
-    <div className="stock-register-heading"><div><h2>Explore properties</h2><p>Compare your units, their features and launch prices.</p></div><div className="stock-view-controls"><Button small onClick={() => setLayout("browse")} aria-pressed={layout === "browse"}>By floor</Button><Button small onClick={() => setLayout("table")} aria-pressed={layout === "table"}>Schedule</Button>{layout === "table" ? <Button small onClick={onExpanded} aria-pressed={expanded}>{expanded ? "Compact areas" : "Show all areas"}</Button> : null}</div></div>
+    <div className="stock-register-heading"><div><h2>Explore properties</h2><p>Compare your units, their features and launch prices.</p></div><div className="stock-view-controls"><Button small onClick={() => setLayout("stack")} aria-pressed={layout === "stack"}>Building stack</Button><Button small onClick={() => setLayout("browse")} aria-pressed={layout === "browse"}>Property cards</Button><Button small onClick={() => setLayout("table")} aria-pressed={layout === "table"}>Schedule</Button>{layout === "table" ? <Button small onClick={onExpanded} aria-pressed={expanded}>{expanded ? "Compact areas" : "Show all areas"}</Button> : null}</div></div>
     {register.units.length < register.total ? <p className="stock-note">Showing {register.units.length} of {register.total} matching units on this page. Floor groups cover this page only.</p> : null}
-    {register.units.length===0 ? <EmptyState title="No stock matches these filters" hint="Clear or adjust your filters to see more units." /> : layout === "browse" ? <div className="stock-browser">
+    {register.units.length===0 ? <EmptyState title="No stock matches these filters" hint="Clear or adjust your filters to see more units." /> : layout === "stack" ? <div className="building-atlas">
+      <div className="atlas-toolbar"><div><span className="eyebrow">The development, unit by unit</span><p>Schematic · equal-size tiles, not a floor plan. Floors follow register order.</p></div><label className="atlas-lens">Colour by<select className="input" value={lens} onChange={event => setLens(event.target.value as typeof lens)}><option value="commercial_status">Commercial status</option><option value="delivery_status">Delivery status</option></select></label></div>
+      <div className="atlas-legend" aria-label="Status legend">{[...new Set(register.units.map(unit => unit.is_active ? unit[lens] || "Not recorded" : "Inactive"))].map(status => <span key={status} data-tone={statusTone(status)}><i aria-hidden="true" />{statusLabel(status)}</span>)}</div>
+      <div className="atlas-buildings">{[...new Set(register.units.map(unit => JSON.stringify([unit.phase_id, unit.building_id])))].map(building => {
+        const units = register.units.filter(unit => JSON.stringify([unit.phase_id, unit.building_id]) === building);
+        const first = units[0];
+        return <section className="atlas-building" key={building}><header><div><span className="eyebrow">{first.phase_code ? "Phase " + first.phase_code : "Phase not recorded"}</span><h3>{first.building_code ? "Building " + first.building_code : "Building not recorded"}</h3></div><span>{units.length} units on this page</span></header>
+          <div className="atlas-floors">{[...floors].filter(([,group]) => group.units.some(unit => units.includes(unit))).map(([key,group]) => <div className="atlas-floor" key={key}><div className="atlas-floor-label"><span>Floor</span><strong>{group.units[0].floor_code ?? "—"}</strong></div><div className="atlas-units">{group.units.map(unit => {
+            const state = unit.is_active ? unit[lens] || "Not recorded" : "Inactive";
+            const price = priceByUnit.get(unit.id);
+            return <article className="atlas-unit" data-tone={statusTone(state)} key={unit.id}><div className="atlas-unit-top"><RecordLink projectId={projectId} kind="unit" id={unit.id} tab="detail">{unit.unit_reference}</RecordLink><span className="atlas-unit-dot" aria-hidden="true" /></div><span className="atlas-unit-state">{statusLabel(state)}</span><div className="atlas-unit-facts"><span>{unit.bedrooms == null ? "Beds —" : unit.bedrooms + " bed"}</span><span>{componentArea(unit,"internal")}</span></div>{seesPrice ? <strong className="atlas-unit-price">{priceError ? "Price unavailable" : price?.repricing_required ? "Price needs review" : price?.price ? money(price.price,codeOf(price.currency_id)) : "Not priced"}</strong> : null}</article>;
+          })}</div></div>)}</div>
+          <footer><span>Open any unit to inspect its full record</span><span>{seesPrice ? "Current launch prices · ex tax" : "Property and status information"}</span></footer>
+        </section>;
+      })}</div>
+    </div> : layout === "browse" ? <div className="stock-browser">
       <nav className="stock-hierarchy" aria-label="Floors on this inventory page"><span className="eyebrow">Browse this page</span><button type="button" aria-pressed={activeFloor === null} onClick={() => setChosenFloor(null)}>All locations <span>{register.units.length}</span></button>{[...floors].map(([key, group]) => <button key={key} type="button" aria-pressed={activeFloor === key} onClick={() => setChosenFloor(key)}>{group.label}<span>{group.units.length}</span></button>)}</nav>
       <div className="stock-floor-groups">{[...floors].filter(([key]) => activeFloor === null || key === activeFloor).map(([key, group]) => <section key={key} className="stock-floor-group">
         <h3>{group.label} <span>{group.units.length} on this page</span></h3>

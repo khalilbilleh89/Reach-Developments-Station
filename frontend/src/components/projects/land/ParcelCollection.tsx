@@ -10,11 +10,11 @@ export function ParcelCollection({ parcels, canSeeCost, onOpen }: {
   parcels: LandParcel[]; canSeeCost: boolean; onOpen: (parcel: LandParcel) => void;
 }) {
   return <div className="parcel-collection" aria-label="Land parcels">
-    {parcels.map(parcel => <article className="parcel-estate" key={parcel.id}>
+    {parcels.map(parcel => <article className="parcel-estate parcel-architectural" key={parcel.id}>
       <div className="parcel-estate-main">
         <header className="parcel-estate-identity">
-          <div className="parcel-estate-kicker"><span>Registered land</span><StatusDot tone={parcel.is_active ? "success" : "muted"}>{parcel.is_active ? "Active" : "Inactive"}</StatusDot></div>
-          <div className="parcel-estate-title"><div><span className="eyebrow">Parcel</span><h2>{parcel.plot_number}</h2></div><div className="parcel-estate-area"><strong>{measurement(parcel.land_area)}</strong><span>{parcel.area_unit}</span></div></div>
+          <div className="parcel-estate-kicker"><span>Land holding · registered parcel</span><StatusDot tone={parcel.is_active ? "success" : "muted"}>{parcel.is_active ? "Active" : "Inactive"}</StatusDot></div>
+          <div className="parcel-estate-title"><div><span className="eyebrow">Parcel</span><h2>{parcel.plot_number}</h2></div><div className="parcel-estate-area"><strong>{measurement(parcel.land_area)}</strong><span>{parcel.area_unit} · recorded site area</span></div></div>
           <p className="parcel-estate-deed">{parcel.title_deed_number ? `Title deed ${parcel.title_deed_number}` : "Title deed not recorded"}</p>
         </header>
         <div className="parcel-estate-facts"><KeyValueGrid columns={2}>

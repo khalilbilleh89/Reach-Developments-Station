@@ -61,6 +61,7 @@ test("a stale launch price is labelled for review instead of displayed", () => {
 
 test("floor browsing keeps identical labels in distinct buildings separate and states page scope", () => {
  const render=mount(source,"StockTable",deps,{projectId:"p",register:{total:5,units:[{...unit,id:"a",building_id:"a",floor_id:"one",commercial_status:"available"},{...unit,id:"b",building_id:"b",floor_id:"two",commercial_status:"unreleased"}]},prices:null,seesPrice:false,priceError:null,expanded:false,onExpanded:()=>{}});
+ nodes(render()).find(n=>n.type==="Button" && textOf(n)==="Property cards").props.onClick();
  const tree=render();
  assert.equal(nodes(tree).filter(n=>n.props?.className==="stock-floor-group").length,2);
  assert.equal(nodes(tree).filter(n=>n.type==="RecordLink").length,2);
@@ -73,4 +74,18 @@ test("floor browsing keeps identical labels in distinct buildings separate and s
  assert.equal(nodes(render()).filter(n=>n.type==="RecordLink").length,1);
  nodes(hierarchy).filter(n=>n.type==="button")[0].props.onClick();
  assert.equal(nodes(render()).filter(n=>n.type==="RecordLink").length,2);
+});
+test("building stack keeps records separate and switches status without exposing restricted prices", () => {
+ const render=mount(source,"StockTable",deps,{projectId:"p",register:{total:5,units:[{...unit,id:"a",building_id:"a",floor_id:"one",commercial_status:"available",delivery_status:"under_construction"},{...unit,id:"b",building_id:"b",floor_id:"two",commercial_status:"unreleased",delivery_status:"handed_over"}]},prices,seesPrice:false,priceError:null,expanded:false,onExpanded:()=>{}});
+ let tree=render();
+ assert.equal(nodes(tree).filter(n=>n.props?.className==="atlas-building").length,2);
+ assert.deepEqual(nodes(tree).filter(n=>n.type==="RecordLink").map(n=>n.props.id),["a","b"]);
+ assert.ok(textOf(tree).includes("Schematic")); assert.ok(!textOf(tree).includes("100000.00"));
+ nodes(tree).find(n=>n.type==="select").props.onChange({target:{value:"delivery_status"}});
+ tree=render(); assert.ok(textOf(tree).includes("Under construction")); assert.ok(textOf(tree).includes("Handed over"));
+ assert.equal(nodes(tree).filter(n=>n.props?.className==="atlas-unit")[1].props["data-tone"],"success");
+});
+test("building stack labels stale prices and inactive or unknown status honestly", () => {
+ const tree=mount(source,"StockTable",deps,{projectId:"p",register:{total:2,units:[{...unit,id:"u1",is_active:false},{...unit,id:"u2",commercial_status:null}]},prices:{...prices,rows:[{...prices.rows[0],repricing_required:true}]},seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}})();
+ assert.ok(textOf(tree).includes("Inactive")); assert.ok(textOf(tree).includes("Not recorded")); assert.ok(textOf(tree).includes("Price needs review")); assert.ok(!textOf(tree).includes("100000.00"));
 });
