@@ -41,6 +41,22 @@ from app.modules.projects.schemas import StrictRequest
 #: never an acceptable carrier for a measured area or a weighting factor.
 DecimalStr = Annotated[Decimal, PlainSerializer(str, return_type=str, when_used="json")]
 
+
+class UnitRestoreRequest(StrictRequest):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class RemovedUnitRead(BaseModel):
+    id: uuid.UUID
+    unit_number: str
+    unit_reference: str
+    commercial_status: str
+    removed_at: datetime
+    phase_code: str | None = None
+    building_code: str | None = None
+    floor_code: str | None = None
+
+
 Measure = Annotated[DecimalStr, Field(ge=0, decimal_places=4)]
 Factor = Annotated[DecimalStr, Field(ge=0, le=1, decimal_places=6)]
 Coverage = Annotated[DecimalStr, Field(ge=0, le=1, decimal_places=6)]

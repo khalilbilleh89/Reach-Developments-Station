@@ -31,6 +31,7 @@ import {
   ToolbarFilter,
 } from "@/components/ui";
 import { UnassignedAssets } from "./inventory/UnassignedAssets";
+import { RemovedUnits } from "./inventory/RemovedUnits";
 import { CommonAreas } from "./inventory/CommonAreas";
 import { InventoryConfiguration } from "./inventory/InventoryConfiguration";
 import { StockSummary, StockTable } from "./inventory/StockView";
@@ -100,6 +101,7 @@ export function InventoryTab({
   const [stockFields,setStockFields]=useRegisterFields({stock_areas:""});
   const setView = (view: string) => setViewFields({ view });
   const [addingUnit, setAddingUnit] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   // Typing in the search box fires a request per change, and responses can come
   // back out of order. Without this ticket the register can end up showing the
@@ -241,6 +243,7 @@ export function InventoryTab({
         compact
         actions={
           <>
+            {roles.has("master_admin") ? <Button onClick={() => setShowRemoved(true)}>Removed units</Button> : null}
             {canConfigure ? (
               <Button
                 variant="quiet"
@@ -552,6 +555,9 @@ export function InventoryTab({
         </TabPanel>
       </div>
 
+      {showRemoved && roles.has("master_admin") ? (
+        <RemovedUnits key={projectId} projectId={projectId} onClose={() => setShowRemoved(false)} onRestored={refresh} />
+      ) : null}
       {addingUnit ? (
         <UnitForm
           projectId={projectId}

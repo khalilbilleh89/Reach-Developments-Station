@@ -32,3 +32,26 @@ test("Unit removal is owner-only and submits the scoped unit and reason", async 
   await action.props.onDeleted();
   assert.equal(refreshed, 1);
 });
+
+test("Permanent deletion explicitly uses the SQL-delete mode and explains blockers", async () => {
+  const calls = [], exports = {};
+  runInNewContext(`(function(require, exports) { ${code}\n})`)(name => {
+    if (name === "@/lib/api") return {inventory: {permanentlyDeleteUnit: async (...args) => calls.push(args)}};
+    if (name === "../DeleteRecordButton") return {DeleteRecordButton: "DeleteRecordButton"};
+    return require(name);
+  }, exports);
+  let refreshed = 0;
+  const action = exports.UnitPermanentDeletionAction({
+    projectId: "project", unitId: "unit", reference: "1102",
+    onDeleted: async () => { refreshed++; },
+  });
+  assert.equal(action.props.recordName, "1102");
+  assert.equal(action.props.confirmLabel, "Delete permanently");
+  assert.equal(action.props.destructive, true);
+  assert.match(action.props.description, /cannot be undone/);
+  assert.match(action.props.description, /block deletion/);
+  await action.props.onDelete("Erase unused duplicate");
+  assert.deepEqual(calls, [["project", "unit", "Erase unused duplicate"]]);
+  await action.props.onDeleted();
+  assert.equal(refreshed, 1);
+});

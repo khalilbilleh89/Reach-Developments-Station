@@ -32,7 +32,7 @@ import { UnitPricingSection } from "@/components/projects/inventory/unit/UnitPri
 import { UnitRelease } from "@/components/projects/inventory/unit/UnitRelease";
 import { UnitProperty } from "./unit/UnitProperty";
 import { UnitSummary } from "@/components/projects/inventory/unit/UnitSummary";
-import { UnitRemovalAction } from "./UnitRemovalAction";
+import { UnitRemovalAction, UnitPermanentDeletionAction } from "./UnitRemovalAction";
 import { stockArea } from "./StockView";
 
 /** The unit fields an ordinary edit may carry. Status is absent by construction. */
@@ -290,6 +290,8 @@ export function UnitWorkspace({
         </Button>
         <UnitRemovalAction projectId={projectId} unitId={unitId} reference={unit.unit_reference} roles={roles}
           onRemoved={async () => { router.replace(`/projects/?project=${projectId}&section=inventory`); await onChanged(); }} />
+        {roles.has("master_admin") ? <UnitPermanentDeletionAction projectId={projectId} unitId={unitId} reference={unit.unit_reference}
+          onDeleted={async () => { router.replace(`/projects/?project=${projectId}&section=inventory`); await onChanged(); }} /> : null}
         </>
       }
       meta={<Badge tone={unit.is_active ? "success" : "neutral"}>{unit.is_active ? "Active unit" : "Inactive unit"}</Badge>}

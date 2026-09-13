@@ -78,6 +78,7 @@ from app.modules.inventory.schemas import (
     PhaseScopeRequest,
     PhaseUpdateRequest,
     ReleaseControlsRequest,
+    RemovedUnitRead,
     SubAssetCreateRequest,
     SubAssetRead,
     SubAssetUpdateRequest,
@@ -88,6 +89,7 @@ from app.modules.inventory.schemas import (
     UnitFeatureCreate,
     UnitFeatureRead,
     UnitRegister,
+    UnitRestoreRequest,
     UnitStatusEventRead,
     UnitSummary,
     UnitUpdateRequest,
@@ -177,6 +179,7 @@ def delete_inventory_record(
     actor: SystemAdmin,
     project: InventoryProject,
     reason: Annotated[str, Query(min_length=1, max_length=500)],
+    permanent: Annotated[bool, Query()] = False,
 ) -> Response:
     deletion.delete_record(
         session,
@@ -185,6 +188,7 @@ def delete_inventory_record(
         kind=kind,
         identifier=identifier,
         reason=reason,
+        permanent=permanent,
     )
     return Response(status_code=204)
 
@@ -507,6 +511,48 @@ def list_units(
     # Every count in `totals` describes the whole filtered set; `units` is the
     # page. Nothing derived from `rows` may join them.
     return UnitRegister(units=rows, **totals)
+
+
+@router.get("/{project_id}/inventory/removed-units", response_model=list[RemovedUnitRead])
+def list_removed_units(
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    limit: Annotated[int, Query(ge=1, le=_MAX_PAGE)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[RemovedUnitRead]:
+    units = deletion.list_removed_units(
+        session, project=project, actor=actor, search=search, limit=limit, offset=offset
+    )
+    labels = service.hierarchy_labels(session, unit_ids=[unit.id for unit in units])
+    return [
+        RemovedUnitRead.model_validate(
+            {
+                **{
+                    name: getattr(unit, name)
+                    for name in RemovedUnitRead.model_fields
+                    if hasattr(unit, name)
+                },
+                **labels.get(unit.id, {}),
+            }
+        )
+        for unit in units
+    ]
+
+
+@router.post("/{project_id}/inventory/units/{unit_id}/restoration", response_model=UnitDetail)
+def restore_unit(
+    unit_id: uuid.UUID,
+    payload: UnitRestoreRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> UnitDetail:
+    unit = deletion.restore_unit(
+        session, project=project, actor=actor, identifier=unit_id, reason=payload.reason
+    )
+    return _unit_detail(session, project, unit, actor)
 
 
 @router.post(

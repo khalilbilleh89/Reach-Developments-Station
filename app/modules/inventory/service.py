@@ -111,9 +111,13 @@ _CONFLICTS = {
     "uq_buildings_phase_id_code": "A building with that code already exists in this phase.",
     "uq_floors_building_id_code": "A floor with that code already exists in this building.",
     "uq_units_project_id_unit_reference": (
-        "A unit with that reference already exists in this project."
+        "A unit with that reference already exists in this project. "
+        "If it is missing from Inventory, ask Master Administrator to check Removed units."
     ),
-    "uq_units_floor_id_unit_number": "A unit with that number already exists on this floor.",
+    "uq_units_floor_id_unit_number": (
+        "A unit with that number already exists on this floor. "
+        "If it is missing from Inventory, ask Master Administrator to check Removed units."
+    ),
     "uq_inventory_sub_assets_project_id_asset_reference": (
         "A sub-asset with that reference already exists in this project."
     ),

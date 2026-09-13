@@ -791,6 +791,17 @@ export interface PriceVersionDetail extends PriceVersion {
   basis_snapshot_json: Record<string, unknown>;
 }
 
+export interface RemovedUnit {
+  id: string;
+  unit_number: string;
+  unit_reference: string;
+  commercial_status: string;
+  removed_at: string;
+  phase_code: string | null;
+  building_code: string | null;
+  floor_code: string | null;
+}
+
 export interface UnitPricing {
   direct_price_currency_id: string;
   price_per_gross_area: string | null;
