@@ -18,3 +18,10 @@ test("expiry chronology is flagged independently of workflow status",()=>{
  assert.equal(notes.length,1); assert.match(notes[0],/expiry date precedes/);
  assert.equal(exports.permitReviewNotes({status:"issued",issue_date:"2026-09-13",expiry_date:"2026-09-13"}).length,0);
 });
+test("journey highlights only the current workflow family",()=>{
+ assert.equal(exports.permitJourneyPosition("preparing"),0);
+ assert.equal(exports.permitJourneyPosition("resubmission"),1);
+ assert.equal(exports.permitJourneyPosition("rejected"),2);
+ assert.equal(exports.permitJourneyPosition("renewed"),3);
+ for(const status of ["on_hold","withdrawn","expired","unknown"]) assert.equal(exports.permitJourneyPosition(status),null);
+});

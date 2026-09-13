@@ -11,3 +11,11 @@ export function permitReviewNotes(permit: Pick<Permit, "status" | "issue_date" |
   }
   return notes;
 }
+/** Current workflow family only; earlier steps are not asserted complete. */
+export function permitJourneyPosition(status: string): number | null {
+  if (["not_started", "preparing"].includes(status)) return 0;
+  if (["submitted", "accepted_for_review", "comments_received", "resubmission"].includes(status)) return 1;
+  if (["approved_with_conditions", "rejected"].includes(status)) return 2;
+  if (["issued", "completed", "renewed"].includes(status)) return 3;
+  return null;
+}

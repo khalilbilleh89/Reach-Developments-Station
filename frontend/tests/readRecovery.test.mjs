@@ -502,3 +502,15 @@ test("Consultant tabs separate programme from agreement and do not treat missing
  const programme=tree.find(n=>n.type==="SubPanel"&&n.props.title==="Design programme");
  assert.ok(nodes(programme.props.actions).some(n=>n.type==="Button"&&n.props.children==="Reorder stages"&&n.props.disabled));
 });
+test("programme deliverables stay with their stage and open the existing editable record", async()=>{
+ const agreement={id:"a",status:"active",consultant_name:"Sample",agreement_reference:"CE"};
+ const item={id:"d",engagement_id:"a",stage_id:"s",name:"Drawings",status:"submitted",revision_reference:"R2"};
+ const render=mount("projects/ConsultantEngineerTab","ConsultantEngineerTab",{
+  "@/lib/api":{ApiError:Error,consultantEngineering:{workspace:async()=>({active_engagement:agreement,engagements:[agreement],disciplines:[],stages:[{id:"s",engagement_id:"a",name:"Concept",sequence:1,status:"in_progress"}],deliverables:[item,{...item,id:"accepted",status:"accepted"},{...item,id:"other",stage_id:"other",name:"Other stage"}],outstanding_deliverables:2})}},
+  "@/lib/roles":{hasAnyRole:()=>true},"@/lib/format":{businessDate:v=>v??"—"},
+ },{projectId:"p",roles:new Set(["master_admin"])});
+ render();await settle();nodes(render()).find(n=>n.type==="Tabs").props.onSelect("programme");
+ const tree=nodes(render());const updates=tree.filter(n=>n.type==="Button"&&n.props.children==="Update deliverable");
+ assert.equal(updates.length,1);assert.ok(!tree.some(n=>n.type==="strong"&&n.props.children==="Other stage"));
+ updates[0].props.onClick();assert.equal(nodes(render()).find(n=>n.props?.editor).props.editor.row.id,"d");
+});

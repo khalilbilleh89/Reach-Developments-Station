@@ -117,3 +117,16 @@ Land has a compact search/view toolbar, architectural parcel identity, readable 
 The frontend-only CI exception now applies solely to this exact same-repository branch targeting main, using the complete allowlisted diff. Earlier delivery branches no longer qualify. No backend application tests or changes, dependencies, endpoints, schema or financial formula changes. Full-page records, removal, history and unsaved-change handling are retained. Independent review precedes merge.
 
 Architectural pass validation: 120 frontend tests, full ESLint, production Next.js build and 39 isolated CI routing checks passed. Desktop/multi-building and 390px mobile sample previews inspected; no document overflow on Land/Inventory. Temporary sample routes removed. Final GitHub CI runs when the completed draft is opened.
+
+## Development briefing follow-up — 13 September 2026
+
+Single PR from main after #329: `eng/development-briefing`.
+
+- Overview pairs compact project entry cards with a white development diary. It reads existing permit targets and role-gated active consultant work, sorts recorded dates, retains past targets for review, and labels planned, forecast and due dates distinctly. Failed reads expose retry and denied reads remain explicit.
+- Permit approval cards highlight only the current workflow family; earlier steps are not represented as completed. On-hold, withdrawn and expired records have no active step.
+- Programme stages include their assigned deliverables, revisions and due dates. Authorized updates reuse the existing full-page editor and retain agreement/history boundaries.
+- White theme, existing role gates, money handling and deletion workflows remain in place. No new API, dependency, database change, record creation or fake business data.
+
+Validation: 124 frontend tests, full ESLint and production Next.js build passed. Desktop and narrow-phone sample previews inspected; deliverable editor identity and Back checked. Temporary sample routes removed before build. 39 isolated CI workflow tests passed; no backend application tests run.
+
+CI: the existing complete-diff, same-repository frontend-only PR exception is restricted to this exact branch. The previous architectural branch no longer qualifies. Forks, unrelated paths and main pushes retain normal CI. This is a draft for independent review under ENGINEERING_RULES.md; no deployment claim.

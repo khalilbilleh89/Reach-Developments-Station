@@ -305,3 +305,43 @@
   .development-workspace .stock-register-heading { flex-direction: column; align-items: stretch; gap: 16px; padding: 18px; }
   .stock-register-heading .stock-view-controls { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
 }
+/* Development briefing and source-linked programme composition. */
+.briefing-overview { display: grid; grid-template-columns: minmax(240px,.8fr) minmax(0,1.5fr); gap: 24px; align-items: start; }
+.briefing-kpis { grid-template-columns: 1fr; gap: 12px; }
+.briefing-kpis .development-entry { border-radius: 6px; padding: 20px; }
+.briefing-dates { margin: 0; padding: 24px; background: var(--surface); border: 1px solid var(--line-default); border-radius: 6px; min-width: 0; }
+.briefing-dates > header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.briefing-dates h2 { margin: 7px 0 14px; font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; }
+.briefing-dates > header > span { font-size: var(--text-xs); color: var(--text-muted); }
+.briefing-dates ol { list-style: none; margin: 20px 0 0; padding: 0; }
+.briefing-dates li { display: grid; grid-template-columns: 105px minmax(0,1fr) auto; gap: 16px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.briefing-dates time { font-size: var(--text-sm); font-weight: 550; }
+.briefing-dates time small { display: block; color: var(--warning); margin-top: 5px; font-size: .68rem; font-weight: 400; }
+.briefing-dates li > div > span { font-size: var(--text-xs); color: var(--text-secondary); }
+.briefing-dates h3 { margin: 5px 0 0; font-size: var(--text-sm); font-weight: 550; overflow-wrap: anywhere; }
+.permit-journey { padding: 20px 0 0; }
+.permit-journey ol { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); list-style: none; margin: 16px 0 0; padding: 0; }
+.permit-journey li { position: relative; display: flex; flex-direction: column; gap: 10px; color: var(--text-secondary); font-size: .7rem; padding-right: 10px; }
+.permit-journey li:not(:last-child)::before { content: ""; position: absolute; top: 14px; left: 29px; right: 0; border-top: 1px solid var(--line-default); }
+.permit-journey li > span { position: relative; display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--line-default); border-radius: 50%; background: var(--surface); }
+.permit-journey strong { font-weight: 450; }
+.permit-journey li[data-current="true"] { color: var(--accent); }
+.permit-journey li[data-current="true"] > span { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+.permit-journey li[data-current="true"] strong { font-weight: 650; }
+.stage-deliverables { margin: 20px 0; padding-top: 18px; border-top: 1px solid var(--line-default); }
+.stage-deliverables h4 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); margin: 0 0 12px; font-weight: 550; }
+.stage-deliverables ul { list-style: none; padding: 0; margin: 0; }
+.stage-deliverables li { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 16px; padding: 14px 0; }
+.stage-deliverables li + li { border-top: 1px solid var(--line-default); }
+.stage-deliverables li > div { display: grid; gap: 6px; }
+.stage-deliverables strong { font-size: var(--text-sm); font-weight: 550; overflow-wrap: anywhere; }
+.stage-deliverables li > div > span:not(.badge) { font-size: var(--text-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .briefing-overview { grid-template-columns: 1fr; } .briefing-kpis { grid-template-columns: repeat(auto-fit,minmax(min(100%,15rem),1fr)); } }
+@media (max-width: 600px) {
+  .briefing-dates { padding: 18px; }
+  .briefing-dates li { grid-template-columns: 85px minmax(0,1fr); gap: 12px; }
+  .briefing-dates li > button { grid-column: 2; justify-self: start; }
+  .stage-deliverables li { grid-template-columns: 1fr; gap: 10px; }
+  .stage-deliverables li > button { justify-self: start; }
+  .permit-journey ol { gap: 6px; }
+}
