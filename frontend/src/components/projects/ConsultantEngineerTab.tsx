@@ -83,7 +83,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
       }
     }
   });
-  return <div className="stack">
+  return <div className="stack consultant-workspace">
     <PageHeader icon="building" title="Consultant Engineer" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement" })}>Add consultant agreement</Button> : undefined} />
     {error && !editor ? <Notice tone="error">{error}</Notice> : null}
     {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Consultant Engineer"}</Button></> : null}
@@ -120,7 +120,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
       {section === "disciplines" ? <Register nested title="Disciplines" action={editable ? <Button onClick={() => setEditor({ kind: "discipline" })}>Add discipline</Button> : undefined} headers={["Discipline", "Lead", "Status", "Notes", "Actions"]} rows={disciplines.map((x) => [x.name, x.lead_name ?? "—", labels(x.status), x.notes ?? "—", editable ? <Button key={x.id} small variant="quiet" onClick={() => setEditor({ kind: "discipline", row: x })}>Edit discipline</Button> : "Read only"])} /> : null}
       {section === "programme" ? <SubPanel title="Design programme" actions={editable ? <ButtonRow><Button onClick={() => setEditor({kind:"stage"})}>Add design stage</Button><Button disabled={busy || stages.length < 2} aria-pressed={reordering} onClick={() => setReordering(!reordering)}>{reordering ? "Finish reordering" : "Reorder stages"}</Button></ButtonRow> : undefined}>
         <p className="footnote">Stages follow their recorded sequence. An undated stage is not a forecast milestone.</p>
-        {stages.length ? <ol className="consultant-programme">{stages.map((stage,index) => <li key={stage.id}>
+        {stages.length ? <ol className="consultant-programme">{stages.map((stage,index) => <li key={stage.id} data-status={stage.status}>
           <span className="consultant-stage-number">{stage.sequence}</span>
           <div className="consultant-stage-body"><div className="consultant-stage-heading"><h3>{stage.name}</h3><Badge>{labels(stage.status)}</Badge></div>
             <KeyValueGrid columns={3}><KeyValue label="Planned" value={stage.planned_date ? businessDate(stage.planned_date) : "Not scheduled"}/><KeyValue label="Forecast" value={stage.forecast_date ? businessDate(stage.forecast_date) : "Not recorded"}/><KeyValue label="Completed" value={stage.actual_completion_date ? businessDate(stage.actual_completion_date) : "Not recorded"}/></KeyValueGrid>
@@ -139,11 +139,13 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
 }
 
 function Register({ title, action, headers, rows, nested }: { title: string; action?: ReactNode; headers: string[]; rows: ReactNode[][]; nested?: boolean }) {
-  const content = rows.length ? <TableScroll label={title} fixedFirst compact>
+  const [schedule, setSchedule] = useState(false);
+  const controls = <ButtonRow>{action}<Button small aria-pressed={schedule} onClick={() => setSchedule(!schedule)}>{schedule ? "Show cards" : "Show schedule"}</Button></ButtonRow>;
+  const content = rows.length ? schedule ? <TableScroll label={title} fixedFirst compact>
     <thead><tr>{headers.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
     <tbody>{rows.map((row, i) => <tr key={i}>{row.map((v, j) => j === 0 ? <th key={j} scope="row">{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody>
-  </TableScroll> : <EmptyState compact title={`No ${title.toLowerCase()}`} hint="Records appear here as the consultant programme is maintained." />;
-  return nested ? <SubPanel title={title} actions={action}>{content}</SubPanel> : <Card title={title} actions={action}>{content}</Card>;
+  </TableScroll> : <div className="consultant-record-grid">{rows.map((row, i) => <article className="consultant-record-card" key={i}><header><span className="eyebrow">{headers[0]}</span><h3>{row[0]}</h3></header><dl>{row.slice(1).map((value, j) => <div key={headers[j + 1]}><dt>{headers[j + 1]}</dt><dd>{value}</dd></div>)}</dl></article>)}</div> : <EmptyState compact title={"No " + title.toLowerCase()} hint="Records appear here as the consultant programme is maintained." />;
+  return nested ? <SubPanel title={title} actions={controls}>{content}</SubPanel> : <Card title={title} actions={controls}>{content}</Card>;
 }
 
 function ConsultantDialog({ editor, stages, disciplines, busy, error, onCancel, onSubmit }: { editor: Editor; stages: ConsultantStage[]; disciplines: ConsultantDiscipline[]; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {

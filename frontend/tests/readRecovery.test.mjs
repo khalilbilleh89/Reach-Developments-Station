@@ -214,8 +214,8 @@ test("Pre-Launch renders server category amounts after the register and honors c
   }, { projectId: "project", roles: new Set(["master_admin"]), currencyCode: "USD" });
   render(); await settle();
   const tree = nodes(render());
-  assert.ok(tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Expenses by category") > tree.findIndex(n => n.type === "TableScroll" && n.props.label === "Pre-Launch expense register"));
-  assert.ok(tree.some(n => n.type === "td" && n.props.children === landFormat.money("3.03", "USD")));
+  assert.ok(tree.findIndex(n => n.props?.className === "expense-category-list") > tree.findIndex(n => n.props?.className === "expense-entry-list"));
+  assert.ok(tree.some(n => n.type === "dd" && n.props.children === landFormat.money("3.03", "USD")));
   const confirm = tree.find(n => n.type === "Button" && n.props.children === "Confirm");
   assert.equal(confirm.props.disabled, false);
   await confirm.props.onClick(); await settle();

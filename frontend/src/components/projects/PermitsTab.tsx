@@ -222,6 +222,7 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
   const [filter, setFilter] = useState<Filter>("");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [presentation, setPresentation] = useState("approvals");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -379,7 +380,8 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
           </ToolbarFilter>
         </DataToolbar>
 
-        <Card flush>
+        <div className="row-actions" role="group" aria-label="Permit presentation"><Button small aria-pressed={presentation === "approvals"} onClick={() => setPresentation("approvals")}>Approvals</Button><Button small aria-pressed={presentation === "schedule"} onClick={() => setPresentation("schedule")}>Schedule</Button></div>
+        <div className="permit-workspace-register">
           {register === null ? (
             <Loading label="Loading permits…" shape="rows" />
           ) : shown.length === 0 ? (
@@ -395,10 +397,10 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
             </div>
           ) : (
             <>
-            <div className="permit-card-list">
+            {presentation === "approvals" ? <div className="permit-approval-grid">
               {shown.map(permit => <article key={permit.id} className="permit-register-card">
                 <div className="permit-register-card-heading">
-                  <button className="button-link" type="button" onClick={() => setSelected(permit)}>{permit.permit_code}</button>
+                  <div><span className="eyebrow">Statutory approval</span><h2><button className="button-link" type="button" onClick={() => setSelected(permit)}>{permit.permit_code}</button></h2></div>
                   <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>{STATUS_LABELS[permit.status] ?? permit.status}</Badge>
                 </div>
                 <p className="subtle">{typeLabel(permit.permit_type_code)} · {permit.authority}</p>
@@ -406,6 +408,8 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                 <KeyValueGrid columns={2}>
                   <KeyValue label="Required by" value={businessDate(permit.planned_issue_date)} />
                   <KeyValue label="Statutory clock" value={slaLabel(permit)} />
+                  <KeyValue label={permit.issue_date ? "Received" : "Forecast"} value={businessDate(permit.issue_date ?? permit.forecast_issue_date)} />
+                  <KeyValue label="Days in stage" value={permit.days_in_stage} />
                 </KeyValueGrid>
                 <div className="row-actions">
                   {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
@@ -414,9 +418,9 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                   {!permit.prerequisite_satisfied ? <Badge tone="muted">Prerequisite open</Badge> : null}
                   {permitReviewNotes(permit).length ? <Badge tone="warning">Review record</Badge> : null}
                 </div>
+                <footer className="permit-approval-footer"><Button small onClick={() => setSelected(permit)}>Open approval</Button></footer>
               </article>)}
-            </div>
-            <div className="permit-register-table">
+            </div> : <div className="permit-approval-schedule">
             <TableScroll label="Permit register" fixedFirst>
               <thead>
                 <tr>
@@ -492,10 +496,10 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                 ))}
               </tbody>
             </TableScroll>
-            </div>
+            </div>}
             </>
           )}
-        </Card>
+        </div>
       </div>
 
       </> : null}

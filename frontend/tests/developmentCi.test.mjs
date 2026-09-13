@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isDevelopmentUiOnly } from '../../scripts/ci_development_ui.mjs';
-const event = { name: 'pull_request', base: 'main', head: 'eng/development-ui-delivery', repository: 'khalilbilleh89/Reach-Developments-Station', headRepository: 'khalilbilleh89/Reach-Developments-Station' };
+const event = { name: 'pull_request', base: 'main', head: 'eng/visual-02-development-delivery', repository: 'khalilbilleh89/Reach-Developments-Station', headRepository: 'khalilbilleh89/Reach-Developments-Station' };
 test('Delivery exception accepts the complete UI stack and its explicit CI governance files', () => {
   assert.equal(isDevelopmentUiOnly(event, ['frontend/src/app/globals.css', 'frontend/tests/landPresentation.test.mjs', 'docs/DEVELOPMENT_UI_PLAN.md', '.github/workflows/ci.yml', 'scripts/ci_development_ui.mjs', 'tests/test_ci_workflow.py']), true);
 });
@@ -10,5 +10,5 @@ test('Backend, dependency, migration and unrelated workflow changes prevent the 
   assert.equal(isDevelopmentUiOnly(event, []), false);
 });
 test('Main pushes, forks and other PR branches keep normal CI', () => {
-  for (const change of [{name:'push'}, {base:'integration/mvp3'}, {head:'eng/another-change'}, {headRepository:'fork/repo'}, {repository:'other/repo'}]) assert.equal(isDevelopmentUiOnly({...event,...change}, ['frontend/src/app/globals.css']), false);
+  for (const change of [{name:'push'}, {base:'integration/mvp3'}, {head:'eng/another-change'}, {head:'eng/development-ui-delivery'}, {headRepository:'fork/repo'}, {repository:'other/repo'}]) assert.equal(isDevelopmentUiOnly({...event,...change}, ['frontend/src/app/globals.css']), false);
 });
