@@ -47,6 +47,12 @@ contract totals, receipts, weighted pricing calculations or historical sale term
 
 ## Register a buyer and mark sold
 
+The primary buyer-first entry is now **Agent/Buyer > Register a buyer > Connect
+unit**, above Sales in the menu. Country, Branch, Branch Leader and Agent are
+recorded on the buyer and copied to the unit transaction. See
+[SALES_AGENT_BUYER.md](SALES_AGENT_BUYER.md) for agent corrections and the
+Master Administrator sale/reservation removal paths.
+
 Master Administrators can choose **Owner: register buyer & mark sold** after
 selecting an eligible unit in Sales > New Reservation. Select an existing buyer or register a new sole
 purchaser, enter a reason, and optionally the sale date. Existing buyers retain

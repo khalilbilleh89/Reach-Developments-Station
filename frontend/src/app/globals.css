@@ -5316,6 +5316,10 @@ a:not([class]):hover { color: var(--accent-hover); }
 .stock-register tbody tr:hover { background: var(--surface-hover); }
 .stock-register .stock-location { display: block; font-size: .68rem; font-weight: 400; color: var(--text-muted); margin-top: .4rem; white-space: nowrap; }
 .stock-unit-mix { white-space: nowrap; font-weight: 550; }
+.buyer-actions { display: flex; flex-wrap: wrap; gap: .4rem; min-width: 11rem; max-width: 16rem; }
+td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; overflow-wrap: anywhere; }
+.agent-fields { border: 0; padding: 0; margin: 1.2rem 0; min-width: 0; }
+.agent-fields > legend { font-weight: 600; padding: 0 0 .8rem; }
 .stock-unit-mix > span { color: var(--text-muted); padding: 0 .2rem; }
 .stock-register .stock-gross { background: var(--surface-command); font-weight: 650; }
 .stock-register .stock-price { font-weight: 600; white-space: nowrap; }

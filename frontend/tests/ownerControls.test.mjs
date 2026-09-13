@@ -18,7 +18,7 @@ function mount(path, component, dependencies, props) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const exports = {};
-  runInNewContext(`(function(require, exports) { ${code}\n})`)(name => {
+  runInNewContext(`(function(require, exports) { ${code}\n})`, {URLSearchParams})(name => {
     if (name === "react") return react;
     if (name in dependencies) return dependencies[name];
     if (name === "@/components/ui") return new Proxy({}, { get: (_, key) => key });
@@ -33,10 +33,51 @@ function nodes(tree) {
 }
 function field(tree, label) { return nodes(tree).find(node => node.type === "Field" && node.props.label === label).props.children; }
 
+test("Agent/Buyer retains the chosen buyer when connecting a unit and opens Sales", () => {
+  const routes = [];
+  const render = mount("components/projects/AgentBuyerTab.tsx", "AgentBuyerTab", {
+    "next/navigation": {useRouter: () => ({push: route => routes.push(route)})},
+    "./sales/ClientsPanel": {ClientsPanel: "ClientsPanel"},
+    "./sales/NewReservation": {NewReservation: "NewReservation"},
+    "./sales/salesRoutes": {createdSalesHref: (query, project, kind, id) => `${query}&${kind}=${id}`},
+  }, {projectId: "project", projectStatus: "active", roles: new Set(["master_admin"])});
+  const panel = nodes(render()).find(node => node.type === "ClientsPanel");
+  assert.equal(panel.props.canWrite, true);
+  panel.props.onConnect({id: "buyer-first", display_name: "Buyer", agent_name: "Agent"});
+  const flow = nodes(render()).find(node => node.type === "NewReservation");
+  assert.equal(flow.props.clientId, "buyer-first");
+  assert.equal(flow.props.allowOwner, true);
+  flow.props.onSaleCreated("new-sale");
+  assert.match(routes[0], /section=sales/);
+  assert.match(routes[0], /sale=new-sale/);
+});
+
+test("Sale agent correction preserves all four fields on failure and refreshes after success", async () => {
+  const calls = []; let fail = true; let changed = 0;
+  const render = mount("components/projects/sales/SaleAgent.tsx", "SaleAgent", {
+    "@/lib/api": {ApiError: Error, sales: {updateSaleAgent: async (...args) => {calls.push(args); if (fail) throw new Error("Try again");}}},
+    "./AgentFields": {AgentFields: "AgentFields", agentLabels: {agent_country: "Country", agent_branch: "Branch", agent_branch_leader: "Branch Leader", agent_name: "Agent"}, agentPayload: value => value},
+  }, {projectId: "project", record: {id: "sale", status: "signature_pending"}, isSale: true, canWrite: true, onChanged: async () => {changed++;}});
+  render().props.actions.props.onClick();
+  nodes(render()).find(node => node.type === "AgentFields").props.onChange({agent_country: "Jordan", agent_branch: "Amman", agent_branch_leader: "Leader", agent_name: "Agent"});
+  field(render(), "Reason for change").props.onChange({target: {value: "Historical attribution"}});
+  await nodes(render()).find(node => node.type === "form").props.onSubmit({preventDefault() {}});
+  assert.equal(changed, 0);
+  assert.equal(nodes(render()).find(node => node.type === "AgentFields").props.value.agent_name, "Agent");
+  assert.ok(nodes(render()).some(node => node.type === "Notice" && node.props.children === "Try again"));
+  fail = false;
+  await nodes(render()).find(node => node.type === "form").props.onSubmit({preventDefault() {}});
+  assert.equal(changed, 1);
+  assert.equal(calls[1][0], "project");
+  assert.equal(calls[1][1], "sale");
+  assert.equal(calls[1][2].agent_branch_leader, "Leader");
+});
+
 test("new buyer and sold commitment use one request; failure preserves inputs", async () => {
   class ApiError extends Error {}
   const calls = []; let saved = false; let refuse = true;
   const render = mount("components/projects/sales/RegisterBuyerSaleForm.tsx", "RegisterBuyerSaleForm", {
+    "./AgentFields": { AgentFields: "AgentFields", emptyAgent: {agent_country: "", agent_branch: "", agent_branch_leader: "", agent_name: ""}, agentPayload: value => value },
     "./SalesPriceInput": { SalesPriceInput: "SalesPriceInput" },
     "@/components/ui/ValidationSummary": { ValidationSummary: "ValidationSummary" },
     "@/lib/api": { ApiError, sales: {
@@ -47,14 +88,17 @@ test("new buyer and sold commitment use one request; failure preserves inputs", 
   }, { projectId: "project", unitId: "unit", unitOption: {unit_id: "unit", unit_price_version_id: "version", reference_price_ex_tax: "250000.00", currency_id: "EUR"}, onSaved: () => { saved = true; }, onCancel() {} });
   render(); await settle();
   field(render(), "Full buyer name").props.onChange({ target: { value: "Test Buyer" } });
+  nodes(render()).find(node => node.type === "AgentFields").props.onChange({agent_country: "Jordan", agent_branch: "Amman", agent_branch_leader: "Leader", agent_name: "Agent"});
   field(render(), "Owner confirmation / reason").props.onChange({ target: { value: "Confirmed sale" } });
   nodes(render()).find(node => node.type === "SalesPriceInput").props.onPreview({sales_price_ex_tax: "250000.00"});
   await nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].body.buyer.sole_purchaser_name, "Test Buyer");
   assert.equal(calls[0].body.unit_id, "unit");
+  assert.equal(calls[0].body.buyer.agent_name, "Agent");
   assert.equal(saved, false);
   assert.equal(field(render(), "Full buyer name").props.value, "Test Buyer");
+  assert.equal(nodes(render()).find(node => node.type === "AgentFields").props.value.agent_branch, "Amman");
   assert.ok(nodes(render()).some(node => node.type === "ValidationSummary" && node.props.error?.message === "Already committed"));
   refuse = false;
   await nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });

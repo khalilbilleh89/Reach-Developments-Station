@@ -28,7 +28,37 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0026_common_areas"
+HEAD_REVISION = "0027_merge_sales_areas"
+
+
+@pytest.mark.parametrize("starting_revision", ["0025_sales_agent_details", "0026_common_areas"])
+def test_sales_and_common_area_histories_converge(postgres: None, starting_revision: str) -> None:
+    """Either feature history upgrades to one head without rewriting shipped revisions."""
+    config = _alembic_config()
+    try:
+        command.downgrade(config, "0024_merge_permits_inventory")
+        command.upgrade(config, starting_revision)
+        assert _current_revision() == starting_revision
+        command.upgrade(config, "head")
+        assert _current_revision() == HEAD_REVISION
+        assert ScriptDirectory.from_config(config).get_heads() == [HEAD_REVISION]
+        with get_engine().connect() as connection:
+            assert connection.scalar(text("SELECT to_regclass('public.inventory_common_areas')"))
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT count(*) FROM information_schema.columns "
+                        "WHERE table_schema='public' "
+                        "AND table_name IN ('clients', 'reservations', 'sale_contracts') "
+                        "AND column_name IN "
+                        "('agent_country', 'agent_branch', 'agent_branch_leader', 'agent_name')"
+                    )
+                )
+                == 12
+            )
+        command.check(config)
+    finally:
+        command.upgrade(config, "head")
 
 
 @pytest.mark.parametrize("starting_revision", ["0023_permit_removal", "0023_inventory_options"])
