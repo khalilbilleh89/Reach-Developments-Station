@@ -159,3 +159,11 @@ Branch `eng/development-workspace-finish` follows merged #332. Permit cards now 
 126 frontend tests pass, including simultaneous invoice/evidence retention. Desktop expense and consultant previews and phone permit preview checked. Temporary fixtures removed. Full lint/build and exact-head GitHub evidence recorded in PR. 39 isolated CI-routing tests pass; no backend application tests run.
 
 The user explicitly authorized inspecting this PR, marking Ready, waiting for checks and merging, then starting phase 3. This overrides the repository's agent-never-merges/default independent-review pause for these two UI PRs only. CI exception remains same-repository, complete-diff and exact branch; main-push CI is unchanged.
+
+## Roadmap phase 3 — Platform consistency
+
+Branch `eng/platform-visual-consistency` starts after merged #333 (`ec7676e`). Remaining project modules use a shared white platform treatment: icon-led headers, pale blue summary/table headings, grouped filters, consistent tabs and secondary actions, readable forms and empty states. Cashflow, Unit Economics and Payment Plan tabs gain explicit icons. Sales reuses its existing transaction and Collections status labels/tones; no status is inferred from a number.
+
+Desktop Sales, Collections summary and Cashflow overview previews inspected using actual components with clearly labelled local sample data. Phone Sales, Collections and form/empty-state previews checked: document width equals viewport, while wide tables scroll inside their own container. Overdue monetary tone remains red; only neutral lead figures receive blue emphasis. Temporary fixture removed before build.
+
+No new API, schema, records, dependencies, money arithmetic, authorization or lifecycle changes. Existing deletion, exact currency formatting and full-page record navigation remain. Full frontend/CI-routing validation and final-head Ready evidence are recorded in PR. The user's explicit authorization covers review, Ready, checks and merge. Main-push CI remains unchanged; the frontend-only PR exception is exact-branch and fail-closed.

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
 import "./development.css";
+import "./platform.css";
 
 export const metadata: Metadata = {
   title: "Reach Developments Station",

@@ -4,10 +4,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesTransaction } from "@/lib/api";
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
-import { Badge, Button, Card, EmptyState, Field, Loading, Notice, PageHeader, RecordLink, RegisterPagination, TableScroll } from "@/components/ui";
+import { Icon, Badge, Button, Card, EmptyState, Field, Loading, Notice, PageHeader, RecordLink, RegisterPagination, TableScroll } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useCurrencyCode } from "@/lib/currency";
-import { reservationLabel, saleLabel } from "./sales/labels";
+import { reservationLabel, saleLabel, reservationTone, saleTone } from "./sales/labels";
+import { unitCollectionLabel, unitCollectionTone } from "./collections/labels";
 import { CommercialUnits } from "./sales/CommercialUnits";
 import { NewReservation } from "./sales/NewReservation";
 import { SalesGates } from "./sales/SalesGates";
@@ -44,22 +45,22 @@ export function SalesTab({projectId, projectStatus, roles}: {
   const refresh = async () => {setRetry(value => value + 1);};
   return <div className="stack">
     <PageHeader icon="sales" title="Sales" subtitle="The sales workflow for each unit" compact actions={<>
-      {canPrepare && projectStatus !== "setup" ? <Button variant="primary" data-leaves-editor onClick={() => {setOpen(null); const next = new URLSearchParams(params); next.set("sales_view", "new"); router.push(`/projects/?${next}`);}}>New Reservation</Button> : null}
-      <Button data-leaves-editor onClick={() => {setOpen(null); setState({sales_view: history ? "" : "history", offset:"", transaction_status:""});}}>{history ? "Current transactions" : "Transaction history"}</Button>
-      <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "stock" ? null : "stock");}}>Commercial stock</Button>
+      {canPrepare && projectStatus !== "setup" ? <Button variant="primary" data-leaves-editor onClick={() => {setOpen(null); const next = new URLSearchParams(params); next.set("sales_view", "new"); router.push(`/projects/?${next}`);}}><Icon name="plus" />New Reservation</Button> : null}
+      <Button data-leaves-editor onClick={() => {setOpen(null); setState({sales_view: history ? "" : "history", offset:"", transaction_status:""});}}><Icon name="history" />{history ? "Current transactions" : "Transaction history"}</Button>
+      <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "stock" ? null : "stock");}}><Icon name="inventory" />Commercial stock</Button>
       {canAdmin || roles.has("project_manager") ? <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "gates" ? null : "gates");}}>Sales gates</Button> : null}
     </>} />
     {projectStatus === "setup" ? <Notice tone="info">Sales becomes available when project setup is complete.</Notice> : preparing ? <NewReservation projectId={projectId} allowOwner={roles.has("master_admin")} onSaleCreated={id => {router.replace(createdSalesHref(params,projectId,"sale",id));}} onCancel={() => setState({sales_view:""})} onCreated={id => {router.replace(createdSalesHref(params,projectId,"reservation",id));}} /> : <>
       {open === "stock" ? <CommercialUnits projectId={projectId} roles={roles} onClose={() => setOpen(null)} /> : null}
       {open === "gates" ? <SalesGates projectId={projectId} onClose={() => setOpen(null)} /> : null}
-      <Field label="Find transaction"><input className="input" type="search" placeholder="Buyer, unit, reservation or SPA" value={state.search} onChange={e => setState({search:e.target.value,offset:""})} /></Field>
-      <Field label="Transaction status"><select className="input" value={state.transaction_status} onChange={e => setState({transaction_status:e.target.value,offset:""})}><option value="">Any status</option>{["draft","deposit_pending","active","extended","signature_pending","termination_pending",...(history ? ["converted","expired","cancelled"] : [])].map(status => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></Field>
+      <div className="workspace-filter-grid"><Field label="Find transaction"><input className="input" type="search" placeholder="Buyer, unit, reservation or SPA" value={state.search} onChange={e => setState({search:e.target.value,offset:""})} /></Field>
+      <Field label="Transaction status"><select className="input" value={state.transaction_status} onChange={e => setState({transaction_status:e.target.value,offset:""})}><option value="">Any status</option>{["draft","deposit_pending","active","extended","signature_pending","termination_pending",...(history ? ["converted","expired","cancelled"] : [])].map(status => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></Field></div>
       {error ? <Notice tone="error">{error} <Button onClick={() => void refresh()}>Retry Sales transactions</Button></Notice> : !rows ? <Loading label="Loading Sales transactions…" shape="rows" /> : <Card title={history ? "Transaction history" : "Current transactions"} description={`${rows.total} transactions`}>
-        {rows.items.length === 0 ? <EmptyState title="No matching transactions" hint="Start a new reservation to select an available unit. Existing transactions can be found by buyer, unit or reference." /> : <TableScroll label="Sales transactions" fixedFirst stickyHeader><thead><tr><th>Transaction / buyer</th><th>Unit</th><th>List price at deal</th><th>Agreed sales price</th><th>Variance</th><th>Status</th><th>SPA</th><th>{history ? "Unit legal · current" : "Legal"}</th><th>{history ? "Unit collections · current" : "Collections"}</th></tr></thead><tbody>{rows.items.map(row => <tr key={`${row.kind}:${row.id}`}>
+        {rows.items.length === 0 ? <EmptyState icon="sales" title="No matching transactions" hint="Start a new reservation to select an available unit. Existing transactions can be found by buyer, unit or reference." /> : <TableScroll label="Sales transactions" fixedFirst stickyHeader><thead><tr><th>Transaction / buyer</th><th>Unit</th><th>List price at deal</th><th>Agreed sales price</th><th>Variance</th><th>Status</th><th>SPA</th><th>{history ? "Unit legal · current" : "Legal"}</th><th>{history ? "Unit collections · current" : "Collections"}</th></tr></thead><tbody>{rows.items.map(row => <tr key={`${row.kind}:${row.id}`}>
           <th scope="row" className="sales-primary-cell"><RecordLink projectId={projectId} kind={row.kind} id={row.id}>Open {row.kind === "sale" ? "Sale" : "Reservation"} {row.reference}</RecordLink><span className="cell-secondary">{row.client_display_name}</span></th>
           <td>{row.unit_reference}</td><td>{money(row.reference_price_ex_tax,codeOf(row.currency_id))}</td><td>{money(row.sales_price_ex_tax,codeOf(row.currency_id))}</td>
           <td>{money(row.price_variance_amount,codeOf(row.currency_id))}<span className="cell-secondary">{row.price_variance_fraction === null ? "Percentage unavailable" : row.price_variance_percentage} · {varianceDirection(row.price_variance_amount)}</span></td>
-          <td><Badge>{row.kind === "sale" ? saleLabel(row.status) : reservationLabel(row.status)}</Badge></td><td>{row.spa_number ?? "Not prepared"}</td><td>{row.legal_status.replaceAll("_"," ")}</td><td>{row.collection_status.replaceAll("_"," ")}</td>
+          <td><Badge tone={row.kind === "sale" ? saleTone(row.status) : reservationTone(row.status)}>{row.kind === "sale" ? saleLabel(row.status) : reservationLabel(row.status)}</Badge></td><td>{row.spa_number ?? "Not prepared"}</td><td>{row.legal_status.replaceAll("_"," ")}</td><td><Badge tone={unitCollectionTone(row.collection_status)}>{unitCollectionLabel(row.collection_status)}</Badge></td>
         </tr>)}</tbody></TableScroll>}
         <RegisterPagination offset={offset} total={rows.total} pageSize={50} onChange={value => setState({offset:String(value)})} />
       </Card>}
