@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0024_merge_permits_inventory"
+HEAD_REVISION = "0025_sales_agent_details"
 
 
 @pytest.mark.parametrize("starting_revision", ["0023_permit_removal", "0023_inventory_options"])
