@@ -483,3 +483,21 @@ test("Contract confirmation disables itself when refreshed eligibility changes",
   assert.equal(dialog.props.unavailable, true);
   assert.equal(dialog.props.failure.message, "Already activated by another operator");
 });
+
+test("Consultant tabs separate programme from agreement and do not treat missing deliverables as complete", async () => {
+ const row={id:"agreement",consultant_name:"Sample",agreement_reference:"CE-1",status:"active"};
+ const render=mount("projects/ConsultantEngineerTab","ConsultantEngineerTab",{
+  "@/lib/api":{ApiError:Error,consultantEngineering:{workspace:async()=>({active_engagement:row,engagements:[row],disciplines:[],stages:[{id:"stage",engagement_id:row.id,name:"Concept",sequence:1,status:"not_started",planned_date:null}],deliverables:[],outstanding_deliverables:0})}},
+  "@/lib/roles":{hasAnyRole:()=>true},"@/lib/format":{businessDate:v=>v??"—"},
+ },{projectId:"project",roles:new Set(["master_admin"])});
+ render();await settle();
+ let tree=nodes(render());
+ assert.equal(tree.find(n=>n.type==="PositionFigure"&&n.props.label==="Outstanding deliverables").props.value,"Not registered");
+ assert.ok(tree.some(n=>n.type==="Button"&&n.props.children==="Edit agreement"));
+ tree.find(n=>n.type==="Tabs").props.onSelect("programme");tree=nodes(render());
+ assert.ok(!tree.some(n=>n.type==="Button"&&n.props.children==="Edit agreement"));
+ assert.ok(tree.some(n=>n.type==="KeyValue"&&n.props.value==="Not scheduled"));
+ assert.ok(!tree.some(n=>n.type==="Button"&&n.props.children==="Move up"));
+ const programme=tree.find(n=>n.type==="SubPanel"&&n.props.title==="Design programme");
+ assert.ok(nodes(programme.props.actions).some(n=>n.type==="Button"&&n.props.children==="Reorder stages"&&n.props.disabled));
+});
