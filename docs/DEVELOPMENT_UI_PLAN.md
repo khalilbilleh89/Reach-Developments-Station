@@ -30,7 +30,13 @@ contracts and retained financial/legal history remain in force.
 
 ## Review gates
 
-Each PR starts as Draft and targets main. Run the applicable checks and obtain
+User-approved stack: PR 1 targets `eng/development-ui-stack`; each subsequent
+implementation PR starts from and targets its predecessor. A seventh consolidated
+delivery PR targets main. Intermediate PRs remain Draft and use local frontend
+checks; frontend GitHub CI is deferred to the completed candidate. The user approved
+no backend tests for this frontend-only stack. Final scoped CI routing remains to
+be implemented and verified before delivery; unrelated CI and protections stay intact.
+Any changed final candidate requires revalidation. Obtain
 independent review before Ready; merge remains a human action under the engineering
 rules. Check populated, empty and incomplete states at desktop, panel and mobile
 widths, including selected/hover/focus tab states. Preserve Back behavior, register

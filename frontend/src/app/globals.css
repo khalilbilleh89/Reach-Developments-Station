@@ -5324,6 +5324,15 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .agent-fields { border: 0; padding: 0; margin: 1.2rem 0; min-width: 0; }
 .agent-fields > legend { font-weight: 600; padding: 0 0 .8rem; }
 .stock-unit-mix > span { color: var(--text-muted); padding: 0 .2rem; }
+.land-overview > .record-section { min-width: 0; padding: var(--space-5); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); }
+.land-utilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--space-3); margin: var(--space-4) 0; }
+.land-utilities > div { padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); }
+.land-utilities dt { font-weight: 650; margin-bottom: var(--space-3); }
+.land-utilities dd { margin: 0; font-size: .85rem; }
+.land-supporting-note { border-left: 3px solid var(--line-strong); padding: var(--space-3) var(--space-4); background: var(--surface); overflow-wrap: anywhere; }
+.land-supporting-note h4 { margin: 0 0 var(--space-2); font-size: .85rem; }
+.land-supporting-note p { margin: 0; color: var(--text-secondary); line-height: 1.7; white-space: pre-line; }
+@media (max-width: 520px) { .land-overview > .record-section { padding: var(--space-4); } }
 .stock-register .stock-gross { background: var(--surface-command); font-weight: 650; }
 .stock-register .stock-price { font-weight: 600; white-space: nowrap; }
 .stock-note { color: var(--text-muted); font-size: .71rem; line-height: 1.6; margin: .8rem 1.4rem; }
