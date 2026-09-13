@@ -232,15 +232,34 @@ def test_an_inactive_manager_is_rejected(
     assert response.json() == {"detail": "Project manager must be an active user."}
 
 
-def test_the_project_code_is_immutable(admin_client: TestClient, project_id: str) -> None:
-    """Given an update naming a code, then the request is refused, not quietly ignored.
+def test_project_code_amendment_preserves_identity_and_audit(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    response = admin_client.patch(f"{PROJECTS}/{project_id}", json={"code": "renamed"})
+    assert response.status_code == 200
+    assert response.json()["id"] == project_id
+    assert response.json()["code"] == "RENAMED"
+    assert admin_client.get(f"{PROJECTS}/{project_id}").json()["code"] == "RENAMED"
+    events = db.scalars(select(AuditEvent).where(AuditEvent.action == "project.updated")).all()
+    assert any(
+        e.before_data["code"] == "GALINI-BLU" and e.after_data["code"] == "RENAMED" for e in events
+    )
 
-    Silently dropping a field a client asked for and answering 200 tells them a
-    change happened that did not.
-    """
-    response = admin_client.patch(f"{PROJECTS}/{project_id}", json={"code": "RENAMED"})
 
-    assert response.status_code == 422
+def test_project_code_amendment_rejects_duplicates_and_invalid_codes(
+    admin_client: TestClient, project_id: str, country_pack_id: str, currency_id: str
+) -> None:
+    assert (
+        admin_client.post(
+            PROJECTS, json=project_payload(country_pack_id, currency_id, code="OTHER")
+        ).status_code
+        == 201
+    )
+    assert admin_client.patch(f"{PROJECTS}/{project_id}", json={"code": "other"}).status_code == 409
+    for code in ["!invalid", "x", None, ""]:
+        assert (
+            admin_client.patch(f"{PROJECTS}/{project_id}", json={"code": code}).status_code == 422
+        )
     assert admin_client.get(f"{PROJECTS}/{project_id}").json()["code"] == "GALINI-BLU"
 
 

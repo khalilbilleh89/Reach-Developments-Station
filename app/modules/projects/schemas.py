@@ -136,7 +136,9 @@ class ProjectCreateRequest(StrictRequest):
 
 
 class ProjectUpdateRequest(StrictRequest):
-    """``code`` is absent: a project code is immutable once issued."""
+    """Amend project details while preserving its stable UUID and audit history."""
+
+    code: ProjectCode | None = None
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     developer_entity: str | None = Field(default=None, min_length=1, max_length=200)

@@ -20,6 +20,7 @@ from sqlalchemy import select
 from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.inventory import (
+    common_areas,
     configuration,
     deletion,
     import_service,
@@ -98,6 +99,56 @@ from app.modules.projects.models import LandParcel, Project
 from app.modules.projects.permissions import AccessibleProject
 
 router = APIRouter(prefix="/projects", tags=["inventory"])
+
+
+@router.get("/{project_id}/inventory/common-areas", response_model=list[common_areas.AreaRead])
+def list_common_areas(
+    project: InventoryProject, session: DbSession, actor: ActiveActor
+) -> list[common_areas.AreaRead]:
+    common_areas.require_whole_project(session, project.id, actor)
+    return [
+        common_areas.AreaRead.model_validate(row)
+        for row in common_areas.list_areas(session, project.id)
+    ]
+
+
+@router.post(
+    "/{project_id}/inventory/common-areas", response_model=common_areas.AreaRead, status_code=201
+)
+def create_common_area(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    payload: common_areas.AreaInput,
+) -> common_areas.AreaRead:
+    return common_areas.AreaRead.model_validate(
+        common_areas.save(session, project.id, actor, payload)
+    )
+
+
+@router.put("/{project_id}/inventory/common-areas/{area_id}", response_model=common_areas.AreaRead)
+def update_common_area(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    area_id: uuid.UUID,
+    payload: common_areas.AreaInput,
+) -> common_areas.AreaRead:
+    return common_areas.AreaRead.model_validate(
+        common_areas.save(session, project.id, actor, payload, area_id)
+    )
+
+
+@router.delete("/{project_id}/inventory/common-areas/{area_id}", status_code=204)
+def delete_common_area(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    area_id: uuid.UUID,
+    reason: Annotated[str, Query(min_length=1, max_length=500)],
+) -> None:
+    common_areas.delete(session, project.id, actor, area_id, reason)
+
 
 #: A page of a unit register. Large enough for a floor, bounded so one request
 #: cannot ask for a whole development.

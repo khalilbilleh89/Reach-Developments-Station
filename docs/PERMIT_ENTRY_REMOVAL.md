@@ -14,6 +14,10 @@ while any completed row or event exists, including retained/deleted permits, so
 history is not silently rewritten. Back up before deployment; roll forward if
 completion history has already been recorded.
 
+Migration 0027 merges the parallel permit-completion and common-area histories.
+It changes no tables or records and preserves both 0026 revisions. Migration
+tests verify upgrading from either branch to the single merged head.
+
 Add permit opens a full-page editor. Identity, current status and effective date,
 scope, owners, application details, dates, fee, conditions and management flags
 can be supplied in one save. An optional new permit type is created in the same

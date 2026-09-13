@@ -28,10 +28,13 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0026_permit_completed"
+HEAD_REVISION = "0027_merge_permit_common"
 
 
-@pytest.mark.parametrize("starting_revision", ["0023_permit_removal", "0023_inventory_options"])
+@pytest.mark.parametrize(
+    "starting_revision",
+    ["0023_permit_removal", "0023_inventory_options", "0026_permit_completed", "0026_common_areas"],
+)
 def test_parallel_permit_and_inventory_histories_converge(
     postgres: None, starting_revision: str
 ) -> None:
