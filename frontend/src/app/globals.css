@@ -1535,12 +1535,11 @@ section + section {
   border-radius: var(--radius-control);
 }
 
-.tab:hover {
+.tab:not(.tab-active):hover {
   color: var(--text-primary);
 }
 
 .tab-active {
-
   color: var(--text-inverse);
   font-weight: 650;
   background-color: var(--ink);
@@ -2814,6 +2813,10 @@ input[type="file"].input {
   padding: 0;
 }
 
+.kv > div {
+  min-width: 0;
+}
+
 .kv-term {
   margin: 0;
   color: var(--text-muted);
@@ -3916,7 +3919,7 @@ input[type="file"].input {
   flex-wrap: wrap;
   gap: var(--space-4);
   align-items: flex-start;
-  padding: var(--space-6) var(--space-6) 0;
+  padding: var(--space-5) var(--space-5) 0;
 }
 
 .record-glyph {
@@ -4062,8 +4065,8 @@ input[type="file"].input {
   display: grid;
   flex-wrap: wrap;
   gap: var(--space-4);
-  margin: var(--space-5) 0 0;
-  padding: var(--space-5) var(--space-6);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--line-soft);
   background-color: var(--surface);
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
@@ -4102,7 +4105,7 @@ input[type="file"].input {
 }
 
 .record-page-sections {
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-5);
   border-top: 1px solid var(--line-soft);
 }
 
