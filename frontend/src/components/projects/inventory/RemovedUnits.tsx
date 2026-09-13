@@ -75,7 +75,7 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
         {rows.length ? <TableScroll label="Removed units"><thead><tr>
           <th>Unit</th><th>Location</th><th>Commercial status</th><th>Removed</th><th>Action</th>
         </tr></thead><tbody>{rows.map(unit => <tr key={unit.id}>
-          <th scope="row">{unit.unit_reference}<span className="stock-location">Number {unit.unit_number}</span></th>
+          <th scope="row"><div>{unit.unit_reference}</div><div className="subtle">Number {unit.unit_number}</div></th>
           <td>{[unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" / ")}</td>
           <td>{unit.commercial_status.replaceAll("_", " ")}</td>
           <td>{new Date(unit.removed_at).toLocaleString()}</td>
