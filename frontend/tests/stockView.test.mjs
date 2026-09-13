@@ -19,6 +19,7 @@ function mount(path, component, dependencies, props) {
   const exports = {};
   runInNewContext(`(function(require, exports) { ${code}\n})`)(name => {
     if (name === "react") return react;
+    if (name === "./statusLabels") { const labels = {}; const js = ts.transpileModule(readFileSync(new URL("../src/components/projects/inventory/statusLabels.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText; runInNewContext(`(function(exports) { ${js}\n})`)(labels); return labels; }
     if (name in dependencies) return dependencies[name];
     if (name === "@/components/ui") return new Proxy({}, { get: (_, key) => key });
     return require(name);
@@ -37,13 +38,15 @@ const unit = {id:"u1",unit_reference:"A-101",phase_code:"P1",building_code:"A",f
 const register = {total:121,units:[unit]};
 const prices = {priced_count:100,unpriced_count:21,repricing_count:2,totals:[{currency_id:"JOD",amount:"1000000.00"},{currency_id:"EUR",amount:"500000.00"}],rows:[{unit_id:"u1",price:"100000.00",currency_id:"JOD",repricing_required:false}]};
 test("stock distinguishes zero and unknown measurements and uses the current launch price", () => {
- const tree=mount(source,"StockTable",deps,{projectId:"p",register,prices,seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}})();
+ const render=mount(source,"StockTable",deps,{projectId:"p",register,prices,seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}});
+ const initial=render(); nodes(initial).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick(); const tree=render();
  const cells=nodes(tree).filter(n=>n.type==="td").map(textOf);
  assert.ok(cells.includes("90.1 sqm")); assert.ok(cells.includes("0 sqm")); assert.ok(cells.includes("—")); assert.ok(cells.includes("JOD 100000.00"));
  const headings=nodes(tree).filter(n=>n.type==="th").map(textOf); assert.ok(!headings.includes("Roof garden")); assert.ok(!headings.includes("Status"));
 });
 test("stock expands optional areas and omits price cells for roles without pricing access", () => {
- const tree=mount(source,"StockTable",deps,{projectId:"p",register,prices:null,seesPrice:false,priceError:null,expanded:true,onExpanded:()=>{}})();
+ const render=mount(source,"StockTable",deps,{projectId:"p",register,prices:null,seesPrice:false,priceError:null,expanded:true,onExpanded:()=>{}});
+ const initial=render(); nodes(initial).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick(); const tree=render();
  const headings=nodes(tree).filter(n=>n.type==="th").map(textOf); assert.ok(headings.includes("Roof garden")); assert.ok(headings.includes("Front garden")); assert.ok(!headings.some(s=>s.includes("Launch price")));
 });
 test("stock totals use the entire selection and keep currencies separate", () => {
@@ -51,6 +54,18 @@ test("stock totals use the entire selection and keep currencies separate", () =>
  for(const value of ["121","100","21","JOD 1000000.00","EUR 500000.00"]) assert.ok(text.includes(value));
 });
 test("a stale launch price is labelled for review instead of displayed", () => {
- const tree=mount(source,"StockTable",deps,{projectId:"p",register,prices:{...prices,rows:[{...prices.rows[0],repricing_required:true}]},seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}})();
+ const render=mount(source,"StockTable",deps,{projectId:"p",register,prices:{...prices,rows:[{...prices.rows[0],repricing_required:true}]},seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}});
+ const initial=render(); nodes(initial).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick(); const tree=render();
  assert.ok(textOf(tree).includes("Review price")); assert.ok(!textOf(tree).includes("JOD 100000.00"));
+});
+
+test("floor browsing keeps identical labels in distinct buildings separate and states page scope", () => {
+ const render=mount(source,"StockTable",deps,{projectId:"p",register:{total:5,units:[{...unit,id:"a",building_id:"a",floor_id:"one",commercial_status:"available"},{...unit,id:"b",building_id:"b",floor_id:"two",commercial_status:"unreleased"}]},prices:null,seesPrice:false,priceError:null,expanded:false,onExpanded:()=>{}});
+ const tree=render();
+ assert.equal(nodes(tree).filter(n=>n.props?.className==="stock-floor-group").length,2);
+ assert.equal(nodes(tree).filter(n=>n.type==="RecordLink").length,2);
+ assert.match(textOf(tree), /Showing\s+2\s+of\s+5/);
+ assert.ok(textOf(tree).includes("Available"));
+ assert.ok(textOf(tree).includes("Unreleased"));
+ assert.ok(!textOf(tree).includes("Launch price · ex tax"));
 });

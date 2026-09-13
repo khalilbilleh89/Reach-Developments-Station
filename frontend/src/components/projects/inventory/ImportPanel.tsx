@@ -6,6 +6,7 @@ import { ApiError, inventory } from "@/lib/api";
 import type { ImportReport, WorkbookReport } from "@/lib/api";
 import {
   Button,
+  DraftBoundary,
   Field,
   FieldRow,
   FormActions,
@@ -109,7 +110,14 @@ export function ImportPanel({
   const records = report?.structure.records ?? null;
 
   return (
+    <DraftBoundary dirty={bytes !== null && !report?.applied} busy={busy}>
     <div className="stack">
+      <ol className="inventory-import-steps" aria-label="Import progress">
+        <li aria-current={bytes === null ? "step" : undefined}><strong>1</strong> Prepare workbook</li>
+        <li aria-current={bytes !== null && report === null ? "step" : undefined}><strong>2</strong> Validate file</li>
+        <li aria-current={report !== null && !report.applied ? "step" : undefined}><strong>3</strong> Review results</li>
+        <li aria-current={report?.applied ? "step" : undefined}><strong>4</strong> Apply accepted records</li>
+      </ol>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
@@ -197,12 +205,13 @@ export function ImportPanel({
       ) : null}
 
       <div>
-        <Button variant="quiet" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}>
+        <Button variant="quiet" data-leaves-editor onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}>
           {advanced ? "Hide advanced CSV import" : "Advanced CSV import"}
         </Button>
       </div>
       {advanced ? <CsvImport projectId={projectId} onApplied={onApplied} /> : null}
     </div>
+    </DraftBoundary>
   );
 }
 
@@ -286,6 +295,7 @@ function CsvImport({
   const ready = report !== null && report.error_count === 0 && !report.applied;
 
   return (
+    <DraftBoundary dirty={csv !== null && !report?.applied} busy={busy}>
     <div className="stack">
       <Notice tone="info">
         The CSV contract is unchanged. Use it for area schedules, custom fields and updates
@@ -352,5 +362,6 @@ function CsvImport({
         </>
       ) : null}
     </div>
+    </DraftBoundary>
   );
 }

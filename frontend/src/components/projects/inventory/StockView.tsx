@@ -1,8 +1,10 @@
 "use client";
+import { useState } from "react";
 import type { LaunchRegister, UnitRegister, UnitSummary } from "@/lib/api";
 import { Badge, Button, EmptyState, RecordLink, TableScroll } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { money } from "@/lib/format";
+import { statusLabel } from "./statusLabels";
 
 /** Display exact decimal strings without insignificant trailing zeroes. */
 export function stockArea(value:string|null|undefined,unit:string|null|undefined):string {
@@ -31,10 +33,32 @@ export function StockTable({projectId,register,prices,seesPrice,priceError,expan
   expanded:boolean;onExpanded:()=>void;
 }) {
   const codeOf=useCurrencyCode();
+  const [layout, setLayout] = useState<"browse" | "table">("browse");
   const priceByUnit=new Map(prices?.rows.map(price=>[price.unit_id,price]) ?? []);
+  const floors = new Map<string, { label: string; units: UnitSummary[] }>();
+  for (const unit of register.units) {
+    const key = JSON.stringify([unit.phase_id, unit.building_id, unit.floor_id]);
+    const group = floors.get(key) ?? { label: [unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" / ") || "Location not recorded", units: [] };
+    group.units.push(unit);
+    floors.set(key, group);
+  }
   return <section className="stock-register" aria-label="Stock schedule">
-    <div className="stock-register-heading"><div><h2>Unit schedule</h2><p>Compare your units, their features and launch prices.</p></div><Button small onClick={onExpanded} aria-pressed={expanded}>{expanded ? "Compact areas" : "Show all areas"}</Button></div>
-    {register.units.length===0 ? <EmptyState title="No stock matches these filters" hint="Clear or adjust your filters to see more units." /> : <TableScroll label="Stock units" fixedFirst stickyHeader>
+    <div className="stock-register-heading"><div><h2>Explore properties</h2><p>Compare your units, their features and launch prices.</p></div><div className="stock-view-controls"><Button small onClick={() => setLayout("browse")} aria-pressed={layout === "browse"}>By floor</Button><Button small onClick={() => setLayout("table")} aria-pressed={layout === "table"}>Schedule</Button>{layout === "table" ? <Button small onClick={onExpanded} aria-pressed={expanded}>{expanded ? "Compact areas" : "Show all areas"}</Button> : null}</div></div>
+    {register.units.length < register.total ? <p className="stock-note">Showing {register.units.length} of {register.total} matching units on this page. Floor groups cover this page only.</p> : null}
+    {register.units.length===0 ? <EmptyState title="No stock matches these filters" hint="Clear or adjust your filters to see more units." /> : layout === "browse" ? <div className="stock-floor-groups">
+      {[...floors].map(([key, group]) => <section key={key} className="stock-floor-group">
+        <h3>{group.label} <span>{group.units.length} on this page</span></h3>
+        <div className="stock-property-grid">{group.units.map(unit => {
+          const price = priceByUnit.get(unit.id);
+          return <article key={unit.id} className="stock-property-card">
+            <div className="stock-property-identity"><RecordLink projectId={projectId} kind="unit" id={unit.id} tab="detail">{unit.unit_reference}</RecordLink><Badge tone={unit.is_active ? "neutral" : "muted"}>{unit.is_active ? statusLabel(unit.commercial_status) : "Inactive"}</Badge></div>
+            <p>{unit.bedrooms ?? "—"} bed · {unit.bathrooms ?? "—"} bath · {unit.asset_class}</p>
+            <dl><div><dt>Internal</dt><dd>{componentArea(unit, "internal")}</dd></div><div><dt>Gross</dt><dd>{stockArea(unit.gross_area, unit.gross_area_unit)}</dd></div></dl>
+            {seesPrice ? <p className="stock-property-price">{priceError ? "Price unavailable" : price?.repricing_required ? "Price needs review" : price?.price ? money(price.price, codeOf(price.currency_id)) : "Not priced"}<small>Launch price · ex tax</small></p> : null}
+          </article>;
+        })}</div>
+      </section>)}
+    </div> : <TableScroll label="Stock units" fixedFirst stickyHeader>
       <thead><tr><th scope="col">Unit / location</th><th scope="col">Features</th><th scope="col">Internal</th><th scope="col">Balcony</th><th scope="col">Net</th><th scope="col">Gross</th>{expanded ? <><th scope="col">Roof garden</th><th scope="col">Terrace</th><th scope="col">Front garden</th><th scope="col">Porches</th></> : null}{seesPrice ? <th scope="col">Launch price · ex tax</th> : null}</tr></thead>
       <tbody>{register.units.map(unit=>{
         const price=priceByUnit.get(unit.id);

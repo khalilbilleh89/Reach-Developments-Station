@@ -32,7 +32,13 @@ export function UnitRelease({unit,roles,busy,onSaveControls,onTransition}: {
       <KeyValue label="Release batch" value={unit.release_batch} />
     </KeyValueGrid>}
     {preparing ? <>
-      {unit.release_blockers.length ? <Notice tone="info">Before release: {unit.release_blockers.join("; ")}. Commercial eligibility is managed in Sales.</Notice> : null}
+      {unit.release_blockers.length ? <Notice tone="info">
+        <strong>Complete before release</strong>
+        <ul className="unit-release-requirements">
+          {unit.release_blockers.map((blocker, index) => <li key={`${index}-${blocker}`}>{blocker}</li>)}
+        </ul>
+        Commercial eligibility is managed in Sales.
+      </Notice> : null}
       {canRelease ? <form onSubmit={event => {event.preventDefault(); onTransition({to_status:"available",effective_date:date,reason:""});}}>
         <Field label="Effective release date"><input className="input" type="date" required disabled={busy} value={date} onChange={event => setDate(event.target.value)} /></Field>
         <FormActions><Button type="submit" variant="primary" disabled={busy || !unit.is_active || !unit.release_eligible}>{busy ? "Releasing…" : "Release as Available"}</Button></FormActions>

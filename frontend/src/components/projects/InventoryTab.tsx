@@ -20,6 +20,7 @@ import {
   Loading,
   Notice,
   PageHeader,
+  RecordPage,
   PlaceCell,
   Position,
   PositionFigure,
@@ -236,7 +237,7 @@ export function InventoryTab({
       <PageHeader
         icon="inventory"
         title={view === "common_areas" ? "Common Areas" : view === "configuration" ? "Inventory Configuration" : view === "stock" ? "Stock" : "Inventory"}
-        subtitle={view === "common_areas" ? "Shared measurements for area feasibility." : view === "configuration" ? "Set the unit choices for this project." : view === "stock" ? "Your inventory, clearly laid out." : sectionDescription("inventory")}
+        subtitle={view === "common_areas" ? "Shared measurements for area feasibility." : view === "configuration" ? "Set the unit choices for this project." : view === "stock" ? "Compare properties, measurements and launch prices. Use Units for operational status and release readiness." : view === "units" ? "Manage unit status and release readiness. Use Stock to compare property measurements and prices." : sectionDescription("inventory")}
         compact
         actions={
           <>
@@ -263,22 +264,24 @@ export function InventoryTab({
         {hierarchyError ? <><Notice tone="error">{hierarchyError}</Notice><Button onClick={() => void loadHierarchy()}>Retry hierarchy</Button></> : null}
 
         {open === "areas" ? (
-          <Card
+          <RecordPage
             title="Area types"
-            description="How this project measures its units, and how much of each area it sells."
-            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
+            eyebrow="Inventory setup"
+            subtitle="How this project measures its units, and how much of each area it sells."
+            onClose={() => setOpen("none")}
           >
             <AreaTypesPanel canDelete={roles.has("system_admin") || roles.has("master_admin")} projectId={projectId} areaTypes={areaTypes} onChanged={refresh} />
-          </Card>
+          </RecordPage>
         ) : null}
         {open === "import" ? (
-          <Card
+          <RecordPage
             title="Import inventory"
-            description="Download the workbook, fill it in, validate, read what is wrong, fix it, apply. Nothing is written until the batch is clean."
-            actions={<Button variant="quiet" onClick={() => setOpen("none")}>Close</Button>}
+            eyebrow="Inventory setup"
+            subtitle="Prepare a workbook, review validation results, then apply the accepted records."
+            onClose={() => setOpen("none")}
           >
             <ImportPanel projectId={projectId} onApplied={refresh} />
-          </Card>
+          </RecordPage>
         ) : null}
 
         <Tabs
