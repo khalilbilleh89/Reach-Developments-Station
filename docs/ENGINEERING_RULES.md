@@ -284,6 +284,11 @@ Financial and legal transactions are **not physically deleted** during normal
 operations. Use controlled `void`, `cancel`, `reverse` or `supersede` operations,
 each recording user, timestamp and reason.
 
+The owner-approved, explicitly confirmed purge of a removed unit's closed linked
+history is the narrow exception described in `DELETION_POLICY.md`. Its dedicated
+maintenance operation may delete the listed domains' owned rows in one transaction;
+ordinary domain services and deletion workflows keep the rules above.
+
 ---
 
 ## 7. API conventions

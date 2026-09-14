@@ -100,14 +100,15 @@ test("Permit creation is a full-page single save, retaining all fields after fai
   render(); await settle();
   const change = (label, value) => nodes(render()).find(n => n.type === "Field" && n.props.label === label).props.children.props.onChange({ target: { value } });
   nodes(render()).find(n => n.type === "input" && n.props.type === "checkbox").props.onChange({ target: { checked: true } });
-  for (const [label, value] of [["Permit code", "TEST"], ["Authority", "Council"], ["New type code", "new"], ["New type name", "New consent"], ["Current status", "issued"], ["Fee", "1234.56"], ["Conditions", "Keep this condition"], ["Issued", "2026-09-10"]]) change(label, value);
+  for (const [label, value] of [["Permit code", "TEST"], ["Authority", "Council"], ["New type code", "new"], ["New type name", "New consent"], ["Fee", "1234.56"], ["Conditions", "Keep this condition"], ["Issued", "2026-09-10"]]) change(label, value);
   assert.ok(nodes(render()).some(n => n.type === "article"));
   assert.ok(!nodes(render()).some(n => ["RecordPage", "FormDialog"].includes(n.type)));
   await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(calls.length, 1);
   assert.equal(calls[0][1].new_permit_type.label, "New consent");
   assert.equal(calls[0][1].fee_amount, "1234.56");
-  assert.equal(calls[0][1].initial_status, "issued");
+  assert.equal(calls[0][1].initial_status, undefined);
+  assert.equal(calls[0][1].status_effective_date, undefined);
   assert.equal(calls[0][1].issue_date, "2026-09-10");
   assert.equal(nodes(render()).find(n => n.type === "Field" && n.props.label === "Conditions").props.children.props.value, "Keep this condition");
   assert.equal(completed, 0);

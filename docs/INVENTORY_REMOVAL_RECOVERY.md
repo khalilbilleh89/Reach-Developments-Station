@@ -49,10 +49,37 @@ are not part of either workflow.
   returns 204 only after physical deletion; a missing unit returns 404.
 
 No schema migration, uniqueness relaxation, dependency addition or financial
-calculation change is required. Existing audit and financial/legal retention
-contracts in `ENGINEERING_RULES.md` and `DELETION_POLICY.md` remain in force.
+calculation change is required. Ordinary deletion retains financial/legal history.
+The explicit purge exception below is documented in `DELETION_POLICY.md`.
 
 Regression coverage is in `tests/modules/test_inventory_recovery.py`: discovery,
 restore, history preservation, duplicate diagnostics, owner authorization,
 project isolation, inactive hierarchy, retry behavior, permanent SQL deletion,
 reference reuse, linked-record rollback, and deletion after restoration.
+
+## Purge a removed unit and its closed history
+
+When a cancelled sale or reservation blocks **Delete permanently**, choose the
+separate **Purge unit and linked history** action on its Removed units row. The
+full page previews the exact record counts and sale/reservation references. Review
+them, enter a reason, type the exact unit reference and acknowledge history erasure.
+The final button permanently deletes those records from SQL, freeing the unit number
+and reference. It also removes source document links, not externally stored files.
+Audit events, shared clients, settings and saved reporting snapshots remain.
+
+Active sales/reservations, confirmed receipt/refund cash and shared dependencies
+block the entire operation. Close or reverse the transaction through its owning
+workflow before refreshing the preview. A stale commercial status on an old removed
+unit does not block an otherwise eligible purge: the source documents are checked.
+If records change after preview, confirmation fails and a fresh preview is required.
+
+- `GET /api/v1/projects/{project_id}/inventory/units/{unit_id}/purge-preview`
+  returns counts, references, blockers and a content fingerprint without writes.
+- `POST /api/v1/projects/{project_id}/inventory/units/{unit_id}/purge` requires
+  `reason`, `confirm_reference`, `fingerprint` and `acknowledge_history_deletion: true`.
+  Returns 204 after atomic erasure; repeated requests return 404. Both routes require
+  Master Administrator and scope the unit to the selected project.
+
+`tests/modules/test_inventory_purge.py` exercises the new exception in PostgreSQL.
+There is no automatic purge during deployment and no database migration. Rolling
+back code removes the feature but cannot recover data already purged.

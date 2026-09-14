@@ -35,17 +35,15 @@
 .development-nav-links svg { width: 16px; height: 16px; }
 .development-nav-links a:hover { background: var(--surface); color: var(--text-primary); }
 .development-nav-links a[aria-current="page"] {
-  background: var(--surface);
-  border-color: var(--line-default);
+  background: var(--accent-soft);
+  border-color: var(--workspace-line);
   color: var(--accent);
   box-shadow: var(--dev-shadow);
 }
 .development-content { min-width: 0; }
-.development-workspace .page-head { padding-bottom: 20px; gap: 20px; border-bottom: 1px solid var(--line-default); }
-.development-workspace .page-title { font-family: var(--font-display); font-weight: 400; font-size: clamp(2.25rem, 3.4vw, 3.25rem); letter-spacing: -.045em; }
-.development-workspace .page-glyph { display: none; }
-.development-workspace .tab-active { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
-.development-workspace .page-subtitle { max-width: 65ch; line-height: 1.6; }
+.development-workspace .page-head { padding-bottom: 16px; margin-bottom: 20px; gap: 12px; border-bottom: 1px solid var(--line-default); }
+.development-workspace .page-title { font-family: var(--font-display); font-weight: 400; font-size: clamp(2rem,2.8vw,2.6rem); letter-spacing: -.045em; }
+.development-workspace .page-subtitle { max-width: 65ch; line-height: 1.6; font-size: .85rem; margin-top: 6px; }
 .development-workspace .card { border: 1px solid var(--line-default); border-radius: var(--dev-radius); box-shadow: var(--dev-shadow); }
 .development-workspace .card-header { padding: 22px 24px; }
 .development-workspace .card-title { letter-spacing: -.02em; }
@@ -87,6 +85,7 @@
 }
 .development-workspace .record-overview { gap: 24px; }
 .development-workspace .stock-summary {
+  margin: 0;
   border-radius: var(--dev-radius);
   overflow: hidden;
   border: 1px solid var(--line-default);
@@ -102,7 +101,7 @@
 .development-workspace .plate { padding: 0 0 26px; border-bottom: 1px solid var(--line-default); margin-bottom: 28px; }
 .development-workspace .plate-title { font-family: var(--font-display); font-size: clamp(2.75rem, 4vw, 4rem); font-weight: 400; }
 .land-layout-controls { display: flex; gap: var(--space-2); }
-.land-register-surface { min-width: 0; }
+.land-workspace, .land-register-surface { min-width: 0; }
 .land-schedule { border: 1px solid var(--line-default); border-radius: var(--dev-radius); overflow: hidden; background: var(--surface); }
 .parcel-collection { display: grid; gap: 24px; }
 .parcel-estate { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--dev-radius); overflow: hidden; }
@@ -120,7 +119,7 @@
 .parcel-estate-context { display: grid; align-content: start; border-left: 1px solid var(--line-default); padding: 28px; min-width: 0; }
 .parcel-estate-context section + section { border-top: 1px solid var(--line-default); padding-top: 24px; margin-top: 24px; }
 .parcel-estate-context h3 { font-size: var(--text-lg); margin: 12px 0; font-weight: 500; }
-.parcel-estate-price { font-size: clamp(1.4rem, 2.1vw, 2rem); margin: 14px 0 8px; letter-spacing: -.035em; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.parcel-estate-price { font-size: clamp(1.4rem, 2.1vw, 2rem); margin: 14px 0 8px; letter-spacing: -.035em; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; color: var(--accent); }
 .parcel-estate-date { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-top: 24px; font-size: var(--text-xs); }
 .parcel-estate-date strong { font-weight: 500; }
 .stock-browser { display: grid; grid-template-columns: minmax(150px, 22%) minmax(0, 1fr); }
@@ -130,15 +129,14 @@
 .stock-hierarchy button:hover { background: var(--surface-hover); }
 .stock-property-emblem { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--line-soft); color: var(--text-muted); font-size: var(--text-xs); text-transform: capitalize; }
 .stock-property-emblem .icon { width: 34px; height: 34px; padding: 7px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); }
-.development-workspace .stock-property-card { padding: 22px; border-radius: 10px; background: var(--surface); }
+.development-workspace .stock-property-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line-default); border-radius: 12px; }
 .development-workspace .stock-property-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
-.development-workspace .stock-property-card:only-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+.development-workspace .stock-property-card:only-child { display: flex; gap: 12px 24px; }
 .development-workspace .stock-property-card:only-child .stock-property-emblem,
 .development-workspace .stock-property-card:only-child .stock-property-identity,
 .development-workspace .stock-property-card:only-child .stock-property-price { grid-column: 1 / -1; }
-.development-workspace .stock-property-identity a { font-size: 1.35rem; letter-spacing: -.025em; }
+.development-workspace .stock-property-identity a { font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; letter-spacing: -.025em; color: var(--accent); }
 .development-workspace .stock-property-price { margin-top: 20px; font-size: 1.3rem; }
-.development-workspace .stock-summary { margin: 0; }
 .development-workspace .stock-summary > div { padding: 20px; }
 .development-workspace .stock-summary-lead strong { color: var(--accent); }
 .development-entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 16px; }
@@ -177,6 +175,7 @@
   .development-workspace .workspace-actions > .button { width: 100%; }
 }
 /* White development workspaces: approvals, design records and expense entries. */
+.permit-workspace-register { min-width: 0; }
 .permit-approval-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr)); gap: 24px; }
 .permit-approval-grid .permit-register-card { padding: 28px; border: 1px solid var(--line-default); border-radius: var(--dev-radius); background: var(--surface); min-width: 0; }
 .permit-approval-grid .permit-register-card h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: 1.9rem; font-weight: 400; overflow-wrap: anywhere; }
@@ -199,6 +198,7 @@
 .consultant-record-card dt,.expense-entry dt,.expense-category-list dt { font-size: var(--text-xs); color: var(--text-secondary); }
 .consultant-record-card dd,.expense-entry dd,.expense-category-list dd { margin: 6px 0 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .consultant-record-card dl > div:last-child { grid-column: 1 / -1; border-top: 1px solid var(--line-soft); padding-top: 16px; }
+.prelaunch-workspace { min-width: 0; }
 .prelaunch-ledger-layout { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(260px, 1fr); gap: 24px; align-items: start; }
 .prelaunch-ledger-layout > * { min-width: 0; }
 .prelaunch-ledger-layout > section + section { margin-top: 0; }
@@ -264,18 +264,15 @@
 .land-register-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .land-register-toolbar > :first-child { flex: 1; min-width: 0; }
 .land-register-toolbar .land-layout-controls { flex-shrink: 0; }
-.land-register-toolbar .data-toolbar { border: 0; background: transparent; padding-inline: 0; }
+.land-register-toolbar .toolbar { border: 0; background: transparent; padding-inline: 0; }
 .parcel-architectural { grid-template-columns: minmax(0,2fr) minmax(240px,1fr); border-radius: 6px; }
 .parcel-architectural .parcel-estate-identity { background: var(--surface); border-top: 3px solid var(--accent); padding: 26px 28px 22px; }
 .parcel-architectural .parcel-estate-title { margin: 18px 0; }
 .parcel-architectural .parcel-estate-title h2 { font-size: clamp(3rem,5vw,5rem); }
 .parcel-architectural .parcel-estate-area strong { font-size: clamp(2rem,3vw,3rem); }
-.parcel-architectural .parcel-estate-context { background: var(--surface-secondary); }
+.parcel-architectural .parcel-estate-context { background: var(--surface); }
 .parcel-architectural .parcel-estate-facts .kv { gap: 20px 32px; }
 .parcel-architectural .parcel-estate-context h3 { font-family: var(--font-display); font-size: 1.5rem; }
-.development-workspace .page-head { padding-bottom: 16px; margin-bottom: 20px; gap: 12px; }
-.development-workspace .page-title { font-size: clamp(2rem,2.8vw,2.6rem); }
-.development-workspace .page-subtitle { font-size: .85rem; margin-top: 6px; }
 @media (max-width: 760px) {
   .building-atlas { padding: 16px; }
   .atlas-toolbar { flex-direction: column; gap: 16px; }
@@ -347,23 +344,21 @@
 }
 
 /* Blue is a secondary surface, while records and primary reading areas stay white. */
-.development-workspace { --dev-blue-wash: #f0f5ff; --dev-blue-line: #d7e3fa; }
-.development-workspace .page-glyph { display: grid; place-items: center; width: 48px; height: 48px; flex: none; border: 1px solid var(--dev-blue-line); border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
+.development-workspace .page-glyph { display: grid; place-items: center; width: 48px; height: 48px; flex: none; border: 1px solid var(--workspace-line); border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
 .development-workspace .page-glyph .icon { width: 25px; height: 25px; }
 .development-workspace .workspace-facts,
 .development-workspace .atlas-building > header,
-.development-workspace .parcel-architectural .parcel-estate-identity { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
+.development-workspace .parcel-architectural .parcel-estate-identity { background: var(--workspace-wash); border-color: var(--workspace-line); }
 .development-workspace .briefing-dates { border-top: 3px solid var(--accent); }
-.development-workspace .briefing-dates > header { background: var(--dev-blue-wash); margin: -24px -24px 20px; padding: 20px 24px 10px; }
+.development-workspace .briefing-dates > header { background: var(--workspace-wash); margin: -24px -24px 20px; padding: 20px 24px 10px; }
 .development-workspace .eyebrow:has(> .icon), .entry-label { display: inline-flex; align-items: center; gap: 9px; }
 .entry-label > .icon { width: 32px; height: 32px; padding: 7px; box-sizing: border-box; border-radius: 9px; color: var(--accent); background: var(--accent-soft); }
-.development-workspace .development-entry:hover { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
-.development-workspace .button:not(.button-primary):not(.button-danger):not(.button-link):not(.button-quiet) { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); color: var(--accent); }
+.development-workspace .development-entry:hover { background: var(--workspace-wash); border-color: var(--workspace-line); }
+.development-workspace .button:not(.button-primary):not(.button-danger):not(.button-link):not(.button-quiet) { background: var(--workspace-wash); border-color: var(--workspace-line); color: var(--accent); }
 .development-workspace .button:not(.button-primary):not(.button-danger):not(.button-link):not(.button-quiet):hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
 .development-workspace .tab { display: inline-flex; align-items: center; gap: 8px; }
 .development-workspace .tab > .icon { width: 17px; height: 17px; flex: none; color: var(--accent); }
-.development-workspace .tab-active { box-shadow: inset 0 -2px var(--accent); }
-.development-nav-links a[aria-current="page"] { background: var(--accent-soft); border-color: var(--dev-blue-line); }
+.development-workspace .tab-active { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
 .sidebar .nav-icon, .nav-page .nav-icon { width: 26px; height: 26px; padding: 4px; box-sizing: border-box; border-radius: 7px; background: var(--accent-soft); color: var(--accent); }
 .sidebar .nav-item[aria-current="page"] .nav-icon, .nav-page .nav-item[aria-current="page"] .nav-icon { color: var(--accent-contrast); background: var(--accent); }
 @media (max-width: 600px) {
@@ -373,23 +368,20 @@
 }
 
 /* Property presentation: colour belongs to a status or a deliberate point of emphasis. */
-.property-building-nav { display: flex; gap: 24px; align-items: center; padding: 18px 24px; background: var(--dev-blue-wash); border-block: 1px solid var(--dev-blue-line); }
+.property-building-nav { display: flex; gap: 24px; align-items: center; padding: 18px 24px; background: var(--workspace-wash); border-block: 1px solid var(--workspace-line); }
 .property-building-nav > div:first-child { display: flex; align-items: center; gap: 12px; color: var(--accent); font-weight: 600; }
 .property-building-nav > div:first-child > .icon { width: 25px; height: 25px; }
 .property-building-nav .footnote { display: block; margin: 4px 0 0; font-weight: 400; white-space: nowrap; }
 .property-building-options { display: flex; flex-wrap: wrap; gap: 8px; }
-.property-building-options button { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); color: var(--text-secondary); border: 1px solid var(--dev-blue-line); border-radius: 8px; font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.property-building-options button { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); color: var(--text-secondary); border: 1px solid var(--workspace-line); border-radius: 8px; font: inherit; font-size: var(--text-sm); cursor: pointer; }
 .property-building-options button > span { font-variant-numeric: tabular-nums; color: var(--accent); }
 .property-building-options button[aria-pressed="true"] { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
 .property-building-options button[aria-pressed="true"] > span { color: inherit; }
 .property-building-options button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .atlas-floor-label small { font-size: var(--text-xs); color: var(--text-muted); font-weight: 400; }
-.development-workspace .stock-property-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--line-default); border-radius: 12px; }
-.development-workspace .stock-property-card:only-child { display: flex; }
 .development-workspace .stock-property-card > * { margin-inline: 22px; }
-.development-workspace .stock-property-card .stock-property-emblem { margin: 0 0 18px; padding: 16px 22px; background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
+.development-workspace .stock-property-card .stock-property-emblem { margin: 0 0 18px; padding: 16px 22px; background: var(--workspace-wash); border-color: var(--workspace-line); }
 .development-workspace .stock-property-identity { gap: 12px; align-items: flex-start; flex-wrap: wrap; }
-.development-workspace .stock-property-identity a { font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; color: var(--accent); }
 .property-feature-row { display: flex; flex-wrap: wrap; gap: 10px 16px; padding-block: 18px 12px; }
 .property-feature-row > span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
 .property-feature-row .icon { color: var(--accent); width: 18px; height: 18px; }
@@ -403,10 +395,8 @@
 .parcel-classification, .property-section-title, .parcel-estate-footer > span { display: flex; align-items: center; gap: 9px; }
 .property-section-title { margin: 0 0 22px; color: var(--text-secondary); font-size: var(--text-sm); font-weight: 600; }
 .property-section-title .icon, .parcel-classification .icon, .parcel-estate-footer > span .icon { color: var(--accent); flex: none; }
-.parcel-architectural .parcel-estate-context { background: var(--surface); }
-.parcel-architectural .parcel-estate-context > section { border: 1px solid var(--dev-blue-line); border-radius: 10px; padding: 20px; background: var(--dev-blue-wash); }
+.parcel-architectural .parcel-estate-context > section { border: 1px solid var(--workspace-line); border-radius: 10px; padding: 20px; background: var(--workspace-wash); }
 .parcel-architectural .parcel-estate-context > section + section { margin-top: 16px; padding-top: 20px; }
-.parcel-estate-price { color: var(--accent); }
 @media (max-width: 760px) {
  .property-building-nav { flex-direction: column; align-items: stretch; gap: 14px; padding: 18px; }
  .property-building-options { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }
@@ -428,7 +418,7 @@
 .permit-record-review p { display: flex; gap: 9px; align-items: flex-start; font-size: var(--text-xs); line-height: 1.6; color: var(--warning); }
 .permit-record-review .icon { flex: none; margin-top: 2px; }
 .development-workspace .expense-entry { border: 1px solid var(--line-default); border-radius: 10px; overflow: hidden; padding: 0; }
-.development-workspace .expense-entry > header { padding: 22px; background: var(--dev-blue-wash); border-bottom: 1px solid var(--dev-blue-line); }
+.development-workspace .expense-entry > header { padding: 22px; background: var(--workspace-wash); border-bottom: 1px solid var(--workspace-line); }
 .development-workspace .expense-entry > dl { padding: 18px 22px; margin: 0; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
 .development-workspace .expense-entry > footer { margin: 0; padding: 16px 22px; background: var(--surface-secondary); border-top: 1px solid var(--line-soft); }
 .expense-entry > .footnote { padding-inline: 22px; }
@@ -437,7 +427,7 @@
 .document-references > span { display: flex; align-items: flex-start; gap: 7px; overflow-wrap: anywhere; }
 .document-references .icon { flex: none; color: var(--accent); margin-top: 2px; }
 .development-workspace .consultant-record-card { padding: 0; overflow: hidden; }
-.development-workspace .consultant-record-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 20px; background: var(--dev-blue-wash); border-bottom: 1px solid var(--dev-blue-line); }
+.development-workspace .consultant-record-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 20px; background: var(--workspace-wash); border-bottom: 1px solid var(--workspace-line); }
 .development-workspace .consultant-record-card h3 { color: var(--text-primary); font-size: 1.2rem; line-height: 1.4; }
 .development-workspace .consultant-record-card > dl { padding: 20px; margin: 0; gap: 18px; }
 .development-workspace .consultant-record-card > footer { padding: 14px 20px; border-top: 1px solid var(--line-soft); color: var(--text-muted); font-size: var(--text-xs); }
