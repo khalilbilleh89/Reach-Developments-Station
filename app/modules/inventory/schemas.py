@@ -46,6 +46,34 @@ class UnitRestoreRequest(StrictRequest):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class UnitPurgeCount(BaseModel):
+    label: str
+    count: int
+
+
+class UnitPurgeTransaction(BaseModel):
+    kind: str
+    reference: str
+    status: str
+
+
+class UnitPurgePreview(BaseModel):
+    unit_id: uuid.UUID
+    unit_reference: str
+    fingerprint: str
+    counts: list[UnitPurgeCount]
+    total_records: int
+    transactions: list[UnitPurgeTransaction]
+    blockers: list[str]
+
+
+class UnitPurgeRequest(StrictRequest):
+    reason: str = Field(min_length=1, max_length=500)
+    confirm_reference: str = Field(min_length=1, max_length=200)
+    fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    acknowledge_history_deletion: Literal[True]
+
+
 class RemovedUnitRead(BaseModel):
     id: uuid.UUID
     unit_number: str
