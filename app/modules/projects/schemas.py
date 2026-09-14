@@ -526,8 +526,8 @@ class PermitCreateRequest(_PermitFacts):
 class PermitUpdateRequest(_PermitFacts):
     """``status`` is absent on purpose.
 
-    Status moves only through the transition endpoint, so an ordinary update
-    cannot overwrite the register's history by setting a column.
+    Actual milestone edits derive status and append history atomically. Manual
+    transitions also append history; callers cannot directly set the column.
     """
 
     permit_type_code: str | None = Field(default=None, min_length=1, max_length=64)

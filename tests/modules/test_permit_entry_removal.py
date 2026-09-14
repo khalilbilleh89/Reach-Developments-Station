@@ -46,7 +46,8 @@ def test_one_save_records_current_status_and_full_details(
         is_blocking=True,
         is_critical_path=True,
     )
-    assert result["status"] == initial_status
+    assert result["status"] == "completed"
+    assert result["status_effective_date"] == "2026-01-01"
     assert result["fee_amount"] == "123.45"
     assert result["conditions"] == "Sample condition"
     assert result["expiry_date"] == "2027-01-01"
@@ -54,7 +55,7 @@ def test_one_save_records_current_status_and_full_details(
         f"{PROJECTS}/{project_id}/permits/{result['id']}/status-history"
     ).json()
     assert len(history) == 1
-    assert history[0]["reason"] == "Initial recorded status"
+    assert history[0]["reason"] == "Status derived from permit dates"
     assert (
         db.scalar(
             select(func.count())

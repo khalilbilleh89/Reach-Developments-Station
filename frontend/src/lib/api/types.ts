@@ -791,6 +791,23 @@ export interface PriceVersionDetail extends PriceVersion {
   basis_snapshot_json: Record<string, unknown>;
 }
 
+export interface UnitPurgePreview {
+  unit_id: string;
+  unit_reference: string;
+  fingerprint: string;
+  counts: { label: string; count: number }[];
+  total_records: number;
+  transactions: { kind: string; reference: string; status: string }[];
+  blockers: string[];
+}
+
+export interface UnitPurgeRequest {
+  reason: string;
+  confirm_reference: string;
+  fingerprint: string;
+  acknowledge_history_deletion: true;
+}
+
 export interface RemovedUnit {
   id: string;
   unit_number: string;

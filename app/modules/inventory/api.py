@@ -25,6 +25,7 @@ from app.modules.inventory import (
     deletion,
     import_service,
     physical,
+    purge,
     service,
     workbook,
 )
@@ -88,6 +89,8 @@ from app.modules.inventory.schemas import (
     UnitDocumentRead,
     UnitFeatureCreate,
     UnitFeatureRead,
+    UnitPurgePreview,
+    UnitPurgeRequest,
     UnitRegister,
     UnitRestoreRequest,
     UnitStatusEventRead,
@@ -539,6 +542,30 @@ def list_removed_units(
         )
         for unit in units
     ]
+
+
+@router.get(
+    "/{project_id}/inventory/units/{unit_id}/purge-preview", response_model=UnitPurgePreview
+)
+def preview_unit_purge(
+    unit_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> UnitPurgePreview:
+    return purge.preview_purge(session, project=project, actor=actor, unit_id=unit_id)
+
+
+@router.post("/{project_id}/inventory/units/{unit_id}/purge", status_code=204)
+def purge_unit_history(
+    unit_id: uuid.UUID,
+    payload: UnitPurgeRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> Response:
+    purge.purge_unit(session, project=project, actor=actor, unit_id=unit_id, request=payload)
+    return Response(status_code=204)
 
 
 @router.post("/{project_id}/inventory/units/{unit_id}/restoration", response_model=UnitDetail)

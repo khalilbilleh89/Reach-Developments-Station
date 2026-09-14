@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, inventory } from "@/lib/api";
 import type { RemovedUnit } from "@/lib/api";
 import { UnitPermanentDeletionAction } from "./UnitRemovalAction";
+import { UnitPurgePage } from "./UnitPurgePage";
 import {
   Button, Card, DataToolbar, EmptyState, Loading, Notice, PromptDialog,
   RecordPage, TableScroll,
@@ -21,6 +22,7 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
   const [rows, setRows] = useState<RemovedUnit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RemovedUnit | null>(null);
+  const [purging, setPurging] = useState<RemovedUnit | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -63,6 +65,13 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
     }
   }
 
+  if (purging) return <UnitPurgePage key={`${projectId}:${purging.id}`} projectId={projectId} unit={purging}
+    onClose={() => setPurging(null)} onPurged={() => {
+      setMessage(`${purging.unit_reference} and its selected history were permanently purged. Its number and reference can be reused.`);
+      setPurging(null); setOffset(0); reload();
+      void onRestored().catch(() => setError("The unit was purged. Refresh Inventory to update its totals."));
+    }} />;
+
   return <RecordPage title="Removed units" icon="inventory" onClose={onClose}
     subtitle="Recover a retained unit using its original number, reference and history.">
     <div className="stack">
@@ -82,6 +91,7 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
           <td><div className="button-row"><Button disabled={busy} onClick={() => { setSelected(unit); setRestoreError(null); }}>Restore {unit.unit_reference}</Button>
             <UnitPermanentDeletionAction projectId={projectId} unitId={unit.id} reference={unit.unit_reference}
               onDeleted={async () => { setOffset(0); reload(); await onRestored(); }} />
+            <Button variant="danger" disabled={busy} onClick={() => setPurging(unit)}>Purge unit and linked history</Button>
           </div></td>
         </tr>)}</tbody></TableScroll> : <EmptyState title="No removed units found" hint="Try another reference or return to Inventory to check the current units." />}
       </Card> : null}

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, projects } from "@/lib/api";
 import type { LandParcel, Permit, PermitType } from "@/lib/api";
-import { todayISO } from "@/lib/format";
 import { Button, Card, DraftBoundary, Field, FieldRow, FormActions, FormSection, Notice, PageHeader } from "@/components/ui";
 
 const DETAILS = [
@@ -26,14 +25,14 @@ const DETAILS = [
   ["notes", "Notes", "textarea", "Management", 4000],
 ] as const;
 
-export function PermitCreatePage({ projectId, types, parcels, permits, statuses, canSeeCost, currencyCode, onCancel, onCreated }: {
+export function PermitCreatePage({ projectId, types, parcels, permits, canSeeCost, currencyCode, onCancel, onCreated }: {
   projectId: string; types: PermitType[] | null; parcels: LandParcel[]; permits: Permit[];
-  statuses: Record<string, string>; canSeeCost: boolean; currencyCode: string | null;
+  canSeeCost: boolean; currencyCode: string | null;
   onCancel: () => void; onCreated: (permit: Permit) => Promise<void>;
 }) {
   const [baseline] = useState<Record<string, string | boolean>>(() => ({
-    permit_code: "", permit_type_code: "", authority: "", initial_status: "not_started",
-    status_effective_date: todayISO(), parcel_id: "", prerequisite_permit_id: "",
+    permit_code: "", permit_type_code: "", authority: "",
+    parcel_id: "", prerequisite_permit_id: "",
     owner_user_id: "", escalation_owner_user_id: "", fee_amount: "", is_blocking: false,
     is_critical_path: false, ...Object.fromEntries(DETAILS.map(([name]) => [name, ""])),
   }));
@@ -83,8 +82,6 @@ export function PermitCreatePage({ projectId, types, parcels, permits, statuses,
             <FieldRow columns={3}>
               <Field label="Permit code"><input className="input" required maxLength={64} value={String(values.permit_code)} onChange={e => set("permit_code", e.target.value)} /></Field>
               <Field label="Authority"><input className="input" required maxLength={200} value={String(values.authority)} onChange={e => set("authority", e.target.value)} /></Field>
-              <Field label="Current status"><select className="input" value={String(values.initial_status)} onChange={e => set("initial_status", e.target.value)}>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></Field>
-              <Field label="Status effective date" hint="When this current status took effect, not necessarily today's date."><input className="input" type="date" required value={String(values.status_effective_date)} onChange={e => set("status_effective_date", e.target.value)} /></Field>
             </FieldRow>
             <label className="checkbox"><input type="checkbox" checked={newType} onChange={e => setNewType(e.target.checked)} />This is a new permit type</label>
             {newType ? <FieldRow columns={2}>
@@ -95,6 +92,7 @@ export function PermitCreatePage({ projectId, types, parcels, permits, statuses,
               {types?.filter(type => type.is_active).map(type => <option key={type.id} value={type.code}>{type.label}</option>)}
             </select></Field>}
           </FormSection>
+          <p className="subtle">Actual milestone dates set the status automatically when saved. An issue date means Completed. Planned, forecast and expiry dates do not change status.</p>
           <FormSection title="Scope and responsibility">
             {peopleError ? <Notice tone="error">Could not load permit owners. <Button onClick={() => setRetry(n => n + 1)}>Retry owners</Button></Notice> : null}
             <FieldRow columns={2}>
