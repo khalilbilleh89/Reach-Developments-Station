@@ -21,6 +21,7 @@ import {
   ButtonRow,
   Card,
   DataToolbar,
+  Disclosure,
   IdentityCell,
   ConfirmDialog,
   Tabs,
@@ -742,8 +743,7 @@ function PermitFile({
           </section>
 
           {canWrite && moves.length > 0 ? (
-            <details>
-              <summary>Other status changes (optional)</summary>
+            <Disclosure title="Other status changes (optional)">
               <SectionHeader
                 title="Change status"
                 description="Recorded with the date it took effect and kept in the history. You may add a reason, but it is optional."
@@ -793,7 +793,7 @@ function PermitFile({
                   </FormActions>
                 </form>
               </DraftBoundary>
-            </details>
+            </Disclosure>
           ) : null}
         </>
       ) : null}
