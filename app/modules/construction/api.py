@@ -5,15 +5,18 @@ every commitment, certified total, net due, outstanding balance, estimate and
 variance arrives from the service already decided, so the API and the rows agree
 by construction rather than by two implementations happening to match.
 
-No status is writable. Submitting, approving, rejecting, activating, certifying,
+No financial status is writable. Submitting, approving, rejecting, activating, certifying,
 confirming and reversing are separate acts with separate rights and separate
 preconditions, so each has its own route — a ``PATCH {"status": "certified"}``
 would be somebody's signature available to whoever could reach the endpoint.
 
-There is no DELETE anywhere in this module. A financial record leaves through a
+A financial record leaves through a
 controlled reversal, void, cancellation or supersession, each with an actor, a
 timestamp and a reason, because the question a year later is not whether a row
 exists but who removed it and why.
+
+Technical specifications have separate sales-readable access and explicit
+draft/confirmed metadata. Their Delete removes drafts or retains confirmed evidence.
 
 Two dependencies decide what a caller may reach. ``ConstructionProject`` gates
 every route on being able to read the module at all. ``GovernedConstructionProject``
@@ -27,11 +30,11 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.core.errors import ValidationError
 from app.modules.access.dependencies import ActiveActor, DbSession
-from app.modules.construction import permissions, schemas, service
+from app.modules.construction import permissions, schemas, service, specifications
 from app.modules.construction import stages as stage_service
 from app.modules.construction.models import BudgetVersion
 from app.modules.construction.permissions import (
@@ -57,6 +60,49 @@ from app.modules.construction.read import (
 from app.modules.inventory.permissions import InventoryProject
 
 router = APIRouter(prefix="/projects/{project_id}/construction", tags=["construction"])
+
+
+@router.get("/technical-specifications", response_model=list[specifications.SpecificationRead])
+def read_technical_specifications(
+    project: InventoryProject, session: DbSession, actor: ActiveActor
+) -> list:
+    return specifications.list_specifications(session, project.id, actor)
+
+
+@router.post(
+    "/technical-specifications", response_model=specifications.SpecificationRead, status_code=201
+)
+def create_technical_specification(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    payload: specifications.SpecificationInput,
+) -> object:
+    return specifications.save(session, project.id, actor, payload)
+
+
+@router.put(
+    "/technical-specifications/{specification_id}", response_model=specifications.SpecificationRead
+)
+def update_technical_specification(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    specification_id: uuid.UUID,
+    payload: specifications.SpecificationInput,
+) -> object:
+    return specifications.save(session, project.id, actor, payload, specification_id)
+
+
+@router.delete("/technical-specifications/{specification_id}", status_code=204)
+def delete_technical_specification(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    specification_id: uuid.UUID,
+    reason: str = Query(min_length=1, max_length=1000),
+) -> None:
+    specifications.delete(session, project.id, actor, specification_id, reason)
 
 
 @router.get("/stages", response_model=list[schemas.StageOut])

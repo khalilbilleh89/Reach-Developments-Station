@@ -476,9 +476,9 @@ class TestTheTriggerOptionsRespectTheSameScope:
         assert codes == {"PHASE-A-TOP", "PHASE-B-TOP", "PRACTICAL-COMPLETION"}
 
 
-class TestNothingIsDeletable:
-    def test_construction_exposes_no_delete_route(self) -> None:
-        """Governed history is superseded, reversed or voided. Never removed."""
+class TestFinancialHistoryIsNotDeletable:
+    def test_only_specification_guide_exposes_delete(self) -> None:
+        """The sales guide has removal; governed financial history still has none."""
         from app.main import create_app
 
         paths = create_app().openapi()["paths"]
@@ -487,4 +487,6 @@ class TestNothingIsDeletable:
             for path, methods in paths.items()
             if "/construction" in path and "delete" in methods
         ]
-        assert deletes == []
+        assert deletes == [
+            "/api/v1/projects/{project_id}/construction/technical-specifications/{specification_id}"
+        ]

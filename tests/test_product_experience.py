@@ -563,7 +563,7 @@ class TestOnlyEntitledReadersAsk:
             ("payments", "PLAN_READERS"),
             ("collections", "COLLECTION_READERS"),
             ("commissions", "COMMISSION_READERS"),
-            ("construction", "CONSTRUCTION_READERS"),
+            ("construction", "SPECIFICATION_READERS"),
             ("economics", "ECONOMICS_READERS"),
             ("cashflow", "CASHFLOW_READERS"),
         ):

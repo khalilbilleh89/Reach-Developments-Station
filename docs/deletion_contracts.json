@@ -638,5 +638,13 @@
     "removal_route": "DELETE /{project_id}/inventory/common-areas/{area_id}",
     "ui_file": "frontend/src/components/projects/inventory/CommonAreas.tsx",
     "notes": "Common Areas row Delete requires a reason, whole-project structure permission and scoped project lock; retains source values in audit and refreshes register. Allocated apartments are protected by a restrictive foreign key."
+  },
+  {
+    "handler": "construction.create_technical_specification",
+    "create_route": "POST /technical-specifications",
+    "status": "implemented",
+    "removal_route": "DELETE /technical-specifications/{specification_id}",
+    "ui_file": "frontend/src/components/projects/construction/TechnicalSpecifications.tsx",
+    "notes": "Whole-project technical writers delete drafts or remove confirmed specifications with retained data and audit; reason required. No dependent transactions are deleted."
   }
 ]

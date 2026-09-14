@@ -7,6 +7,45 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test("sales opens only Technical Specifications and never requests construction costs", async () => {
+  let costs = 0;
+  const render = mount("projects/ConstructionTab", "ConstructionTab", {
+    "@/lib/api": { construction: { summary: async () => { costs++; } } },
+    "@/lib/roles": { CONSTRUCTION_READERS: new Set(["finance"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) },
+    "@/components/shell/registerState": { useRegisterFields: () => [{ constructionTab: "budget" }, () => {}] },
+    "./construction/TechnicalSpecifications": { TechnicalSpecifications: "TechnicalSpecifications" },
+  }, { projectId: "project", roles: new Set(["sales_advisor"]) });
+  render(); await settle();
+  const tree = nodes(render());
+  const tabs = tree.find(node => node.type === "Tabs").props;
+  assert.equal(tabs.active, "technical-specifications");
+  assert.equal(tabs.tabs.length, 1);
+  assert.equal(tabs.tabs[0].label, "Technical Specifications");
+  assert.equal(costs, 0);
+  assert.ok(tree.some(node => node.type === "TechnicalSpecifications"));
+});
+
+test("specification guide searches applicability and saves a complete versioned record", async () => {
+  const row = { id: "spec", project_id: "project", category: "water", title: "Hot water", scope: "units", applies_to: "All 2-bedroom units", description: "Synthetic heater", brand_model: "", inclusion: "included", status: "confirmed", source_reference: "Schedule A", version: 4, updated_at: "2026-09-14T10:00:00Z" };
+  let saved;
+  const render = mount("projects/construction/TechnicalSpecifications", "TechnicalSpecifications", {
+    "@/lib/api/technicalSpecifications": { technicalSpecifications: { list: async () => [row], update: async (...args) => { saved = args; } } },
+    "@/lib/roles": { hasAnyRole: () => true }, "@/lib/format": { businessDate: value => value },
+    "../EditForm": { EditForm: "EditForm" }, "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
+  }, { projectId: "project", roles: new Set(["project_manager"]) });
+  render(); await settle();
+  nodes(render()).find(node => node.type === "DataToolbar").props.search.onChange("2-bedroom");
+  assert.ok(nodes(render()).some(node => node.type === "SectionHeader" && node.props.title === "Hot water"));
+  assert.ok(nodes(render()).some(node => node.type === "DeleteRecordButton"));
+  nodes(nodes(render()).find(node => node.type === "SectionHeader" && node.props.title === "Hot water").props.actions)[0].props.onClick();
+  const form = nodes(render()).find(node => node.type === "EditForm");
+  assert.ok(nodes(render()).some(node => node.type === "RecordPage"));
+  await form.props.onSave({ description: "Updated heater", brand_model: null });
+  assert.equal(saved[0], "project"); assert.equal(saved[1], "spec");
+  assert.equal(saved[2].version, 4); assert.equal(saved[2].description, "Updated heater");
+  assert.equal(saved[2].applies_to, "All 2-bedroom units"); assert.equal(saved[2].brand_model, "");
+});
+
 test("Issued permits offer Completed and submit without a mandatory reason", async () => {
   const calls = [];
   const permit = { id: "permit", permit_code: "TEST", status: "issued", prerequisite_satisfied: true };
