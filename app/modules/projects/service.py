@@ -1619,6 +1619,73 @@ def _validate_permit_links(
             _require_project_member(session, project_id=project.id, user_id=user_id, label=label)
 
 
+_PERMIT_DATE_STATUSES = (
+    ("actual_submission_date", "submitted"),
+    ("accepted_for_review_date", "accepted_for_review"),
+    ("comments_received_date", "comments_received"),
+    ("resubmission_date", "resubmission"),
+    ("issue_date", "completed"),
+    ("renewal_date", "renewed"),
+)
+
+
+def _status_from_permit_dates(values: dict[str, object]) -> tuple[str, date] | None:
+    """Latest actual milestone wins; lifecycle order breaks same-day ties.
+
+    Expiry is a validity deadline, not evidence that a milestone happened.
+    Planned and forecast dates likewise never advance an application.
+    """
+    milestones = [
+        (value, order, status)
+        for order, (field, status) in enumerate(_PERMIT_DATE_STATUSES)
+        if isinstance(value := values.get(field), date)
+    ]
+    if not milestones:
+        return None
+    effective_date, _, status = max(milestones)
+    return status, effective_date
+
+
+def _sync_permit_date_status(
+    session: Session, *, permit: Permit, actor_user_id: uuid.UUID, correlation_id: uuid.UUID
+) -> None:
+    """Append a correction/event in the caller's transaction; never rewrite history."""
+    derived = _status_from_permit_dates(
+        {field: getattr(permit, field) for field, _ in _PERMIT_DATE_STATUSES}
+    )
+    to_status, effective_date = derived or (PERMIT_STATUS_NOT_STARTED, date.today())
+    if (permit.status, permit.status_effective_date) == (to_status, effective_date):
+        return
+    before = _snapshot(permit, _PERMIT_FIELDS)
+    # Status history records movements, not same-status date corrections. The
+    # latter remain in the append-only audit with old/new dates below.
+    if permit.status != to_status:
+        session.add(
+            PermitStatusEvent(
+                permit_id=permit.id,
+                from_status=permit.status,
+                to_status=to_status,
+                effective_date=effective_date,
+                reason="Status derived from permit dates",
+                notes="Actual milestone dates saved or corrected; earlier history is retained.",
+                changed_by_user_id=actor_user_id,
+            )
+        )
+    permit.status = to_status
+    permit.status_effective_date = effective_date
+    record_event(
+        session,
+        action="permit.status_changed",
+        entity_type=ENTITY_PERMIT,
+        entity_id=permit.id,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        before=before,
+        after=_snapshot(permit, _PERMIT_FIELDS),
+        reason="Status derived from permit dates",
+    )
+
+
 def create_permit(
     session: Session,
     *,
@@ -1673,6 +1740,9 @@ def create_permit(
     if existing is not None:
         raise ConflictError("A permit with that code already exists in this project.")
 
+    derived_status = _status_from_permit_dates(dict(fields))
+    if derived_status is not None:
+        initial_status, status_effective_date = derived_status
     permit = Permit(
         project_id=project.id,
         permit_code=code,
@@ -1698,7 +1768,9 @@ def create_permit(
                 from_status=PERMIT_STATUS_NOT_STARTED,
                 to_status=initial_status,
                 effective_date=permit.status_effective_date,
-                reason="Initial recorded status",
+                reason="Status derived from permit dates"
+                if derived_status
+                else "Initial recorded status",
                 notes="Recorded when adding the permit; not a new authority decision.",
                 changed_by_user_id=actor_user_id,
             )
@@ -1824,6 +1896,10 @@ def update_permit(
     before = _snapshot(permit, _PERMIT_FIELDS)
     for field, value in updates.items():
         setattr(permit, field, value)
+    if any(field in updates for field, _ in _PERMIT_DATE_STATUSES):
+        _sync_permit_date_status(
+            session, permit=permit, actor_user_id=actor_user_id, correlation_id=correlation_id
+        )
     session.flush()
     record_event(
         session,

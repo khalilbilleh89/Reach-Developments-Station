@@ -213,7 +213,14 @@ def test_an_explicit_milestone_date_is_never_silently_overwritten(
     Theirs is the corrected one; the transition date is only a default.
     """
     admin_client.patch(f"{permits_url}/{permit_id}", json={"actual_submission_date": "2026-01-07"})
-    _walk_to(admin_client, permits_url, permit_id, ("preparing", "2026-01-05"))
+    # Saving the date already submits it. A later manual restart must preserve it.
+    _walk_to(
+        admin_client,
+        permits_url,
+        permit_id,
+        ("rejected", "2026-01-08"),
+        ("preparing", "2026-01-09"),
+    )
 
     response = _move(admin_client, permits_url, permit_id, "submitted", "2026-01-10")
 
