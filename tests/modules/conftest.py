@@ -621,10 +621,10 @@ def released_unit(
 ) -> str:
     """A priced unit that has passed every release gate and is on the market.
 
-    Runs the real route in each case: the release controls through inventory's
-    own endpoint, then the commercial transition to ``available``. A unit that
-    arrived at ``available`` by any other path would not prove the sales gates
-    are standing on the release gates.
+    Runs the real route: the release date through inventory's own endpoint,
+    which is the release. A unit that arrived at ``available`` by any other
+    path -- a direct write, or a transition that skipped the gates -- would not
+    prove the sales gates are standing on the release gates.
     """
     controls = admin_client.patch(
         f"{inventory_url(project_id)}/units/{unit_id}/release-controls",
@@ -635,11 +635,7 @@ def released_unit(
         },
     )
     assert controls.status_code == 200, controls.text
-    released = admin_client.post(
-        f"{inventory_url(project_id)}/units/{unit_id}/commercial-transitions",
-        json={"to_status": "available", "effective_date": "2026-01-02"},
-    )
-    assert released.status_code == 201, released.text
+    assert controls.json()["commercial_status"] == "available", controls.text
     return unit_id
 
 

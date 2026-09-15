@@ -209,7 +209,7 @@ test("global empty inventory keeps a labelled trigger and guidance even while cl
   f.pending[0].resolve({items:[],next_offset:null}); await settle();
   assert.equal(button(f.view,"No available units").props["aria-expanded"],false);
   assert.match(textOf(f.view.render()),/No units are currently available for reservation/);
-  assert.match(textOf(f.view.render()),/released for sale and have a current approved price/);
+  assert.match(textOf(f.view.render()),/goes on sale on its release date/);
   button(f.view,"No available units").props.onClick();
   assert.ok(nodes(f.view.render()).find(node=>node.type==="input"));
 });
