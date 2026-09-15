@@ -65,6 +65,50 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import MONEY, RATE, Base, in_list
 
 
+class TechnicalSpecification(Base):
+    """Recorded delivery inclusions; confirmation is not construction completion."""
+
+    __tablename__ = "technical_specifications"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"))
+    category: Mapped[str] = mapped_column(String(32))
+    title: Mapped[str] = mapped_column(String(200))
+    scope: Mapped[str] = mapped_column(String(16))
+    applies_to: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(String(4000))
+    brand_model: Mapped[str] = mapped_column(String(300), default="")
+    inclusion: Mapped[str] = mapped_column(String(16), default="undecided")
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    source_reference: Mapped[str] = mapped_column(String(500), default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        Index("ix_technical_specifications_project_id", "project_id"),
+        CheckConstraint(
+            "category IN ('structure','finishes','sanitary','plumbing','water',"
+            "'aluminium','doors','kitchen','electrical','heating_cooling','shared','other')",
+            name="category_allowed",
+        ),
+        CheckConstraint("scope IN ('project','units')", name="scope_allowed"),
+        CheckConstraint(
+            "inclusion IN ('included','optional','excluded','undecided')", name="inclusion_allowed"
+        ),
+        CheckConstraint("status IN ('draft','confirmed')", name="status_allowed"),
+        CheckConstraint(
+            "length(trim(title)) > 0 AND length(trim(applies_to)) > 0 "
+            "AND length(trim(description)) > 0",
+            name="text_required",
+        ),
+        CheckConstraint(
+            "status != 'confirmed' OR (length(trim(source_reference)) > 0 "
+            "AND inclusion != 'undecided')",
+            name="confirmation_source",
+        ),
+        CheckConstraint("version > 0", name="version_positive"),
+    )
+
+
 class ConstructionStage(Base):
     """A project's physical checklist, independent of financial milestones."""
 

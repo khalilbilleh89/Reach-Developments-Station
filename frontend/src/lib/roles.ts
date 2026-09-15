@@ -143,6 +143,9 @@ export const CONSTRUCTION_READERS: Roles = new Set([
   "auditor",
 ]);
 
+/** Delivery specifications only; sales receives no construction cost access. */
+export const SPECIFICATION_READERS: Roles = new Set([...CONSTRUCTION_READERS, "sales_advisor", "sales_operations"]);
+
 /** Roles that may read unit cost, margin and the allocation basis behind them. */
 export const ECONOMICS_READERS: Roles = new Set([
   "system_admin",

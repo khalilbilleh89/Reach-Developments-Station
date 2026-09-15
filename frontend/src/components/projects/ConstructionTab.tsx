@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
 import { ContractHeaderEditor } from "./construction/ContractWorkflow";
-import { hasAnyRole } from "@/lib/roles";
+import { CONSTRUCTION_READERS, hasAnyRole } from "@/lib/roles";
+import { TechnicalSpecifications } from "./construction/TechnicalSpecifications";
 import { BudgetWorkspace } from "./construction/BudgetWorkspace";
 
 import {
@@ -63,6 +64,7 @@ function contractCurrency(contracts: ConstructionContract[], contractId: string 
 
 const SECTIONS = [
   { key: "overview", label: "Overview" },
+  { key: "technical-specifications", label: "Technical Specifications" },
   { key: "budget", label: "Budget" },
   { key: "contracts", label: "Contracts" },
   { key: "variations", label: "Variations" },
@@ -75,7 +77,7 @@ const SECTIONS = [
 /**
  * The construction workspace: budget, commitment, certification, cash, forecast.
  *
- * Eight sections in the order the control model runs, because that order is the
+ * Financial sections follow the order the control model runs, because that order is the
  * argument. A budget authorises; a contract commits against that authorisation;
  * a variation changes the commitment; a certificate turns work into cost; an
  * invoice turns cost into a liability; a payment settles it; a forecast says
@@ -89,14 +91,17 @@ const SECTIONS = [
  * of the rows the server already narrowed by role and by phase.
  */
 export function ConstructionTab({ projectId, roles = new Set<string>(), currencyId = "", currencyCode = null }: { projectId: string; roles?: Set<string>; currencyId?: string; currencyCode?: string | null }) {
+  const canReadCosts = hasAnyRole(roles, CONSTRUCTION_READERS);
+  const sections = canReadCosts ? SECTIONS : SECTIONS.filter(item => item.key === "technical-specifications");
   const [view, setView] = useRegisterFields({ constructionTab: "overview" });
-  const section = SECTIONS.some(item => item.key === view.constructionTab) ? view.constructionTab : "overview";
+  const section = sections.some(item => item.key === view.constructionTab) ? view.constructionTab : sections[0].key;
   const setSection = (constructionTab: string) => setView({ constructionTab });
   const [summary, setSummary] = useState<ConstructionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [retrying, setRetrying] = useState(false);
   const load = useCallback(async () => {
+    if (!canReadCosts) return;
     setRetrying(true);
     try {
       setSummary(await construction.summary(projectId));
@@ -111,7 +116,7 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
     } finally {
       setRetrying(false);
     }
-  }, [projectId]);
+  }, [projectId, canReadCosts]);
 
   useEffect(() => {
     void (async () => {
@@ -124,9 +129,9 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
       <PageHeader
         icon="building"
         title="Construction"
-        subtitle={sectionDescription("construction")}
+        subtitle={canReadCosts ? sectionDescription("construction") : "What the project and its units will include."}
         meta={
-          summary ? (
+          canReadCosts && summary ? (
             <>
               <Badge
                 tone={
@@ -151,17 +156,18 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
         }
       />
 
-      {error ? <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry construction position"}</Button></> : null}
+      {canReadCosts && error ? <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry construction position"}</Button></> : null}
 
       <Tabs
         label="Construction sections"
-        tabs={SECTIONS}
+        tabs={sections}
         active={section}
         onSelect={setSection}
         group="construction"
       />
 
       <TabPanel group="construction" tab={section}>
+      {section === "technical-specifications" ? <TechnicalSpecifications key={projectId} projectId={projectId} roles={roles} /> : null}
       {section === "overview" ? (
         summary ? (
           <ConstructionSummaryView summary={summary} />
