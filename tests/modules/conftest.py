@@ -971,11 +971,7 @@ def other_phase_plan(
         },
     )
     assert controls.status_code == 200, controls.text
-    released = admin_client.post(
-        f"{inventory_url(project_id)}/units/{unit_id}/commercial-transitions",
-        json={"to_status": "available", "effective_date": "2026-01-02"},
-    )
-    assert released.status_code == 201, released.text
+    assert controls.json()["commercial_status"] == "available", controls.text
 
     buyer = sales_ops_client.post(
         f"{sales_url(project_id)}/clients",
