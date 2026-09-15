@@ -5380,3 +5380,5 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .stock-note { color: var(--text-muted); font-size: .71rem; line-height: 1.6; margin: .8rem 1.4rem; }
 @media (max-width: 1050px) { .stock-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 520px) { .stock-summary > div { padding: 1rem; } .stock-summary strong { font-size: 1.6rem; } .stock-register-heading { align-items: flex-start; padding: 1rem; } }
+
+.specification-description { white-space: pre-wrap; overflow-wrap: anywhere; }
