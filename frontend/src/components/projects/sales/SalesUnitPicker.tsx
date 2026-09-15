@@ -100,7 +100,7 @@ export function SalesUnitPicker({ projectId, onSelect, onCancel, initiallyOpen =
     {rows && rows.next_offset !== null && !error ? <Button disabled={loading} onClick={() => setOffset(rows.next_offset!)}>Load more units</Button> : null}
     </div> : null}
     {globalEmpty ? <Notice tone="info"><strong>No units are currently available for reservation</strong>
-      <p>Units must be released for sale and have a current approved price before they can be reserved.</p>
+      <p>A unit goes on sale on its release date, once its launch price is approved. Set a release date in Inventory &rarr; the unit &rarr; Release.</p>
     </Notice> : null}
     {error ? <Notice tone="error"><strong>Could not load available units</strong>{error !== "Could not load available units." ? <p>{error}</p> : null}
       <Button onClick={() => setRetry(value => value + 1)}>Retry</Button>

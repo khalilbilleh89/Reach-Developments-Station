@@ -165,27 +165,30 @@ def test_a_fully_satisfied_unit_is_releasable(
     assert response.status_code == 201, response.text
 
 
-@pytest.mark.parametrize(
-    ("field", "blocker"),
-    [
-        ("drawings_approved", "Drawings not approved"),
-        ("legal_sale_eligible", "Legal sale eligibility not confirmed"),
-    ],
-)
-def test_each_gate_names_itself_when_missing(
+@pytest.mark.parametrize("field", ["drawings_approved", "legal_sale_eligible"])
+def test_preparation_is_recorded_but_does_not_hold_the_unit_back(
     admin_client: TestClient,
     project_id: str,
     unit_id: str,
     area_types: dict[str, str],
     db: Session,
     field: str,
-    blocker: str,
 ) -> None:
+    """Given drawings or legal sign-off outstanding, then the unit still sells.
+
+    Both are facts worth knowing and both stay on the record. Neither answers
+    the question the release gate asks -- whether this unit can be sold at all
+    -- and a development that has priced a unit and set its date is not helped
+    by a release that waits on a countersignature.
+    """
     make_releasable(admin_client, project_id, unit_id, area_types, db)
 
     admin_client.patch(_controls(project_id, unit_id), json={field: False})
 
-    assert blocker in _unit(admin_client, project_id, unit_id)["release_blockers"]
+    unit = _unit(admin_client, project_id, unit_id)
+    assert unit["release_blockers"] == []
+    assert unit[field] is False
+    assert unit["commercial_status"] == "available"
 
 
 def test_a_future_release_date_blocks_until_it_arrives(
@@ -307,3 +310,112 @@ def test_a_partly_permitted_request_is_refused_whole(
     unit = db.scalars(select(Unit)).one()
     assert unit.drawings_approved is False
     assert unit.release_batch is None
+
+
+# --------------------------------------------------------------------------- #
+# The release date is the release
+# --------------------------------------------------------------------------- #
+
+
+def test_setting_a_release_date_that_has_arrived_puts_the_unit_on_sale(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """Given a priced unit, when a past release date is saved, then it is available.
+
+    The date is the decision. Asking the operator to state it and then to
+    confirm it is asking the same question twice, and the second question is
+    the one that was being forgotten.
+    """
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    unit = db.scalars(select(Unit)).one()
+    unit.pricing_approved = True
+    db.commit()
+
+    admin_client.patch(_controls(project_id, unit_id), json={"release_date": "2024-01-01"})
+
+    assert _unit(admin_client, project_id, unit_id)["commercial_status"] == "available"
+
+
+def test_the_status_event_carries_the_release_date_the_operator_set(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """The history says the unit went on sale on its release date, not today.
+
+    A release recorded under the date it was typed rather than the date it took
+    effect makes every later "what was on the market in January?" wrong.
+    """
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    unit = db.scalars(select(Unit)).one()
+    unit.pricing_approved = True
+    db.commit()
+
+    admin_client.patch(_controls(project_id, unit_id), json={"release_date": "2024-03-04"})
+
+    history = admin_client.get(f"{inventory_url(project_id)}/units/{unit_id}/status-history").json()
+    released = [row for row in history if row["to_status"] == "available"]
+    assert released and released[-1]["effective_date"] == "2024-03-04"
+
+
+def test_an_unpriced_unit_stays_off_the_market_however_the_date_reads(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+) -> None:
+    """The one gate the owner kept. A unit with no approved price is not sellable."""
+    approve_areas(admin_client, project_id, unit_id, area_types)
+
+    admin_client.patch(_controls(project_id, unit_id), json={"release_date": "2024-01-01"})
+
+    unit = _unit(admin_client, project_id, unit_id)
+    assert unit["commercial_status"] == "unreleased"
+    assert "Pricing not approved" in unit["release_blockers"]
+
+
+def test_a_future_release_date_does_not_release_the_unit_early(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """Saving tomorrow's date states an intention, not a sale."""
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    unit = db.scalars(select(Unit)).one()
+    unit.pricing_approved = True
+    db.commit()
+
+    admin_client.patch(_controls(project_id, unit_id), json={"release_date": "2099-01-01"})
+
+    assert _unit(admin_client, project_id, unit_id)["commercial_status"] == "unreleased"
+
+
+def test_a_blocked_unit_is_not_released_by_its_date_arriving(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """A commercial block is somebody saying stop, and the date does not overrule it."""
+    approve_areas(admin_client, project_id, unit_id, area_types)
+    unit = db.scalars(select(Unit)).one()
+    unit.pricing_approved = True
+    db.commit()
+
+    admin_client.patch(
+        _controls(project_id, unit_id),
+        json={"release_date": "2024-01-01", "block_reason": "Title deed under review"},
+    )
+
+    on_file = _unit(admin_client, project_id, unit_id)
+    assert on_file["commercial_status"] == "unreleased"
+    assert "Commercial block: Title deed under review" in on_file["release_blockers"]
