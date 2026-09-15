@@ -17,7 +17,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.errors import NotFoundError, ValidationError
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession
@@ -908,8 +908,8 @@ def _selected_units(
         _require_available_units(session, actor, project, payload.unit_ids)
     statement = (
         select(Unit)
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .where(Unit.project_id == project.id, Unit.is_active.is_(True))
     )
     if payload.unit_ids:

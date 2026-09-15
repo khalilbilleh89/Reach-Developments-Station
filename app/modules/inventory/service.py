@@ -118,6 +118,7 @@ _CONFLICTS = {
         "A unit with that number already exists on this floor. "
         "If it is missing from Inventory, ask Master Administrator to check Removed units."
     ),
+    "uq_units_building_id_unit_number": "A unit with that number already exists in this building.",
     "uq_inventory_sub_assets_project_id_asset_reference": (
         "A sub-asset with that reference already exists in this project."
     ),
@@ -196,6 +197,7 @@ _FLOOR_FIELDS = (
     "is_active",
 )
 _UNIT_FIELDS = (
+    "building_id",
     "id",
     "project_id",
     "floor_id",
@@ -546,15 +548,19 @@ def stage_update_building(
             raise ConflictError("Reactivate the destination phase first.")
         for unit in session.scalars(
             select(Unit)
-            .join(Floor, Unit.floor_id == Floor.id)
-            .where(Floor.building_id == building.id)
+            .outerjoin(Floor, Unit.floor_id == Floor.id)
+            .where((Floor.building_id == building.id) | (Unit.building_id == building.id))
         ):
             invalidate_pricing(session, unit=unit)
     if updates.get("is_active") is False and building.is_active:
         active_floor = session.scalars(
             select(Floor.id).where(Floor.building_id == building.id, Floor.is_active.is_(True))
         ).first()
-        if active_floor is not None:
+        if active_floor is not None or session.scalar(
+            select(Unit.id)
+            .where(Unit.building_id == building.id, Unit.is_active.is_(True))
+            .limit(1)
+        ):
             raise ConflictError(
                 "This building still has active floors. Deactivate or move them first."
             )
@@ -613,6 +619,11 @@ def stage_create_floor(
     _reload(session, building)
     if not building.is_active:
         raise ConflictError("That building is not active.")
+    if session.scalar(select(Unit.id).where(Unit.building_id == building.id).limit(1)):
+        raise ConflictError(
+            "This building has units attached directly. Keep it without floors, "
+            "or move those units before adding floors."
+        )
     floor = Floor(
         project_id=project.id,
         building_id=building.id,
@@ -655,6 +666,10 @@ def stage_update_floor(
         target = get_building(
             session, project_id=floor.project_id, building_id=updates["building_id"]
         )
+        if session.scalar(select(Unit.id).where(Unit.building_id == target.id).limit(1)):
+            raise ConflictError(
+                "The destination building has units attached directly and cannot receive floors."
+            )
         parent = session.get(Phase, target.phase_id)
         if not target.is_active or not parent.is_active:
             raise ConflictError("Reactivate the destination building and phase first.")
@@ -894,6 +909,7 @@ _UNIT_REFERENCE_FIELDS = {
 }
 
 _UNIT_UPDATABLE = (
+    "building_id",
     "floor_id",
     "unit_number",
     "unit_reference",
@@ -918,6 +934,8 @@ _UNIT_UPDATABLE = (
 )
 _UNIT_CLEARABLE = frozenset(
     {
+        "building_id",
+        "floor_id",
         "unit_type_code",
         "bedrooms",
         "bathrooms",
@@ -938,7 +956,15 @@ _UNIT_FACT_FIELDS = tuple(
     field
     for field in _UNIT_UPDATABLE
     if field
-    not in {"floor_id", "unit_number", "unit_reference", "asset_class", "is_active", "sequence"}
+    not in {
+        "building_id",
+        "floor_id",
+        "unit_number",
+        "unit_reference",
+        "asset_class",
+        "is_active",
+        "sequence",
+    }
 )
 
 _RELEASE_UPDATABLE = (
@@ -975,6 +1001,7 @@ def _validate_unit_codes(
 #: reversing it for one flag would be a circular import bought for a boolean.
 PRICING_RELEVANT_UNIT_FIELDS = frozenset(
     {
+        "building_id",
         "floor_id",
         "unit_type_code",
         "furnishing_specification_code",
@@ -1024,11 +1051,43 @@ def lock_unit(session: Session, *, project_id: uuid.UUID, unit_id: uuid.UUID) ->
     return unit
 
 
+def unit_parent(
+    session: Session, *, project: Project, floor_id: uuid.UUID | None, building_id: uuid.UUID | None
+) -> tuple[Floor | None, Building]:
+    """Resolve exactly one parent under the project lock used by structure writes."""
+    if (floor_id is None) == (building_id is None):
+        raise ValidationError("Choose a floor, or a building without floors.")
+    floor = get_floor(session, project_id=project.id, floor_id=floor_id) if floor_id else None
+    if floor is not None:
+        _reload(session, floor)
+    building = get_building(
+        session, project_id=project.id, building_id=floor.building_id if floor else building_id
+    )
+    _reload(session, building)
+    if not building.is_active or (floor is not None and not floor.is_active):
+        raise ConflictError("The destination building and floor must be active.")
+    if floor is None and session.scalar(
+        select(Floor.id).where(Floor.building_id == building.id).limit(1)
+    ):
+        raise ValidationError("This building has floors. Choose a floor for the unit.")
+    phase = session.get(Phase, building.phase_id)
+    if phase is None or not phase.is_active:
+        raise ConflictError("The destination phase must be active.")
+    return floor, building
+
+
+def phase_of_unit(session: Session, unit: Unit) -> Phase:
+    floor = session.get(Floor, unit.floor_id) if unit.floor_id else None
+    building = session.get(Building, floor.building_id if floor else unit.building_id)
+    return session.get(Phase, building.phase_id)
+
+
 def create_unit(
     session: Session,
     *,
     project: Project,
-    floor: Floor,
+    floor: Floor | None = None,
+    building: Building | None = None,
     actor_user_id: uuid.UUID,
     correlation_id: uuid.UUID,
     unit_number: str,
@@ -1039,14 +1098,18 @@ def create_unit(
     # Configuration and assignment share the project lock, so retirement cannot
     # race a new choice onto a unit.
     project = lock_project(session, project.id)
-    _reload(session, floor)
-    if not floor.is_active:
-        raise ConflictError("That floor is not active.")
+    floor, building = unit_parent(
+        session,
+        project=project,
+        floor_id=floor.id if floor else None,
+        building_id=building.id if building else None,
+    )
     _validate_unit_codes(session, project_id=project.id, values=fields)
 
     unit = Unit(
         project_id=project.id,
-        floor_id=floor.id,
+        floor_id=floor.id if floor else None,
+        building_id=None if floor else building.id,
         unit_number=unit_number.strip(),
         unit_reference=_normalize_reference(unit_reference),
         asset_class=asset_class,
@@ -1106,31 +1169,31 @@ def update_unit(
                 "through Sales, then return the unit to unreleased first."
             )
         if updates["is_active"] is True:
-            floor = get_floor(session, project_id=project.id, floor_id=unit.floor_id)
-            building = session.get(Building, floor.building_id)
-            phase = phase_of_floor(session, floor)
-            if not (floor.is_active and building and building.is_active and phase.is_active):
-                raise ConflictError("Reactivate the unit's phase, building and floor first.")
-
-    if "floor_id" in updates and updates["floor_id"] != unit.floor_id:
-        if unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED and not actor.is_master_admin:
-            raise ConflictError(
-                "A unit can only be moved while it is unreleased. Return it to unreleased first."
+            unit_parent(
+                session, project=project, floor_id=unit.floor_id, building_id=unit.building_id
             )
-        target = get_floor(session, project_id=project.id, floor_id=updates["floor_id"])
-        target_building = session.get(Building, target.building_id)
-        if not target.is_active or not target_building or not target_building.is_active:
-            raise ConflictError("The destination floor and building must be active.")
-        destination = phase_of_floor(session, target)
-        if not destination.is_active:
-            raise ConflictError("That phase is not active.")
-        _require_phase_in_scope(session, project_id=project.id, actor=actor, phase=destination)
-        _require_phase_in_scope(
-            session,
-            project_id=project.id,
-            actor=actor,
-            phase=phase_of_floor(session, session.get(Floor, unit.floor_id)),
-        )
+
+    if "floor_id" in updates or "building_id" in updates:
+        target_floor = updates.get("floor_id", unit.floor_id)
+        target_building = updates.get("building_id", unit.building_id)
+        if target_floor != unit.floor_id or target_building != unit.building_id:
+            if unit.commercial_status != COMMERCIAL_STATUS_UNRELEASED and not actor.is_master_admin:
+                raise ConflictError(
+                    "A unit can only be moved while it is unreleased. "
+                    "Return it to unreleased first."
+                )
+            _, building = unit_parent(
+                session, project=project, floor_id=target_floor, building_id=target_building
+            )
+            _require_phase_in_scope(
+                session,
+                project_id=project.id,
+                actor=actor,
+                phase=session.get(Phase, building.phase_id),
+            )
+            _require_phase_in_scope(
+                session, project_id=project.id, actor=actor, phase=phase_of_unit(session, unit)
+            )
 
     if "unit_reference" in updates and updates["unit_reference"] is not None:
         updates["unit_reference"] = _normalize_reference(str(updates["unit_reference"]))
@@ -2286,12 +2349,11 @@ def completeness_checks(
     """
     from app.modules.inventory.custom_fields import missing_required_custom_fields
 
-    floor = session.get(Floor, unit.floor_id)
-    building = session.get(Building, floor.building_id) if floor is not None else None
+    floor = session.get(Floor, unit.floor_id) if unit.floor_id else None
+    building = session.get(Building, floor.building_id if floor else unit.building_id)
     phase = session.get(Phase, building.phase_id) if building is not None else None
     hierarchy_live = bool(
-        floor is not None
-        and floor.is_active
+        (floor is None or floor.is_active)
         and building is not None
         and building.is_active
         and phase is not None
@@ -2626,10 +2688,14 @@ def _unit_filters(
     if floor_id is not None:
         clauses.append(Unit.floor_id == floor_id)
     if building_id is not None:
-        clauses.append(Unit.floor_id.in_(select(Floor.id).where(Floor.building_id == building_id)))
+        clauses.append(
+            (Unit.building_id == building_id)
+            | Unit.floor_id.in_(select(Floor.id).where(Floor.building_id == building_id))
+        )
     if phase_id is not None:
         clauses.append(
-            Unit.floor_id.in_(
+            Unit.building_id.in_(select(Building.id).where(Building.phase_id == phase_id))
+            | Unit.floor_id.in_(
                 select(Floor.id)
                 .join(Building, Building.id == Floor.building_id)
                 .where(Building.phase_id == phase_id)
@@ -2724,8 +2790,8 @@ def hierarchy_labels(
             Phase.id,
             Phase.code,
         )
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .join(Phase, Phase.id == Building.phase_id)
         .where(Unit.id.in_(unit_ids))
     ).all()

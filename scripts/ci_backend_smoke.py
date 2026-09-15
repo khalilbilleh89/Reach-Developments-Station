@@ -222,6 +222,12 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "inventory",
         ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
     ),
+    "0032_building_units.py": (
+        "inventory",
+        (
+            "tests/modules/test_building_units.py::test_building_unit_migration_preserves_units_and_refuses_loss",
+        ),
+    ),
     "0024_merge_permits_inventory.py": (
         "projects",
         ("tests/test_migrations.py::test_parallel_permit_and_inventory_histories_converge",),

@@ -538,6 +538,10 @@ class UnitPricingRead(BaseModel):
 
     direct_price_currency_id: uuid.UUID
     price_per_gross_area: DecimalStr | None
+    price_per_net_area: DecimalStr | None
+    net_area_unit: str | None
+    net_area: DecimalStr | None
+    gross_area: DecimalStr | None
     gross_area_unit: str | None
     unit_id: uuid.UUID
     unit_reference: str

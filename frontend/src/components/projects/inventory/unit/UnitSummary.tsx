@@ -1,6 +1,8 @@
 "use client";
 
-import type { CollectionSaleSummary, Unit, UnitPricing } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { inventory } from "@/lib/api";
+import type { InventoryOption, SubAsset, CollectionSaleSummary, Unit, UnitPricing } from "@/lib/api";
 import type { Answer } from "@/lib/answer";
 import {
   Badge,
@@ -34,14 +36,24 @@ const COMMITTED = new Set(["reserved", "contract_pending", "contracted"]);
 
 /** Inventory profile and launch price; transaction snapshots below serve Sales. */
 export function UnitSummary({
+  projectId,
   unit,
   pricing,
   onOpenTab,
 }: {
+  projectId: string;
   unit: Unit;
   pricing: Answer<UnitPricing>;
   onOpenTab: (tab: string) => void;
 }) {
+
+  const [details,setDetails]=useState<{projectId:string;unitId:string;options:InventoryOption[];assets:SubAsset[]}|null>(null);
+  const [detailError,setDetailError]=useState(false);
+  useEffect(()=>{let current=true;Promise.all([inventory.configuration(projectId),inventory.subAssets(projectId,{unit_id:unit.id})]).then(([options,assets])=>{if(current){setDetails({projectId,unitId:unit.id,options,assets});setDetailError(false);}}).catch(()=>{if(current)setDetailError(true);});return()=>{current=false;};},[projectId,unit.id]);
+  const currentDetails=details?.projectId === projectId && details.unitId === unit.id ? details : null;
+  const label=(category:string,code:string|null)=> code ? currentDetails?.options.find(option=>option.category===category && option.code===code)?.label ?? (currentDetails ? "Name unavailable" : "Loading name…") : "Not recorded";
+  const assetNames=(type:string)=>currentDetails?.assets.filter(asset=>asset.is_active && asset.asset_type===type).map(asset=>[asset.subtype_code ? label("sub_asset_subtype",asset.subtype_code) : type,asset.asset_reference].join(" · ")).join(", ");
+  const garden=(component:string)=>{const area=(unit.area_lines ?? []).find(line=>line.physical_component===component);return area ? Number(area.raw_area)>0 ? `Yes · ${area.raw_area} ${area.unit_of_measure}` : "No" : "Not recorded";};
 
   return (
     <div className="record-overview">
@@ -50,10 +62,16 @@ export function UnitSummary({
         <KeyValueGrid columns={3}>
           <KeyValue label="Property" value={[unit.asset_class, unit.bedrooms === null ? null : `${unit.bedrooms} bedrooms`, unit.bathrooms === null ? null : `${unit.bathrooms} bathrooms`].filter(Boolean).join(" · ") || unit.asset_class} />
           <KeyValue label="Location" value={[unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" → ") || "Not recorded"} />
-          {unit.view_class_code || unit.orientation_code ? <KeyValue label="View / orientation" value={[unit.view_class_code, unit.orientation_code].filter(Boolean).join(" · ")} /> : null}
+          {unit.view_class_code || unit.orientation_code ? <KeyValue label="View / orientation" value={[label("view_class",unit.view_class_code),label("orientation",unit.orientation_code)].join(" · ")} /> : null}
           <KeyValue label="Parking / storage" value={`${unit.parking_count} parking · ${unit.storage_count} storage`} />
+          <KeyValue label="Parking types" value={assetNames("parking") || (unit.parking_count ? detailError ? "Unavailable" : currentDetails ? "Not recorded" : "Loading names…" : "None")} />
+          <KeyValue label="Storage types" value={assetNames("storage") || (unit.storage_count ? detailError ? "Unavailable" : currentDetails ? "Not recorded" : "Loading names…" : "None")} />
+          <KeyValue label="Garden type" value={label("garden_class",unit.garden_class_code)} />
+          <KeyValue label="Roof garden" value={garden("roof_garden")} />
+          <KeyValue label="Front garden" value={garden("front_garden")} />
           <KeyValue label="Area revision" value={unit.area_revision_code ?? "Not recorded"} />
         </KeyValueGrid>
+        {detailError ? <Notice tone="error">Feature names and attached assets could not be loaded.</Notice> : null}
         <p className="footnote">Parking and storage remain separate attached assets, excluded from gross area.</p>
       </section>
       {pricing.status === "off" ? null : (
@@ -114,7 +132,8 @@ function PriceSnapshot({ answer }: { answer: Answer<UnitPricing> }) {
       {price ? (
         <Position compact>
           <PositionFigure lead label="List price (ex tax)" value={money(price.reference_price_ex_tax, priceCode)} />
-          <PositionFigure label={`Per gross ${unitPricing.gross_area_unit ?? "area unit"}`} value={money(unitPricing.price_per_gross_area, priceCode)} note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : "Ex tax"} />
+          <PositionFigure label={`Price / net ${unitPricing.net_area_unit === "sqm" ? "m²" : unitPricing.net_area_unit ?? "area unit"}`} value={money(unitPricing.price_per_net_area, priceCode)} note={`Net area: ${unitPricing.net_area ?? "Not measured"} ${unitPricing.net_area_unit ?? ""} · Ex tax`} />
+          <PositionFigure label={`Price / gross ${unitPricing.gross_area_unit === "sqm" ? "m²" : unitPricing.gross_area_unit ?? "area unit"}`} value={money(unitPricing.price_per_gross_area, priceCode)} note={unitPricing.price_per_gross_area === null ? "Needs complete gross measurements and a current price" : `Gross area: ${unitPricing.gross_area ?? "Not measured"} ${unitPricing.gross_area_unit ?? ""} · Ex tax`} />
           <PositionFigure
             label="Version"
             value={`v${price.version_number}`}

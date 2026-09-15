@@ -22,7 +22,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import Depends, Path
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
@@ -142,8 +142,8 @@ def _units_in_visible_phases(allowed: Select[tuple[uuid.UUID]]) -> Select[tuple[
     """Unit ids whose floor sits in a building of one of ``allowed``."""
     return (
         select(Unit.id)
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .where(Building.phase_id.in_(allowed))
     )
 

@@ -262,8 +262,8 @@ def _eligible_units_statement(pool: CostPool) -> Select[tuple[uuid.UUID]]:
     """
     statement = (
         select(Unit.id)
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .where(Unit.project_id == pool.project_id, Unit.is_active.is_(True))
     )
     if pool.scope_kind == SCOPE_PHASE:
@@ -2709,8 +2709,8 @@ def unit_register(
 
     statement = (
         select(Unit)
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .where(Unit.project_id == project.id, Unit.is_active.is_(True))
     )
     allowed = permissions.visible_units(session, project_id=project.id, actor=actor)

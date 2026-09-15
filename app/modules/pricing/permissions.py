@@ -22,7 +22,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import Depends, Path
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
@@ -152,8 +152,8 @@ def visible_units_for_pricing(
     return statement.where(
         Unit.id.in_(
             select(Unit.id)
-            .join(Floor, Floor.id == Unit.floor_id)
-            .join(Building, Building.id == Floor.building_id)
+            .outerjoin(Floor, Floor.id == Unit.floor_id)
+            .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
             .where(Building.phase_id.in_(allowed))
         )
     )
@@ -173,8 +173,8 @@ def visible_unit_ids(
         return None
     return (
         select(Unit.id)
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .where(Building.phase_id.in_(allowed))
     )
 

@@ -82,3 +82,39 @@ Existing units, pricing rules and shared reference data are unchanged.
 Downgrade removes the new configuration table, not unit facts. Export project
 choices before deliberate rollback; new project-only codes need reconciliation
 with the old shared catalogue before old-version writes resume.
+
+
+## Units in buildings without floors
+
+Add Unit starts with a building. Any recorded floors make floor selection mandatory
+(inactive floors do not turn a building into a floorless building). A building with
+no floors accepts units directly, including villas. Each unit has exactly one parent;
+existing floor assignments are unchanged. Unit numbers remain unique per floor, or
+per building for direct attachments. Phase permissions, stock filtering, pricing,
+commercial selection, analysis, economics and construction resolve either parent.
+
+Creating or moving a floor into a building with directly attached units is refused.
+Move those units through the governed unit API before changing that structure; no
+synthetic floor is generated. The existing Excel unit import retains its explicit
+floor-based hierarchy format; it may update existing building-level unit facts but
+cannot introduce floors underneath direct units. Manual Add Unit supports both
+placement modes.
+
+Migration 0031 adds the optional building parent and a database constraint requiring
+exactly one parent. Existing units retain their UUIDs and floor links. Downgrade is
+refused while any unit is attached directly to a building, rather than deleting it
+or inventing a floor. Reassign those units deliberately before attempting rollback.
+
+
+### Inventory property amendments
+
+Unit pricing displays separate server-calculated rates for net and gross area, excluding tax.
+Net is internal area plus recorded balcony area. Gross adds the recorded outdoor components;
+with no extra components, gross equals net. Missing internal area, mixed measurement units,
+or duplicate components do not produce a misleading gross rate. Parking/storage stay separate.
+
+Edit selling price starts a replacement price version prefilled from the current record.
+Submission, approval and activation remain explicit; approved history is retained.
+Edit property opens Identity, Features, measurements, attachments and additional-field editors
+together. Saving a section keeps the remaining editors open. Overview uses project configuration
+labels for views and attached asset types and shows recorded roof/front gardens.

@@ -142,7 +142,7 @@ export function PreLaunchTab({
                   {canConfirm && row.status === "confirmed" ? <Button small variant="danger" disabled={busy} onClick={() => setReversing(row.id)}>Reverse</Button> : null}
                 </ButtonRow>);
   return (
-    <div className="stack prelaunch-workspace">
+    <div className="stack">
       <PageHeader
         icon="money"
         title="Pre-Launch"

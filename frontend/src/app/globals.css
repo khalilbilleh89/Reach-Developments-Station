@@ -30,6 +30,8 @@
  */
 
 :root {
+  --workspace-blue-wash: #f0f5ff;
+  --workspace-blue-line: #d7e3fa;
   /* ---- Canvas and surfaces ------------------------------------------- */
   /* Cool neutral canvas, white working surfaces and readable ink.
    * Each has a distinct job; borders are reserved for data and controls. */
@@ -76,13 +78,6 @@
   --danger-soft: #fbe9e7;
   --info: var(--accent);
   --info-soft: var(--accent-soft);
-
-  /* ---- Workspace wash ------------------------------------------------ */
-  /* The pale blue secondary surface the development and platform
-   * workspaces put behind headers, toolbars and table heads. One pair,
-   * declared here, so the two workspaces cannot drift apart. */
-  --workspace-wash: #f0f5ff;
-  --workspace-line: #d7e3fa;
 
   /* ---- Navigation rail ----------------------------------------------- */
   /* White navigation uses blue selection and dark readable labels. */
@@ -5346,6 +5341,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .permit-next-action { margin: var(--space-4) 0; padding-left: var(--space-3); border-left: 3px solid var(--line-strong); font-size: .875rem; }
 .permit-next-action p { margin: var(--space-2) 0; line-height: 1.6; overflow-wrap: anywhere; }
 .permit-date-groups > .kv { padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-control); background: var(--surface); margin-bottom: var(--space-5); }
+.inventory-measurement-guide { color: var(--text-secondary); font-size: .875rem; padding: var(--space-3) 0; }
+.inventory-measurement-guide summary { cursor: pointer; font-weight: 600; }
+.inventory-measurement-guide p { max-width: 75ch; line-height: 1.6; }
 .stock-view-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .stock-floor-groups { display: grid; gap: var(--space-5); padding: var(--space-5); }
 .stock-floor-group h3 { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-3); font-size: .95rem; }
@@ -5369,6 +5367,7 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .land-cost-breakdown > div { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line-soft); }
 .land-cost-breakdown dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
 .land-cost-breakdown > div:last-child { font-weight: 650; border-color: var(--line-strong); }
+.land-cost-method > summary { cursor: pointer; padding: var(--space-3) 0; color: var(--text-secondary); font-size: .85rem; }
 .land-envelope { padding: var(--space-4) var(--space-5); margin-bottom: var(--space-5); background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--radius-control); }
 .land-utilities dd { margin: 0; font-size: .85rem; }
 .land-supporting-note { border-left: 3px solid var(--line-strong); padding: var(--space-3) var(--space-4); background: var(--surface); overflow-wrap: anywhere; }

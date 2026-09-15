@@ -360,7 +360,7 @@ class SalesUnitOption(BaseModel):
     unit_reference: str
     phase_name: str
     building_name: str
-    floor_name: str
+    floor_name: str | None
     unit_type: str | None
     commercial_availability: str
     gross_area: DecimalStr | None

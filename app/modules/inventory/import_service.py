@@ -916,8 +916,8 @@ def _check_release_controls(
 
 def _unit_phase_visible(session: Session, *, unit: Unit, visible: set[uuid.UUID]) -> bool:
     """Whether the caller may see the phase this unit sits in right now."""
-    floor = session.get(Floor, unit.floor_id)
-    building = session.get(Building, floor.building_id) if floor is not None else None
+    floor = session.get(Floor, unit.floor_id) if unit.floor_id else None
+    building = session.get(Building, floor.building_id if floor else unit.building_id)
     return building is not None and building.phase_id in visible
 
 
@@ -1537,6 +1537,10 @@ def _materialise_hierarchy(
             )
         floor = existing.floors.get((building.id, key.floor_code))
         if floor is None:
+            if session.scalar(select(Unit.id).where(Unit.building_id == building.id).limit(1)):
+                raise ValidationError(
+                    "Cannot import floors into a building with units attached directly."
+                )
             floor = Floor(
                 project_id=project.id,
                 building_id=building.id,
@@ -1611,6 +1615,7 @@ def _apply_row(
         _require_appliable(session, row=row, unit=unit, floor=floor, fields=fields)
         if floor is not None and floor.id != unit.floor_id:
             unit.floor_id = floor.id
+            unit.building_id = None
         for name, value in fields.items():
             if name == "unit_reference" and value is not None:
                 value = " ".join(str(value).split())
@@ -1666,6 +1671,7 @@ def _require_appliable(
     clash = session.scalars(
         select(Unit).where(
             Unit.floor_id == (floor.id if floor is not None else unit.floor_id),
+            Unit.building_id == (None if floor is not None else unit.building_id),
             Unit.unit_number == number,
             Unit.id != unit.id,
         )

@@ -95,6 +95,8 @@ def test_direct_price_without_configuration_requires_separate_approval(
     assert read.status_code == 200, read.text
     assert read.json()["active_price"]["reference_price_ex_tax"] == "195123.45"
     assert read.json()["price_per_gross_area"] == "1626.03"
+    assert read.json()["price_per_net_area"] == "1626.03"
+    assert read.json()["net_area"] == read.json()["gross_area"] == "120.0000"
     maker = make_user(db, email="direct-maker@example.com", roles=("finance", "approver_cfo"))
     assert admin_client.put(f"{PROJECTS}/{project_id}/access/{maker.id}").status_code == 200
     maker_client = client_for(maker.email)

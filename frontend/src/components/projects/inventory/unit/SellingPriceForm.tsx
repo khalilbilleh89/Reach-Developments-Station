@@ -5,10 +5,12 @@ import { ApiError, pricing } from "@/lib/api";
 import { Button, Field, FieldRow, FormActions, FormSection, Notice } from "@/components/ui";
 
 /** Direct entry creates a draft; approval and activation remain separate actions. */
-export function SellingPriceForm({ projectId, unitId, currencyCode, onChanged }: {
+export function SellingPriceForm({ projectId, unitId, currencyCode, currentAmount = null, isMasterAdmin = false, onChanged }: {
   projectId: string;
   unitId: string;
   currencyCode: string | null;
+  currentAmount?: string | null;
+  isMasterAdmin?: boolean;
   onChanged: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -17,7 +19,7 @@ export function SellingPriceForm({ projectId, unitId, currencyCode, onChanged }:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!open) return <Button onClick={() => setOpen(true)}>Enter selling price</Button>;
+  if (!open) return <Button onClick={() => { setAmount(currentAmount ?? ""); setOpen(true); }}>{currentAmount !== null ? "Edit selling price" : "Enter selling price"}</Button>;
 
   return (
     <form onSubmit={async event => {
@@ -39,7 +41,7 @@ export function SellingPriceForm({ projectId, unitId, currencyCode, onChanged }:
         setBusy(false);
       }
     }}>
-      <FormSection title="Enter selling price" description="Enter the total before tax in the project base currency. Save a draft, then submit it for approval by a different person. Approved measurements are required; pricing configuration is not.">
+      <FormSection title={currentAmount !== null ? "Correct selling price" : "Enter selling price"} description={`Enter the total before tax in the project base currency. A correction creates a new version and preserves the previous price. Save, submit, approve, then activate the replacement. ${isMasterAdmin ? "As Master Administrator, you can approve your own correction with a recorded rationale." : "Approval requires a different person."}`}>
         {error ? <Notice tone="error">{error}</Notice> : null}
         <FieldRow columns={2}>
           <Field label={`Selling price (${currencyCode ?? "project base currency"}, ex tax)`}>

@@ -14,7 +14,7 @@ export function AcquisitionCosts({ parcel }: { parcel: LandParcel }) {
         ["Total fees, including taxes", parcel.total_acquisition_fees],
       ] as const).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{price(value)}</dd></div>)}
     </dl>
-    <Disclosure title="Fee rates & calculation basis">
+    <div className="land-cost-method"><Disclosure title="Fee rates & calculation basis">
       <KeyValueGrid columns={2}>
         <KeyValue label="Tax rate on purchase price" value={percent(parcel.acquisition_tax_rate_fraction)} />
         <KeyValue label="Agent fee / purchase price" value={percent(parcel.agent_fee_rate_fraction)} />
@@ -22,6 +22,6 @@ export function AcquisitionCosts({ parcel }: { parcel: LandParcel }) {
         <KeyValue label="Registration fee / purchase price" value={percent(parcel.registration_fee_rate_fraction)} />
       </KeyValueGrid>
       <p className="footnote">Taxes = purchase price × tax %. Total acquisition cost = purchase price + taxes + other fees + agent + legal + registration. Do not repeat itemized charges in other fees.</p>
-    </Disclosure>
+    </Disclosure></div>
   </>;
 }

@@ -559,9 +559,11 @@ export function InventoryTab({
         <UnitForm
           projectId={projectId}
           floors={floorsForNewUnit}
-          buildings={buildings}
+          buildings={buildings.filter(b => b.is_active && phases.some(p => p.id === b.phase_id && p.is_active) && (!filters.phase_id || b.phase_id === filters.phase_id) && (!filters.building_id || b.id === filters.building_id))}
           phases={phases}
           defaultFloorId={filters.floor_id}
+          defaultBuildingId={filters.building_id}
+          allFloors={floors}
           onCancel={() => setAddingUnit(false)}
           onSaved={async () => {
             setAddingUnit(false);

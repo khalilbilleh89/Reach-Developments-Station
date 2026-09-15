@@ -369,18 +369,34 @@ def test_the_unit_table_holds_four_status_columns(postgres: None) -> None:
 
 
 def test_the_unit_table_stores_no_hierarchy_it_can_derive(postgres: None) -> None:
-    """Given the unit, then phase and building are absent.
+    """Given the unit, then it carries exactly one physical parent and no phase.
 
-    They are reached through the floor. Two copies of one fact are two things to
-    disagree, and ``project_id`` is the deliberate exception because it is the
+    A unit hangs from a floor, or -- for a building with no floors, a villa being
+    the case that forced it -- from the building directly. Both are never set at
+    once: the database refuses it, so the pair cannot become two copies of one
+    fact that disagree. Phase is still reached through that parent and is absent
+    here, and ``project_id`` remains the deliberate exception because it is the
     security scope every query filters on.
     """
     columns = _columns("units")
 
     assert "floor_id" in columns
+    assert "building_id" in columns
     assert "project_id" in columns
     assert "phase_id" not in columns
-    assert "building_id" not in columns
+
+    with get_engine().connect() as connection:
+        definitions = " ".join(
+            connection.execute(
+                text(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                    "WHERE contype = 'c' AND conrelid = 'units'::regclass"
+                )
+            ).scalars()
+        )
+
+    assert "ck_units_one_parent" in _constraint_names("units", "c")
+    assert "floor_id IS NULL" in definitions and "building_id IS NULL" in definitions
 
 
 def test_no_money_column_reaches_inventory(postgres: None) -> None:

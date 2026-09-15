@@ -186,8 +186,8 @@ def unit_options(
     permissions.require_operational_project(project)
     query = (
         select(Unit, Floor, Building, Phase)
-        .join(Floor, Floor.id == Unit.floor_id)
-        .join(Building, Building.id == Floor.building_id)
+        .outerjoin(Floor, Floor.id == Unit.floor_id)
+        .join(Building, Building.id == func.coalesce(Unit.building_id, Floor.building_id))
         .join(Phase, Phase.id == Building.phase_id)
         .where(
             Unit.project_id == project.id,
@@ -242,7 +242,7 @@ def unit_options(
                 "unit_id": unit.id,
                 "unit_reference": unit.unit_reference,
                 "building_name": building.name,
-                "floor_name": floor.label,
+                "floor_name": floor.label if floor else None,
                 "phase_name": phase.name,
                 "unit_type": unit.unit_type_code,
                 "commercial_availability": unit.commercial_status,

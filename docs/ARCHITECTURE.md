@@ -1324,3 +1324,13 @@ separation. Consultant Engineering's existing locked update contract also permit
 active agreement corrections without replacing the agreement or its programme.
 See [PRELAUNCH_CONSULTANT_AMENDMENTS.md](PRELAUNCH_CONSULTANT_AMENDMENTS.md) for
 scope, audit and rollback behavior.
+
+### Inventory parent placement
+
+Units store exactly one physical parent: a floor, or a building with no floors.
+The database enforces the exclusive parent and project-scoped foreign keys.
+Buildings with recorded floors require floor-level units; direct unit creation
+and floor creation/moves share the project lock so they cannot race into mixed
+placement. Building and phase labels, filtering, permissions and downstream
+reports resolve either path. No synthetic floor or duplicate building reference
+is stored for a floor-level unit. See INVENTORY_LAUNCH.md for migration rollback.
