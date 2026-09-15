@@ -23,16 +23,29 @@ def test_net_and_gross_follow_owner_formulas_without_weights() -> None:
     assert result["net_area_unit"] == result["gross_area_unit"] == "sqm"
 
 
-def test_net_remains_known_when_an_outdoor_component_is_unknown() -> None:
+def test_an_outdoor_component_absent_from_the_schedule_adds_no_area() -> None:
+    """An outdoor component the approved schedule does not list is not unknown.
+
+    It is a component the unit does not have, so gross equals net rather than
+    refusing a total. Only the internal area is required; it is what gross and
+    net are both built from, and without it neither can be stated.
+    """
     result = gross_measurement(lines(("75.3", "12.5", "20", "8", "4.2", "0"))[:2])
     assert result["net_area"] == Decimal("87.8")
+    assert result["gross_area"] == Decimal("87.8")
+    assert result["gross_missing_components"] == []
+    assert result["gross_area_reason"] is None
+
+
+def test_gross_is_still_refused_when_the_internal_area_is_the_missing_one() -> None:
+    """The one component whose absence is genuinely unknown, not zero."""
+    result = gross_measurement(lines(("75.3", "12.5", "20", "8", "4.2", "0"))[1:])
+    assert result["net_area"] is None
     assert result["gross_area"] is None
-    assert result["gross_missing_components"] == [
-        "roof_garden",
-        "front_garden",
-        "terrace",
-        "porches",
-    ]
+    assert result["gross_missing_components"] == ["internal"]
+    assert result["gross_area_reason"] == (
+        "Record the internal area to calculate net and gross area."
+    )
 
 
 def test_missing_mixed_or_duplicate_net_measurements_are_not_zero() -> None:
