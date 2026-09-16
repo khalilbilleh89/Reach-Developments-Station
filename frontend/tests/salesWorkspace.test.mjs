@@ -251,3 +251,34 @@ test("selected trigger preserves governed details and routes changes through the
   assert.equal(nodes(view.render()).find(node=>node.type==="SalesUnitPicker").props.initiallyOpen,true);
   assert.equal(nodes(view.render()).find(node=>node.type==="ReservationForm"),undefined);
 });
+
+test("the select-all tick can be cleared on a page holding a unit that cannot be released", async()=>{
+  // The regression: `checked` was true only when every row on the page was
+  // picked, but only releasable rows can be picked. One already-Available row
+  // made `checked` unreachable, so the browser reported every click as "now
+  // checked" and the handler kept re-selecting. There was no way back off.
+  const units=[
+    {id:"sold-out",unit_reference:"Akoya 3101",commercial_status:"available",legal_status:"no_spa",collection_status:"not_started",delivery_status:"not_started",release_eligible:true,release_blockers:[]},
+    {id:"ready",unit_reference:"Akoya 3104",commercial_status:"unreleased",legal_status:"no_spa",collection_status:"not_started",delivery_status:"not_started",release_eligible:true,release_blockers:[]},
+  ];
+  const view=mount("CommercialUnits","CommercialUnits",{
+    "@/lib/api":{ApiError,inventory:{units:async()=>({units,total:units.length})}},
+    "../inventory/unit/UnitStanding":{UnitStanding:"UnitStanding"},
+    "../inventory/unit/UnitHistory":{UnitHistory:"UnitHistory"},
+    "../construction/StageWorkspace":{UnitStages:"UnitStages"},
+    "../inventory/statusLabels":{statusLabel:value=>value},
+  },{projectId:"project",roles:new Set(["project_manager"]),onClose(){}});
+  view.render();view.flush();await settle();
+
+  const box = tree => nodes(tree).find(node=>node.type==="input"&&node.props["aria-label"]==="Select every unit ready to release");
+  const row = tree => nodes(tree).find(node=>node.type==="input"&&node.props["aria-label"]==="Release Akoya 3104");
+
+  box(view.render()).props.onChange({target:{checked:true}});
+  const picked=view.render();
+  assert.equal(row(picked).props.checked,true,"select-all picks the releasable unit");
+  assert.equal(box(picked).props.checked,false,"one unpickable row means the header never reads as fully ticked");
+
+  box(picked).props.onChange({target:{checked:true}});
+  const cleared=view.render();
+  assert.equal(row(cleared).props.checked,false,"a second press clears the selection");
+});

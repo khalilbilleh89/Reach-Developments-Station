@@ -78,7 +78,11 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
           // full tick above three plainly unticked rows reads as a lie.
           ref={box=>{if(box) box.indeterminate = chosen.length>0 && chosen.length<rows.units.length;}}
           checked={chosen.length>0 && chosen.length===rows.units.length} disabled={busy || ready.length===0}
-          onChange={e=>setPicked(e.target.checked ? new Set(ready.map(unit=>unit.id)) : new Set())} /></label></th> : null}<th>Unit</th><th>Commercial</th><th>Legal</th><th>Collections</th><th>Delivery</th></tr></thead><tbody>{rows.units.map(unit=><tr key={unit.id}>{canRelease ? <td><label><input type="checkbox" aria-label={`Release ${unit.unit_reference}`}
+          // Decided from what is picked, never from the box's own checked state.
+          // On a page holding one unreleasable row this can never read as ticked,
+          // so the browser called every click "now checked" and the selection had
+          // no way back off: clearing it was impossible.
+          onChange={()=>setPicked(chosen.length>0 ? new Set() : new Set(ready.map(unit=>unit.id)))} /></label></th> : null}<th>Unit</th><th>Commercial</th><th>Legal</th><th>Collections</th><th>Delivery</th></tr></thead><tbody>{rows.units.map(unit=><tr key={unit.id}>{canRelease ? <td><label><input type="checkbox" aria-label={`Release ${unit.unit_reference}`}
           checked={picked.has(unit.id)} disabled={busy || !ready.some(row=>row.id===unit.id)}
           onChange={e=>setPicked(current=>{const next = new Set(current); if(e.target.checked) next.add(unit.id); else next.delete(unit.id); return next;})} /></label></td> : null}<th scope="row"><Button disabled={busy} onClick={()=>void loadUnit(unit.id)}>{unit.unit_reference}</Button></th><td>{statusLabel(unit.commercial_status)}{unit.release_blockers.length && ["unreleased","held"].includes(unit.commercial_status) ? <span className="footnote"> — {unit.release_blockers.join("; ")}</span> : null}</td><td>{statusLabel(unit.legal_status)}</td><td>{statusLabel(unit.collection_status)}</td><td>{statusLabel(unit.delivery_status)}</td></tr>)}</tbody></TableScroll>
         {rows.units.length===0 ? <p>No matching units.</p> : null}
