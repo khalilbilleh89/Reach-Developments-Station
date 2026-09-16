@@ -4600,15 +4600,65 @@ input[type="file"].input {
   font-size: var(--text-xl);
 }
 
-/* Management intelligence: context, reported findings, then evidence. */
+/* Management intelligence: context, reported findings, then evidence.
+ *
+ * The section reads as one instrument rather than a run of loose text. The
+ * heading, the four sections and the period that governs all of them sit on a
+ * single band at the top; below it is the evidence for whichever section is
+ * chosen. Before this the title, the tabs and a bare "Observation period" row
+ * stood on the canvas one under another, which is how an owner came to read
+ * them as a list of words rather than a set of controls.
+ */
 .analysis-workspace {
   min-width: 0;
-  padding: var(--space-6) 0;
-  border-top: 1px solid var(--line-default);
+  padding: var(--space-5);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-card);
+  background-color: var(--surface);
 }
 
-.analysis-workspace > .section-header .section-heading {
+.analysis-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.analysis-head-title {
+  min-width: 0;
+}
+
+.analysis-head-heading {
+  margin: 0;
   font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+
+.analysis-head-note {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+}
+
+/* The tab strip is part of the band, so it carries no margin of its own. */
+.analysis-head .tabs {
+  margin-bottom: 0;
+}
+
+/* The period governs every figure below it, so it sits directly under the
+ * band as a control with its answer on its face, not as a stray row. */
+.analysis-period {
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  margin-bottom: var(--space-5);
+  background-color: var(--surface-secondary);
+}
+
+.analysis-period > .disclosure {
+  border-top: 0;
 }
 
 .analysis-context {
@@ -4640,63 +4690,115 @@ input[type="file"].input {
   background-color: var(--accent-soft);
 }
 
-.analysis-counts {
-  padding: var(--space-4) 0;
+/* Three dimensions of the same population belong beside each other. Stacked,
+ * with a section margin and their own padding between each, they turned nine
+ * small numbers into a screen and a half of scrolling. */
+.analysis-dimensions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
 }
 
-.analysis-counts h4 {
+.analysis-counts {
+  min-width: 0;
+}
+
+.analysis-counts-label {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.analysis-count-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+/* A status count is read beside its neighbours, so the figure is sized for a
+ * row rather than for a headline. */
+.analysis-count {
+  display: flex;
+  gap: var(--space-4);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-tag);
+  background-color: var(--surface-secondary);
+}
+
+.analysis-count-name {
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
 
-.analysis-counts dl {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-7);
-  margin: var(--space-3) 0 0;
-}
-
-.analysis-counts dt {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-.analysis-counts dd {
-  margin: var(--space-1) 0 0;
-  font-size: var(--metric);
-  font-weight: 600;
+.analysis-count-figure {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
+/* Provenance, on one line. This sits under nearly every block on every tab,
+ * so its furniture is the most-repeated thing in the section: as a bordered
+ * panel with a heading and its own collapsed row it was routinely taller than
+ * the finding it qualified. Coverage and sample read left to right, and the
+ * method opens in place on the right. */
 .source-basis {
-  margin-top: var(--space-5);
-  padding-top: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: var(--space-4);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--line-soft);
 }
 
 .source-basis-status {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
-  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  min-width: 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
 
 .source-basis-reason {
-  margin-top: var(--space-2);
   color: var(--text-secondary);
-  font-size: var(--text-sm);
 }
 
-.source-basis > .disclosure {
+.source-basis-detail {
+  flex: none;
+  margin-left: auto;
+}
+
+.source-basis > .source-basis-detail > .disclosure {
   border-top: 0;
+}
+
+.source-basis .disclosure-trigger {
+  min-height: 0;
+  gap: var(--space-2);
+  padding: 0;
 }
 
 .source-basis .disclosure-label {
   color: var(--text-secondary);
   font-size: var(--text-xs);
   font-weight: 500;
+}
+
+.source-basis .disclosure-content {
+  padding: var(--space-2) 0 0;
 }
 
 .attention-clear-compact { padding: var(--space-3) var(--space-4); margin: 0; border: 1px solid var(--line-soft); border-radius: var(--radius-card); font-size: var(--text-sm); }
@@ -5138,6 +5240,16 @@ a:not([class]):hover { color: var(--accent-hover); }
 
   .analysis-position {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The band stacks rather than squeezing the heading against the tabs; the
+     tab strip keeps its own horizontal scroll. */
+  .analysis-head {
+    align-items: stretch;
+  }
+
+  .analysis-workspace {
+    padding: var(--space-4);
   }
 
   .overview-position {

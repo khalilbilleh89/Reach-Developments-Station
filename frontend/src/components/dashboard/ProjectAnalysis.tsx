@@ -19,6 +19,16 @@ const display = (value: string) => value.replaceAll("_", " ");
 const percentage = (value: Ratio) => value.percentage === null ? "Unavailable" : `${value.percentage}% (${value.numerator} / ${value.denominator})`;
 const amounts = (values: Money[]) => values.length ? values.map((value) => money(value.amount, value.currency)).join(" · ") : "No sale activations";
 
+/**
+ * How far a figure can be trusted, said once and quietly.
+ *
+ * This appears under nearly every block on every tab. As a bordered panel with
+ * its own heading and its own collapsed disclosure it was the single largest
+ * source of noise on the page: ten copies of the same furniture per tab,
+ * each taller than the finding it qualified. It is now one row — coverage,
+ * sample, and the method behind a link that opens in place. Nothing is
+ * dropped; the reason and the source basis are still both reachable.
+ */
 function Basis({ value }: { value: Availability }) {
   return <div className="source-basis">
     <div className="source-basis-status">
@@ -26,19 +36,32 @@ function Basis({ value }: { value: Availability }) {
         {value.availability === "available" ? "Available" : value.availability === "partial" ? "Partial coverage" : "Unavailable"}
       </StatusDot>
       <span>{value.sample_size} records in sample</span>
+      {value.availability !== "available" && value.reason ? <span className="source-basis-reason">{value.reason}</span> : null}
     </div>
-    {value.availability !== "available" && value.reason ? <p className="source-basis-reason">{value.reason}</p> : null}
-    <Disclosure title="Source & coverage">
-      {value.availability === "available" && value.reason ? <p>{value.reason}</p> : null}
-      <p className="footnote">{value.source_basis}</p>
-    </Disclosure>
+    <div className="source-basis-detail">
+      <Disclosure title="Method">
+        {value.availability === "available" && value.reason ? <p>{value.reason}</p> : null}
+        <p className="footnote">{value.source_basis}</p>
+      </Disclosure>
+    </div>
   </div>;
 }
+/**
+ * One dimension of the record population, as a row of small facts.
+ *
+ * Previously a heading over a wrapping list of 26px figures, which turned
+ * three dimensions into a screen and a half of mostly nothing. A status count
+ * is a fact to scan, not a headline: the figure is sized to be read beside
+ * its neighbours rather than across the room.
+ */
 function Counts({ values, label }: { values: Record<string, number>; label: string }) {
-  return <section className="analysis-counts"><h4>{label}</h4>
-    {Object.keys(values).length ? <dl>{Object.entries(values).map(([name, count]) => <div key={name}>
-      <dt>{display(name)}</dt><dd>{count}</dd>
-    </div>)}</dl> : <p className="footnote">No records reported.</p>}
+  const entries = Object.entries(values);
+  return <section className="analysis-counts">
+    <h4 className="analysis-counts-label">{label}</h4>
+    {entries.length ? <ul className="analysis-count-list">{entries.map(([name, count]) => <li key={name} className="analysis-count">
+      <span className="analysis-count-name">{display(name)}</span>
+      <span className="analysis-count-figure num">{count}</span>
+    </li>)}</ul> : <p className="footnote">No records reported.</p>}
   </section>;
 }
 function ContextNote({ context }: { context: Context }) {
@@ -81,10 +104,10 @@ function FundamentalView({ data }: { data: Fundamental }) {
       <Basis value={data.sales_basis} />
       <Disclosure title={<> Monthly selling demand </>}><TableScroll fixedFirst label="Monthly selling demand"><thead><tr><th scope="col">Month</th><th scope="col" className="num">Activations</th><th scope="col" className="num">Cancellations</th><th scope="col" className="num">Net absorption</th><th scope="col" className="num">New contracted value</th></tr></thead><tbody>{data.monthly_sales.map((row) => <tr key={row.month}><th scope="row">{businessDate(row.month)}</th><td className="num">{row.activations}</td><td className="num">{row.cancellations}</td><td className="num">{row.net_absorption}</td><td className="num">{amounts(row.contracted_value)}</td></tr>)}</tbody></TableScroll></Disclosure>
     </section>
-    <Disclosure title={<> Inventory scope & status dimensions · {p.total_units} total records </>}><p>{p.eligible_units} units are eligible for absorption analysis. Eligibility excludes inactive, held, unreleased and withdrawn units. Overview register counts follow your inventory access and filters.</p><Counts label="Commercial" values={p.commercial} /><Counts label="Legal" values={p.legal} /><Counts label="Delivery" values={p.delivery} /><p>These are current record dimensions, not a single combined status.</p></Disclosure>
+    <Disclosure title="Inventory scope & status dimensions" context={`${p.total_units} total records`}><p className="muted">{p.eligible_units} units are eligible for absorption analysis. Eligibility excludes inactive, held, unreleased and withdrawn units. Overview register counts follow your inventory access and filters. These are current record dimensions, not a single combined status.</p><div className="analysis-dimensions"><Counts label="Commercial" values={p.commercial} /><Counts label="Legal" values={p.legal} /><Counts label="Delivery" values={p.delivery} /></div></Disclosure>
     <RankingTable title="Sales branches" rows={data.branches} /><RankingTable title="Salespeople" rows={data.salespeople} /><Basis value={data.ranking_basis} />
     <DemandTable title="Property type demand" rows={data.property_types} /><DemandTable title="View demand" rows={data.views} /><Basis value={data.view_basis} />
-    <Disclosure title={<> Observed view premiums </>}>{data.observed_premiums.length ? data.observed_premiums.map((row) => <section key={`${row.property_type}-${row.view}`}><h4>{row.property_type} · {row.view}</h4><p>{row.percentage === null ? "Unavailable" : `${row.percentage}% observed premium`} · View sample {row.sample_size}, baseline sample {row.baseline_sample}</p><p>{row.baseline} {row.currency && row.area_unit ? `${row.view_price_per_gross_area ?? "Unavailable"} vs ${row.baseline_price_per_gross_area ?? "Unavailable"} ${row.currency}/${row.area_unit}` : null}</p><Basis value={row} /></section>) : <p>No comparable structured view cohorts recorded.</p>}</Disclosure>
+    <Disclosure title="Observed view premiums" context={`${data.observed_premiums.length} cohorts`}>{data.observed_premiums.length ? <><TableScroll fixedFirst label="Observed view premiums"><thead><tr><th scope="col">Cohort</th><th scope="col">Coverage</th><th scope="col" className="num">Observed premium</th><th scope="col" className="num">View sample</th><th scope="col" className="num">Baseline sample</th><th scope="col">Comparison</th></tr></thead><tbody>{data.observed_premiums.map((row) => <tr key={`${row.property_type}-${row.view}`}><th scope="row">{display(row.property_type)} · {display(row.view)}</th><td><StatusDot tone={row.availability === "available" ? "success" : row.availability === "partial" ? "warning" : "muted"}>{row.availability === "available" ? "Available" : row.availability === "partial" ? "Partial" : "Unavailable"}</StatusDot></td><td className="num">{row.percentage === null ? "Unavailable" : `${row.percentage}%`}</td><td className="num">{row.sample_size}</td><td className="num">{row.baseline_sample}</td><td>{row.currency && row.area_unit ? `${row.view_price_per_gross_area ?? "Unavailable"} vs ${row.baseline_price_per_gross_area ?? "Unavailable"} ${row.currency}/${row.area_unit}` : row.reason ?? row.baseline}</td></tr>)}</tbody></TableScroll><p className="muted">Every recorded cohort is listed, including those with no comparable sale — an absent premium is a fact about the records, not a gap in the page. The method is identical for every row and is stated once below rather than repeated on each.</p>{data.observed_premiums[0] ? <p className="footnote">{data.observed_premiums[0].source_basis}</p> : null}</> : <p>No comparable structured view cohorts recorded.</p>}</Disclosure>
   </div>;
 }
 function FinancialView({ data }: { data: Financial }) {
@@ -138,5 +161,34 @@ export function ProjectAnalysis({ projectId, roles }: { projectId: string; roles
   const [query, setQuery] = useState("");
   const section = chosen && enabled.includes(chosen) ? chosen : enabled[0];
   if (!section) return null;
-  return <section className="analysis-workspace"><SectionHeader level={2} title="Project Analysis" description="Demand, capital movement and the recorded product." /><div className="stack"><Tabs label="Project analysis sections" tabs={enabled.map((key) => ({ key, label: labels[key] }))} active={section} onSelect={(key) => setChosen(key as Section)} /><Disclosure title={<> Observation period </>}><form onSubmit={(event) => { event.preventDefault(); const params = new URLSearchParams(); if (from) params.set("period_from", from); if (to) params.set("period_to", to); if (asOf) params.set("as_of", asOf); setQuery(params.size ? `?${params}` : ""); }}><FieldRow columns={3}><Field label="From" optional><input className="input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></Field><Field label="To" optional><input className="input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></Field><Field label="As of" optional><input className="input" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} /></Field></FieldRow><FormActions><Button type="submit">Apply period</Button></FormActions><p className="muted">Default: last 12 calendar months including the current partial month. Maximum 732 days. Inventory and technical facts are current snapshots.</p></form></Disclosure><TabPanel group="Project analysis sections" tab={section}><AnalysisAnswer key={`${projectId}:${section}:${query}`} projectId={projectId} section={section} query={query} /></TabPanel></div></section>;
+  // What the reader has actually asked for, in words, on the control that sets
+  // it. "Observation period" alone said nothing about which period was in
+  // force, so the only way to learn it was to open the panel.
+  const period = from || to || asOf
+    ? [from ? `from ${businessDate(from)}` : null, to ? `to ${businessDate(to)}` : null, asOf ? `as of ${businessDate(asOf)}` : null].filter(Boolean).join(" · ")
+    : "Last 12 months";
+
+  return <section className="analysis-workspace">
+    <header className="analysis-head">
+      <div className="analysis-head-title">
+        <h2 className="analysis-head-heading">Project Analysis</h2>
+        <p className="analysis-head-note">Demand, capital movement and the recorded product.</p>
+      </div>
+      <Tabs label="Project analysis sections" tabs={enabled.map((key) => ({ key, label: labels[key] }))} active={section} onSelect={(key) => setChosen(key as Section)} />
+    </header>
+    <div className="analysis-period">
+      <Disclosure title="Observation period" context={period}>
+        <form onSubmit={(event) => { event.preventDefault(); const params = new URLSearchParams(); if (from) params.set("period_from", from); if (to) params.set("period_to", to); if (asOf) params.set("as_of", asOf); setQuery(params.size ? `?${params}` : ""); }}>
+          <FieldRow columns={3}>
+            <Field label="From" optional><input className="input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></Field>
+            <Field label="To" optional><input className="input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></Field>
+            <Field label="As of" optional><input className="input" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} /></Field>
+          </FieldRow>
+          <FormActions><Button type="submit">Apply period</Button></FormActions>
+          <p className="muted">Default: last 12 calendar months including the current partial month. Maximum 732 days. Inventory and technical facts are current snapshots.</p>
+        </form>
+      </Disclosure>
+    </div>
+    <TabPanel group="Project analysis sections" tab={section}><AnalysisAnswer key={`${projectId}:${section}:${query}`} projectId={projectId} section={section} query={query} /></TabPanel>
+  </section>;
 }
