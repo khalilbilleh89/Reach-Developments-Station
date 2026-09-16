@@ -103,7 +103,8 @@ def test_approved_ui_delivery_skips_backend_entry_and_aggregator(draft: bool) ->
         assert not condition(job, "pull_request", "main", draft, ui_only=True)
     # Full remains dependent on successful structural checks, so a skipped
     # structural job cannot start database shards.
-    assert setting("backend_full", "needs") == "backend_static"
+    needs = setting("backend_full", "needs") or ""
+    assert "backend_static" in needs and "development_scope" in needs
     assert "always()" not in (setting("backend_full", "if") or "")
     assert condition("frontend", "pull_request", "main", draft, ui_only=True)
 
@@ -161,7 +162,7 @@ def test_smoke_refuses_before_dependency_installation() -> None:
 
 def test_shards_are_independent_complete_and_not_fail_fast() -> None:
     content = block("backend_full")
-    assert "needs: backend_static" in content
+    assert "backend_static" in (setting("backend_full", "needs") or "")
     assert "fail-fast: false" in content
     assert "shard: [1, 2, 3, 4]" in content
     assert "image: postgres:16" in content
@@ -170,6 +171,7 @@ def test_shards_are_independent_complete_and_not_fail_fast() -> None:
         "ci_backend_shards.py --shard ${{ matrix.shard }} --count 4 --out selected-tests.txt"
         in content
     )
+    assert "--scope ${{ needs.development_scope.outputs.full_scope || 'all' }}" in content
     assert "pytest -q $(tr '\\n' ' ' < selected-tests.txt) --durations=20" in content
     assert "--maxfail" not in content
     assert "--ignore" not in content
@@ -211,3 +213,80 @@ def test_checks_use_reviewed_head_and_frontend_still_builds() -> None:
     assert "npm ci" in block("frontend")
     assert "npm run lint" in block("frontend")
     assert "npm run build" in block("frontend")
+
+
+# --------------------------------------------------------------------------- #
+# Narrowing Full to the guards a frontend change can reach
+# --------------------------------------------------------------------------- #
+
+SCOPE_SCRIPT = ROOT / "scripts" / "ci_development_ui.mjs"
+REPOSITORY = "khalilbilleh89/Reach-Developments-Station"
+
+
+def scoped(event: dict, paths: list[str]) -> bool:
+    """Ask the real module, so this cannot drift from what CI actually runs."""
+    program = (
+        f"import {{ isFrontendScoped }} from {str(SCOPE_SCRIPT.as_uri())!r};"
+        f"process.stdout.write(String(isFrontendScoped({event!r}, {paths!r})));"
+    ).replace("'", '"')
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", program],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip() == "true"
+
+
+def pull_request(**over: str) -> dict:
+    return {
+        "name": "pull_request",
+        "base": "main",
+        "head": "claude/some-ui-change",
+        "repository": REPOSITORY,
+        "headRepository": REPOSITORY,
+        **over,
+    }
+
+
+def test_a_diff_confined_to_the_frontend_scopes_full() -> None:
+    assert scoped(pull_request(), ["frontend/src/app/globals.css", "frontend/tests/a.test.mjs"])
+
+
+@pytest.mark.parametrize(
+    "paths",
+    (
+        ["frontend/src/app/globals.css", "app/modules/inventory/service.py"],
+        ["app/modules/inventory/service.py"],
+        ["tests/test_product_experience.py"],
+        [".github/workflows/ci.yml"],
+        ["docs/ARCHITECTURE.md"],
+        ["frontend/../app/main.py"],
+    ),
+)
+def test_anything_outside_the_frontend_keeps_the_whole_suite(paths: list[str]) -> None:
+    """One backend path in the diff is enough, and traversal is not a frontend path."""
+    assert not scoped(pull_request(), paths)
+
+
+def test_a_push_to_main_is_never_scoped() -> None:
+    # The branch everything merges into always runs the complete suite. This is
+    # the safety net that makes narrowing a pull request defensible at all.
+    assert not scoped(pull_request(name="push"), ["frontend/src/app/globals.css"])
+
+
+def test_a_fork_and_an_empty_diff_are_never_scoped() -> None:
+    assert not scoped(pull_request(headRepository="someone/fork"), ["frontend/src/a.css"])
+    assert not scoped(pull_request(base="integration/mvp3"), ["frontend/src/a.css"])
+    # An empty set satisfies `every`, which would narrow Full to nothing.
+    assert not scoped(pull_request(), [])
+
+
+def test_the_workflow_passes_the_computed_scope_to_both_shard_commands() -> None:
+    """A scope the workflow never reads is a policy that does not exist."""
+    assert "full_scope: ${{ steps.scope.outputs.full_scope }}" in block("development_scope")
+    for job in ("backend_static", "backend_full"):
+        content = block(job)
+        assert "ci_backend_shards.py" in content
+        assert "--scope ${{ needs.development_scope.outputs.full_scope || 'all' }}" in content
+        assert "development_scope" in setting(job, "needs") or ""
