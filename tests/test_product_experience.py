@@ -269,6 +269,77 @@ class TestThereIsOnePrimitiveSystem:
                 )
 
 
+class TestEveryTabStripLooksTheSame:
+    """One set of sections looks like one set of sections, everywhere.
+
+    The product had three tab appearances at once — a dark pill on a workspace,
+    an accent underline on a record, a raised white chip on analysis — selected
+    by a ``variant`` prop. Nothing about a project section, a sale section and
+    an analysis section makes them three different kinds of thing, so the
+    difference taught a reader nothing and cost them the one habit a tab strip
+    should build: recognising the selected section without looking twice.
+
+    This is the kind of divergence that returns quietly. A screen needs "a bit
+    more emphasis here", a variant is added, and a year later there are four.
+    The rules below make the fourth appearance fail rather than ship: the strip
+    takes no variant, and the stylesheet declares the selected state once.
+    """
+
+    def test_the_tab_primitive_offers_no_appearance_variant(self) -> None:
+        source = read(UI / "Tabs.tsx")
+        # The prop and the class it built, not the word: the comment above the
+        # component explains why there is no variant, and should keep saying so.
+        for shape in ("variant?:", "variant =", "variant:", "tabs-${"):
+            assert shape not in source, (
+                f"Tabs grew a variant again (`{shape}`). A strip that needs different "
+                "framing from its surroundings gets it from the container it sits in; "
+                "the tabs themselves have one appearance."
+            )
+        assert 'className="tabs"' in source, "The tab strip no longer carries the canonical class"
+
+    def test_no_screen_asks_a_tab_strip_for_a_different_look(self) -> None:
+        for path in frontend_sources():
+            source = read(path)
+            for match in re.finditer(r"<Tabs\b[^>]*>", source, re.DOTALL):
+                assert "variant" not in match.group(0), (
+                    f"{path.name} asks Tabs for an appearance of its own. "
+                    "Every tab strip in the product looks the same."
+                )
+
+    def test_the_selected_tab_is_declared_once(self) -> None:
+        css = read(STYLESHEET)
+        selectors = [
+            found.strip()
+            for found in re.findall(r"^\s*([^@{}\n]*\.tab-active[^{}\n]*)\{", css, re.MULTILINE)
+            # A rule for the UNSELECTED tab names the selected class in a
+            # negation. That is one appearance described from both sides, not two.
+            if ":not(" not in found
+        ]
+        assert selectors == [".tab-active"], (
+            "The selected tab is styled in more than one place: "
+            f"{selectors}. One appearance means one declaration."
+        )
+
+    def test_the_selected_tab_is_named_in_the_accent_and_anchored(self) -> None:
+        css = read(STYLESHEET)
+        block = re.search(r"\.tab-active\s*\{([^}]*)\}", css)
+        assert block, "The selected tab has no declaration at all"
+        body = block.group(1)
+        assert "var(--accent)" in body, "The selected section is no longer named in the accent"
+        assert "var(--accent-soft)" in body, "The selected section no longer reads as a surface"
+        assert "border-bottom-color" in body, (
+            "The selected section is no longer anchored to the strip"
+        )
+
+    def test_no_retired_tab_variant_class_survives_in_the_stylesheet(self) -> None:
+        css = read(STYLESHEET)
+        for retired in (".tabs-record", ".tabs-analysis", ".tabs-workspace"):
+            assert retired not in css, (
+                f"`{retired}` is still styled, but no component emits it. "
+                "A rule nobody can reach is a rule that misleads the next reader."
+            )
+
+
 class TestTheStylesheetIsOneLayer:
     """One rule per selector, one token per value, no colour outside the tokens.
 
