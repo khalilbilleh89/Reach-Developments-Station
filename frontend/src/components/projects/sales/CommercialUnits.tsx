@@ -68,12 +68,16 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
         {outcome.skipped ? <ul className="unit-release-requirements">{outcome.outcomes.filter(row=>!row.released).map(row=><li key={row.unit_id}>{row.unit_reference}: {row.blockers.join("; ")}</li>)}</ul> : null}
       </Notice> : null}
       {failure?.key === key ? <Notice tone="error">{failure.message}<Button onClick={()=>setRevision(value=>value+1)}>Retry</Button></Notice> : !rows ? <Loading label="Loading commercial stock" /> : <>
-        {canRelease ? <div className="row-actions">
-          <Button variant="primary" disabled={busy || chosen.length===0} onClick={()=>void releaseChosen()}>Release {chosen.length} selected</Button>
-          <span className="footnote">{ready.length===0 ? "No unit on this page is ready to go on sale." : `${ready.length} ready to release on this page.`}</span>
+        {canRelease ? <div className="toolbar">
+          <Button variant="primary" disabled={busy || chosen.length===0} onClick={()=>void releaseChosen()}>Release selected</Button>
+          <span className="footnote">{ready.length===0 ? "No unit on this page is ready to go on sale." : `${ready.length} ready to release on this page · ${chosen.length} ticked`}</span>
         </div> : null}
         <TableScroll label="Commercial stock"><thead><tr>{canRelease ? <th><label><input type="checkbox" aria-label="Select every unit ready to release"
-          checked={ready.length>0 && chosen.length===ready.length} disabled={busy || ready.length===0}
+          // Ticked only when every row on the page is picked. A page whose
+          // released units cannot be picked shows a dash instead, because a
+          // full tick above three plainly unticked rows reads as a lie.
+          ref={box=>{if(box) box.indeterminate = chosen.length>0 && chosen.length<rows.units.length;}}
+          checked={chosen.length>0 && chosen.length===rows.units.length} disabled={busy || ready.length===0}
           onChange={e=>setPicked(e.target.checked ? new Set(ready.map(unit=>unit.id)) : new Set())} /></label></th> : null}<th>Unit</th><th>Commercial</th><th>Legal</th><th>Collections</th><th>Delivery</th></tr></thead><tbody>{rows.units.map(unit=><tr key={unit.id}>{canRelease ? <td><label><input type="checkbox" aria-label={`Release ${unit.unit_reference}`}
           checked={picked.has(unit.id)} disabled={busy || !ready.some(row=>row.id===unit.id)}
           onChange={e=>setPicked(current=>{const next = new Set(current); if(e.target.checked) next.add(unit.id); else next.delete(unit.id); return next;})} /></label></td> : null}<th scope="row"><Button disabled={busy} onClick={()=>void loadUnit(unit.id)}>{unit.unit_reference}</Button></th><td>{statusLabel(unit.commercial_status)}{unit.release_blockers.length && ["unreleased","held"].includes(unit.commercial_status) ? <span className="footnote"> — {unit.release_blockers.join("; ")}</span> : null}</td><td>{statusLabel(unit.legal_status)}</td><td>{statusLabel(unit.collection_status)}</td><td>{statusLabel(unit.delivery_status)}</td></tr>)}</tbody></TableScroll>
