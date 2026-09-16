@@ -522,7 +522,7 @@ export function ProjectCommandCenter({
                 section="inventory"
                 onNavigate={onNavigate}
               >
-                <Section answer={units} name="Inventory" off="Inventory opens after setup.">
+                <Section answer={units} name="Inventory" off="Inventory opens after setup." block>
                   {(data) => (
                     <MetricGroup compact>
                       <Metric label="Units" value={data.total} />
@@ -534,7 +534,7 @@ export function ProjectCommandCenter({
                   )}
                 </Section>
                 {seesSales ? (
-                  <Section answer={deals} name="Sales" off="">
+                  <Section answer={deals} name="Sales" off="" block>
                     {(data) => (
                       <>
                         <SectionHeader
@@ -569,7 +569,7 @@ export function ProjectCommandCenter({
                   </Section>
                 ) : null}
                 {seesPricing ? (
-                  <Section answer={prices} name="Pricing" off="">
+                  <Section answer={prices} name="Pricing" off="" block>
                     {(data) => (
                       <>
                         <SectionHeader
@@ -664,7 +664,7 @@ export function ProjectCommandCenter({
                   section="construction"
                   onNavigate={onNavigate}
                 >
-                  <Section answer={build} name="Construction" off="Opens after setup.">
+                  <Section answer={build} name="Construction" off="Opens after setup." block>
                     {(data) => <BuildPosition summary={data} />}
                   </Section>
                 </ModuleSection>
@@ -677,7 +677,7 @@ export function ProjectCommandCenter({
                   section="cashflow"
                   onNavigate={onNavigate}
                 >
-                  <Section answer={projectCash} name="Cashflow" off="Opens after setup.">
+                  <Section answer={projectCash} name="Cashflow" off="Opens after setup." block>
                     {(data) => <ProjectCashPosition summary={data} />}
                   </Section>
                 </ModuleSection>
@@ -939,16 +939,28 @@ function Section<T>({
   answer,
   name,
   off,
+  block,
   children,
 }: {
   answer: Answer<T>;
   name: string;
   off: string;
+  /**
+   * Draw this as one of the department band's positions.
+   *
+   * Opt-in rather than automatic: the same helper carries the Collections
+   * card, which is a panel in its own right and would gain a second surface
+   * inside its first. A position a reader may not see stays absent, so the
+   * band never shows an empty block where a permission ends.
+   */
+  block?: boolean;
   children: (data: T) => ReactNode;
 }) {
-  if (answer.status === "off") return off ? <p className="footnote">{off}</p> : null;
-  if (answer.status === "loading") return <Loading label={`Loading ${name.toLowerCase()}…`} shape="metrics" />;
+  const wrap = (body: ReactNode) => (block ? <div className="module-position">{body}</div> : body);
+  if (answer.status === "off") return off ? wrap(<p className="footnote">{off}</p>) : null;
+  if (answer.status === "loading")
+    return wrap(<Loading label={`Loading ${name.toLowerCase()}…`} shape="metrics" />);
   if (answer.status === "denied") return null;
-  if (answer.status === "failed") return <Notice tone="warning">{name}: {answer.message}</Notice>;
-  return <>{children(answer.data)}</>;
+  if (answer.status === "failed") return wrap(<Notice tone="warning">{name}: {answer.message}</Notice>);
+  return wrap(<>{children(answer.data)}</>);
 }
