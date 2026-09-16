@@ -453,6 +453,21 @@ export type UnitSummary = {
   is_active: boolean;
 };
 
+/** What became of one unit in a bulk release, and why when nothing did. */
+export type UnitReleaseOutcome = {
+  unit_id: string;
+  unit_reference: string;
+  released: boolean;
+  commercial_status: string;
+  blockers: string[];
+};
+
+export type UnitReleaseResult = {
+  released: number;
+  skipped: number;
+  outcomes: UnitReleaseOutcome[];
+};
+
 export type UnitFeature = { id: string; label: string; is_active: boolean };
 export type UnitDocument = { id: string; title: string; url: string; revision: string | null; is_active: boolean };
 

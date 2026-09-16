@@ -419,3 +419,130 @@ def test_a_blocked_unit_is_not_released_by_its_date_arriving(
     on_file = _unit(admin_client, project_id, unit_id)
     assert on_file["commercial_status"] == "unreleased"
     assert "Commercial block: Title deed under review" in on_file["release_blockers"]
+
+
+# --------------------------------------------------------------------------- #
+# Releasing a set of units at once
+# --------------------------------------------------------------------------- #
+
+
+def _releases(project_id: str) -> str:
+    return f"{inventory_url(project_id)}/unit-releases"
+
+
+def test_a_chosen_set_of_due_units_goes_on_sale_together(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    second_unit: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """A development launches a floor, not a unit.
+
+    The release date this branch's predecessor introduced only fires on a save,
+    so a unit whose date was set earlier has nothing left to change and no way
+    out of its own screen. Choosing the units and releasing them together is
+    that way out, and it is the same release: the same gates, the same event.
+    """
+    for unit in (unit_id, second_unit):
+        make_releasable(admin_client, project_id, unit, area_types, db, release_date="2024-01-01")
+
+    response = admin_client.post(_releases(project_id), json={"unit_ids": [unit_id, second_unit]})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["released"], body["skipped"]) == (2, 0)
+    assert {row["commercial_status"] for row in body["outcomes"]} == {"available"}
+    for unit in (unit_id, second_unit):
+        assert _unit(admin_client, project_id, unit)["commercial_status"] == "available"
+
+
+def test_a_unit_that_cannot_go_is_named_with_its_reason_and_the_rest_still_go(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    second_unit: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """One blocked unit must not cost the others their release.
+
+    Refusing the whole request would make an operator hunt for the offending
+    row before anything could happen, which is the search across screens this
+    work exists to remove. Each unit is judged and released on its own.
+    """
+    make_releasable(admin_client, project_id, unit_id, area_types, db, release_date="2024-01-01")
+    approve_areas(admin_client, project_id, second_unit, area_types)
+
+    response = admin_client.post(_releases(project_id), json={"unit_ids": [unit_id, second_unit]})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["released"], body["skipped"]) == (1, 1)
+    refused = next(row for row in body["outcomes"] if not row["released"])
+    # Every reason, not the first one found: an operator told to fix the price
+    # and then refused again for the date has been sent round the loop twice.
+    assert refused["blockers"] == ["Pricing not approved", "Release date not set"]
+    assert refused["commercial_status"] == "unreleased"
+    assert _unit(admin_client, project_id, unit_id)["commercial_status"] == "available"
+    assert _unit(admin_client, project_id, second_unit)["commercial_status"] == "unreleased"
+
+
+def test_releasing_a_unit_that_is_already_on_sale_is_not_an_error(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """Asking for what is already true changes nothing and refuses nothing.
+
+    An operator ticking a page of rows should not have to know which of them a
+    colleague released ten minutes ago, and a second press of the button must
+    not write a second event.
+    """
+    make_releasable(admin_client, project_id, unit_id, area_types, db, release_date="2024-01-01")
+    assert admin_client.post(_releases(project_id), json={"unit_ids": [unit_id]}).status_code == 200
+
+    response = admin_client.post(_releases(project_id), json={"unit_ids": [unit_id]})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["released"] == 1
+    history = admin_client.get(f"{inventory_url(project_id)}/units/{unit_id}/status-history").json()
+    assert [event["to_status"] for event in history].count("available") == 1
+
+
+def test_a_future_dated_unit_is_refused_by_the_set_release_too(
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """Choosing a unit is not the same as deciding its date has arrived."""
+    make_releasable(admin_client, project_id, unit_id, area_types, db, release_date="2099-01-01")
+
+    response = admin_client.post(_releases(project_id), json={"unit_ids": [unit_id]})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["released"] == 0
+    assert body["outcomes"][0]["blockers"] == ["Release date 2099-01-01 not reached"]
+
+
+def test_a_caller_without_commercial_permission_cannot_release_a_set(
+    finance_client: TestClient,
+    admin_client: TestClient,
+    project_id: str,
+    unit_id: str,
+    area_types: dict[str, str],
+    db: Session,
+) -> None:
+    """The set release is the transition it performs, and is authorised as one."""
+    make_releasable(admin_client, project_id, unit_id, area_types, db, release_date="2024-01-01")
+
+    response = finance_client.post(_releases(project_id), json={"unit_ids": [unit_id]})
+
+    assert response.status_code == 403, response.text
+    assert _unit(admin_client, project_id, unit_id)["commercial_status"] == "unreleased"

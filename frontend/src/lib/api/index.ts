@@ -124,6 +124,7 @@ import type {
   UnitFeature, UnitDocument,
   UnitPricing,
   UnitRegister,
+  UnitReleaseResult,
   LaunchRegister,
   UnitStatusEvent,
   AllocationVersion,
@@ -478,6 +479,10 @@ export const inventory = {
       `/projects/${projectId}/inventory/units/${unitId}/commercial-transitions`,
       input,
     ),
+  releaseUnits: (projectId: string, unitIds: string[]) =>
+    post<UnitReleaseResult>(`/projects/${projectId}/inventory/unit-releases`, {
+      unit_ids: unitIds,
+    }),
   unitFeatures: (projectId: string, unitId: string) => get<UnitFeature[]>(`/projects/${projectId}/inventory/units/${unitId}/features`),
   addUnitFeature: (projectId: string, unitId: string, body: { label: string }) => post<UnitFeature>(`/projects/${projectId}/inventory/units/${unitId}/features`, body),
   retireUnitFeature: (projectId: string, unitId: string, id: string) => post<UnitFeature>(`/projects/${projectId}/inventory/units/${unitId}/features/${id}/retire`),

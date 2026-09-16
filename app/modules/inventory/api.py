@@ -92,6 +92,9 @@ from app.modules.inventory.schemas import (
     UnitPurgePreview,
     UnitPurgeRequest,
     UnitRegister,
+    UnitReleaseOutcome,
+    UnitReleaseRequest,
+    UnitReleaseResult,
     UnitRestoreRequest,
     UnitStatusEventRead,
     UnitSummary,
@@ -697,6 +700,50 @@ def update_release_controls(
         **changes,
     )
     return _unit_detail(session, project, updated, actor)
+
+
+@router.post(
+    "/{project_id}/inventory/unit-releases",
+    response_model=UnitReleaseResult,
+    summary="Put every chosen unit that is due on the market",
+)
+def release_units(
+    payload: UnitReleaseRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: InventoryProject,
+) -> UnitReleaseResult:
+    """Release a chosen set of units in one action.
+
+    Not a path under ``/units/{unit_id}``: the resource is the set, and a static
+    segment beside a UUID path parameter is a route whose meaning depends on
+    declaration order. Authorised as the commercial transition it performs,
+    because that is exactly what each release writes.
+    """
+    require_commercial_transition_writer(actor)
+    units = [
+        require_unit(session, project=project, unit_id=unit_id, actor=actor)
+        for unit_id in dict.fromkeys(payload.unit_ids)
+    ]
+    outcomes = service.release_many(
+        session,
+        project=project,
+        units=units,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+    )
+    rows = [
+        UnitReleaseOutcome(
+            unit_id=unit.id,
+            unit_reference=unit.unit_reference,
+            released=not blockers,
+            commercial_status=unit.commercial_status,
+            blockers=blockers,
+        )
+        for unit, blockers in outcomes
+    ]
+    released = sum(1 for row in rows if row.released)
+    return UnitReleaseResult(released=released, skipped=len(rows) - released, outcomes=rows)
 
 
 @router.post(
