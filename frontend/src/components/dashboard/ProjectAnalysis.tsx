@@ -175,7 +175,7 @@ export function ProjectAnalysis({ projectId, roles }: { projectId: string; roles
         <h2 className="analysis-head-heading">Project Analysis</h2>
         <p className="analysis-head-note">Demand, capital movement and the recorded product.</p>
       </div>
-      <Tabs variant="analysis" label="Project analysis sections" tabs={enabled.map((key) => ({ key, label: labels[key] }))} active={section} onSelect={(key) => setChosen(key as Section)} />
+      <Tabs label="Project analysis sections" tabs={enabled.map((key) => ({ key, label: labels[key] }))} active={section} onSelect={(key) => setChosen(key as Section)} />
     </header>
     <div className="analysis-period">
       <Disclosure title="Observation period" context={period}>

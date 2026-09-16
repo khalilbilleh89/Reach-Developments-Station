@@ -1500,27 +1500,47 @@ section + section {
  * Tabs and segmented controls
  * ------------------------------------------------------------------------ */
 
+/* One set of sections looks like one set of sections, everywhere.
+ *
+ * There were three: a dark pill on the workspace, an accent underline on a
+ * record, and a raised white chip on analysis. Nothing about a project section,
+ * a sale section and an analysis section makes them three different kinds of
+ * thing, so the difference taught the reader nothing and cost them the one
+ * habit a tab strip should build — recognising the selected one at a glance.
+ *
+ * The survivor is the record treatment, because it is the one the owner
+ * pointed at: the selected section is named in the accent, filled softly so it
+ * reads as a surface rather than as emphasis, and anchored by a rule that sits
+ * on the strip's own line. The strip carries no card of its own; it is a row of
+ * sections above their content, which is what the underline is for.
+ *
+ * There is deliberately no variant hook. A fourth appearance should be hard to
+ * add by accident, and `test_every_tab_strip_looks_the_same` fails if one
+ * appears.
+ */
 .tabs {
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;
   overflow-y: hidden;
+  padding: 0;
   margin-bottom: var(--space-5);
-  border-bottom: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
   scrollbar-width: thin;
-  padding: var(--space-1);
-  background-color: var(--surface);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-xs);
 }
 
 .tab {
   position: relative;
   flex: none;
-  padding: 0.65rem var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border: 0;
-  border-bottom: 0;
-  margin-bottom: 0;
+  /* Sits on the strip's own rule rather than beneath it. */
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  border-radius: var(--radius-control) var(--radius-control) 0 0;
   background: none;
   color: var(--text-secondary);
   font-size: var(--text-sm);
@@ -1529,52 +1549,20 @@ section + section {
   cursor: pointer;
   transition:
     color var(--motion-fast) var(--ease),
+    background-color var(--motion-fast) var(--ease),
     border-color var(--motion-fast) var(--ease);
-  border-radius: var(--radius-control);
 }
 
 .tab:not(.tab-active):hover {
   color: var(--text-primary);
+  background-color: var(--surface-hover);
 }
 
 .tab-active {
-  color: var(--text-inverse);
-  font-weight: 650;
-  background-color: var(--ink);
-}
-
-/* Workspace navigation, record sections and analysis are distinct contexts. */
-.tabs-record {
-  padding: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.tabs-record .tab {
-  padding: var(--space-4) var(--space-3);
-  border-radius: 0;
-  border-bottom: 3px solid transparent;
-}
-
-.tabs-record .tab-active {
   border-bottom-color: var(--accent);
-  background-color: transparent;
+  background-color: var(--accent-soft);
   color: var(--accent);
-}
-
-.tabs-analysis {
-  width: fit-content;
-  max-width: 100%;
-  background-color: var(--surface-secondary);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  box-shadow: none;
-}
-
-.tabs-analysis .tab-active {
-  background-color: var(--surface);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
+  font-weight: 650;
 }
 
 .disclosure {
