@@ -1259,6 +1259,12 @@ def update_release_controls(
     the request model either: PR-MVP-04 sets it when a real approved price
     exists. Per-field role checks happen in the route, because each field here
     has a different owner.
+
+    Setting a release date that has arrived is the release. If every gate in
+    :func:`release_blockers` passes once the change is applied, the unit moves
+    to available in the same transaction, with the same appended status event a
+    manual release would have written. The operator states the date; the system
+    does not then ask them to confirm the thing they just said.
     """
     updates = resolve_updates(changes, fields=_RELEASE_UPDATABLE, clearable=_RELEASE_CLEARABLE)
     unit = lock_unit(session, project_id=project.id, unit_id=unit.id)
@@ -1277,9 +1283,57 @@ def update_release_controls(
         before=before,
         after=_snapshot(unit, _UNIT_FIELDS),
     )
-    session.commit()
-    session.refresh(unit)
-    return unit
+    released = release_due(
+        session,
+        project=project,
+        unit=unit,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+    if released is None:
+        session.commit()
+        session.refresh(unit)
+    return released or unit
+
+
+def release_due(
+    session: Session,
+    *,
+    project: Project,
+    unit: Unit,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    today: date | None = None,
+) -> Unit | None:
+    """Put the unit on the market if its release date has arrived and it may go.
+
+    Returns the released unit, or ``None`` when nothing was due -- either a gate
+    still fails, or the unit is past inventory's hands already. Only a unit that
+    is unreleased or held is a candidate: a reserved or contracted unit is not
+    inventory's to move, and a unit already available needs nothing.
+
+    This is the whole of the release action. There is no separate confirmation,
+    because there is nothing left to confirm: the date is the decision, and the
+    remaining gates are facts the operator cannot answer by clicking.
+    """
+    if unit.commercial_status not in {COMMERCIAL_STATUS_UNRELEASED, COMMERCIAL_STATUS_HELD}:
+        return None
+    effective = today or date.today()
+    if release_blockers(session, unit=unit, today=effective):
+        return None
+    return transition_commercial_status(
+        session,
+        project=project,
+        unit=unit,
+        to_status=COMMERCIAL_STATUS_AVAILABLE,
+        effective_date=max(
+            unit.release_date,
+            latest_commercial_effective_date(session, unit_id=unit.id) or unit.release_date,
+        ),
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        reason="Release date reached.",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -2406,22 +2460,30 @@ def release_blockers(
 ) -> list[str]:
     """Everything standing between this unit and being offered for sale.
 
-    Before PR-MVP-04 exists, ``pricing_approved`` is false on every unit and this
-    list always contains "Pricing not approved". That is correct, not a gap: a
-    development should not offer a unit it has no approved price for, and there
-    is deliberately no override.
+    Four things decide it, and the owner chose each one because it is a fact
+    about whether the unit can be sold at all, not a stage in somebody's
+    checklist:
+
+    * the unit is active -- an inactive unit is not a unit;
+    * an approved launch price exists -- a development must not offer a unit it
+      has no approved price for, and there is deliberately no override;
+    * the release date has been set and has arrived -- this is the decision to
+      put the unit on the market, and it is the only step the operator takes;
+    * nobody has set a commercial block -- somebody deliberately said stop.
+
+    Drawings approval, legal sale eligibility and the completeness of the
+    inventory record used to block here too. They are still recorded, still
+    shown on the unit, and still worth chasing -- but a development that knows
+    what a unit costs and has decided to sell it is not helped by a release
+    button that refuses until a drawing is countersigned. They inform; they no
+    longer stop. Preparation is not the same question as saleability, and
+    answering them in one list made releasing a unit a search across two
+    modules for whichever box was still unticked.
     """
     effective = today or date.today()
     blockers: list[str] = []
     if not unit.is_active:
         blockers.append("Unit is not active")
-    _, _, missing = completeness(session, unit=unit, actor=actor)
-    if missing:
-        blockers.append("Inventory record incomplete: " + ", ".join(missing))
-    if not unit.drawings_approved:
-        blockers.append("Drawings not approved")
-    if not unit.legal_sale_eligible:
-        blockers.append("Legal sale eligibility not confirmed")
     if not unit.pricing_approved:
         blockers.append("Pricing not approved")
     if unit.release_date is None:

@@ -331,14 +331,16 @@ export function UnitWorkspace({
         <UnitRelease
           unit={unit}
           roles={roles}
-          busy={busy}
           onSaveControls={async (changes) => {
-            await inventory.releaseControls(projectId, unitId, changes);
+            const saved = await inventory.releaseControls(projectId, unitId, changes);
             await load();
             await onChanged();
-            setNotice("Release controls updated.");
+            setNotice(
+              saved.commercial_status === "available"
+                ? "Release date saved. The unit is on sale."
+                : "Release date saved.",
+            );
           }}
-          onTransition={(move) => void transition(move)}
         />
       ) : null}
 

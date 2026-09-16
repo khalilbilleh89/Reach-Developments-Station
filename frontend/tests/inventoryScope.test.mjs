@@ -25,6 +25,13 @@ function mount(path, component, dependencies, props) {
   }, exports);
   return () => { cursor = 0; effects = []; const tree = exports[component](props); effects.forEach(fn => fn()); return tree; };
 }
+const textOf = tree => {
+  if (tree == null || typeof tree === "boolean") return "";
+  if (typeof tree !== "object") return String(tree);
+  if (Array.isArray(tree)) return tree.map(textOf).join(" ");
+  return textOf(tree.props?.children);
+};
+
 function nodes(tree) {
   if (!tree || typeof tree !== "object") return [];
   if (Array.isArray(tree)) return tree.flatMap(nodes);
@@ -46,21 +53,21 @@ test("launch price entry omits Reason and keeps amount after a refused save", as
   assert.equal(field(render(),"Selling price (EUR, ex tax)").props.value,"125000.25");
 });
 
-test("Inventory release offers only Available and preserves server eligibility", () => {
-  const moves=[];
-  const unit={commercial_status:"unreleased",release_eligible:true,is_active:true,release_blockers:[]};
-  const props={unit,roles:new Set(["master_admin"]),busy:false,onSaveControls:async()=>{},onTransition:move=>moves.push(move)};
+test("Inventory release states the date and never asks for a second confirmation", () => {
+  const unit={commercial_status:"unreleased",release_eligible:false,is_active:true,
+    release_blockers:["Pricing not approved"],pricing_approved:false,drawings_approved:false,legal_sale_eligible:false};
+  const props={unit,roles:new Set(["master_admin"]),onSaveControls:async()=>{}};
   const render=mount("components/projects/inventory/unit/UnitRelease.tsx","UnitRelease",{
     "@/components/projects/EditForm":{EditForm:"EditForm",asValue:value=>value},
-    "@/lib/format":{todayISO:()=>"2026-09-12",businessDate:value=>value},
+    "@/lib/format":{businessDate:value=>value},
   },props);
-  const release=()=>nodes(render()).find(node=>node.type==="Button" && node.props.type==="submit");
-  assert.equal(release().props.disabled,false);
-  nodes(render()).find(node=>node.type==="form").props.onSubmit({preventDefault(){}});
-  assert.equal(moves[0].to_status,"available");
-  unit.release_eligible=false;
-  assert.equal(release().props.disabled,true);
-  unit.commercial_status="contracted";
-  assert.equal(release(),undefined);
+  // No release button and no release form: setting the date is the whole action.
+  assert.equal(nodes(render()).find(node=>node.type==="form"),undefined);
+  assert.equal(nodes(render()).find(node=>node.type==="Button" && node.props.type==="submit"),undefined);
+  // While it is off the market the outstanding gates are named.
+  assert.match(textOf(render()),/Pricing not approved/);
+  // Once it is on sale the unit says so instead.
+  unit.commercial_status="available"; unit.release_blockers=[];
+  assert.match(textOf(render()),/on sale/);
   assert.ok(!nodes(render()).some(node=>node.type==="select"));
 });

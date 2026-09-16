@@ -4,9 +4,19 @@ Owner-requested scope, 12 September 2026. Governing policy: [ENGINEERING_RULES.m
 
 Inventory maintains phases, buildings, floors, unit features, measured areas and
 launch list prices. A unit has Overview, Property, Pricing and Release tabs.
-Release offers only release as Available; server eligibility, permissions and
-append-only history remain authoritative. Removing completeness cards does not
-remove release validation.
+
+Release is one decision: the release date. On that date the unit goes on sale by
+itself, provided its launch price is approved, it is active, and nobody has set a
+commercial block. There is no separate confirmation, because there is nothing
+left to confirm -- the operator already said when the unit goes to market, and
+the remaining gates are facts they cannot answer by clicking.
+
+Drawings approval and legal sale eligibility are recorded on the unit and shown
+on the Release tab, but they do not hold it back. They describe how ready the
+development is, not whether the unit can be sold; owner decision, 15 September
+2026. Permissions, server-side eligibility and append-only status history remain
+authoritative: the automatic release writes the same status event, dated the
+release date, that a manual one wrote.
 
 Sales > Commercial stock owns the manual uncommitted status controls, legal
 eligibility, holds, four status dimensions, status history and delivery detail.
