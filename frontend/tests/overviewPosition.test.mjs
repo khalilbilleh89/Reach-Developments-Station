@@ -58,12 +58,27 @@ const withClass = (tree, name) =>
 
 const format = { money: (value, code) => (value === null || value === undefined ? "—" : code ? `${code} ${value}` : String(value)), businessDate: (value) => value };
 
+/**
+ * Currency ids are UUIDs, and the fixtures say so.
+ *
+ * The first version of this suite wrote ``currency_id: "EUR"`` and asserted
+ * "EUR 180.00". It passed, and the shipped page rendered
+ * "2e654ca7-0122-4323-8ba2-38d58a2f94b8 217,377.30" at an owner, because a
+ * fixture shaped like the answer cannot test the step that produces it. Every
+ * id below is a UUID, and only the register turns one into a code.
+ */
+const CYP_ID = "2e654ca7-0122-4323-8ba2-38d58a2f94b8";
+const EUR_ID = "7b1d0f26-93aa-4a55-9f0e-2c1b6d84a071";
+const UNKNOWN_ID = "00000000-0000-4000-8000-000000000000";
+const REGISTER = { [CYP_ID]: "CYP", [EUR_ID]: "EUR" };
+const currency = { useCurrencyCode: () => (id) => (id ? (REGISTER[id] ?? null) : null) };
+
 const register = (over = {}) => ({
   units: [], total: 50, sold_count: 0, reserved_count: 0, available_count: 50, held_count: 0, unreleased_count: 0, ...over,
 });
 
 function selling(props) {
-  return mount("SellingPosition", "SellingPosition", { "@/lib/format": format }, {
+  return mount("SellingPosition", "SellingPosition", { "@/lib/format": format, "@/lib/currency": currency }, {
     units: null, deals: null, cash: null, currencyCode: "CYP", onNavigate() {}, ...props,
   });
 }
@@ -92,8 +107,8 @@ test("two collection currencies are never added together", () => {
   const tree = selling({
     units: register(),
     cash: { as_of: "2026-09-16", accounts: 4, accounts_overdue: 1, accounts_disputed: 0, accounts_cleared: 0, currencies: [
-      { currency_id: "CYP", accounts: 2, outstanding_total: "100.00", due_total: "10.00", overdue_total: "5.00", unapplied_cash: "0", confirmed_receipts_total: "90.00", buckets: {} },
-      { currency_id: "EUR", accounts: 2, outstanding_total: "200.00", due_total: "20.00", overdue_total: "6.00", unapplied_cash: "0", confirmed_receipts_total: "180.00", buckets: {} },
+      { currency_id: CYP_ID, accounts: 2, outstanding_total: "100.00", due_total: "10.00", overdue_total: "5.00", unapplied_cash: "0", confirmed_receipts_total: "90.00", buckets: {} },
+      { currency_id: EUR_ID, accounts: 2, outstanding_total: "200.00", due_total: "20.00", overdue_total: "6.00", unapplied_cash: "0", confirmed_receipts_total: "180.00", buckets: {} },
     ] },
   });
 
@@ -102,16 +117,45 @@ test("two collection currencies are never added together", () => {
   assert.doesNotMatch(textOf(tree), /270|30\.00|11\.00/, "no total is invented across the two purses");
 });
 
-test("one collection currency is shown with its own code, not the project's base", () => {
-  const tree = selling({
-    units: register(),
-    currencyCode: "CYP",
-    cash: { as_of: "2026-09-16", accounts: 2, accounts_overdue: 1, accounts_disputed: 0, accounts_cleared: 0, currencies: [
-      { currency_id: "EUR", accounts: 2, outstanding_total: "200.00", due_total: "20.00", overdue_total: "6.00", unapplied_cash: "0", confirmed_receipts_total: "180.00", buckets: {} },
-    ] },
-  });
+const purse = (id, over = {}) => ({
+  as_of: "2026-09-16", accounts: 2, accounts_overdue: 1, accounts_disputed: 0, accounts_cleared: 0,
+  currencies: [{ currency_id: id, accounts: 2, outstanding_total: "200.00", due_total: "20.00", overdue_total: "6.00", unapplied_cash: "0", confirmed_receipts_total: "180.00", buckets: {}, ...over }],
+});
+
+test("one collection currency is resolved to its own code, not the project's base", () => {
+  const tree = selling({ units: register(), currencyCode: "CYP", cash: purse(EUR_ID) });
 
   assert.deepEqual(withClass(tree, "selling-money-figure").map(textOf), ["EUR 180.00", "EUR 20.00", "EUR 6.00"]);
+});
+
+test("a currency id never reaches the page as the label of a figure", () => {
+  // The fault this suite missed once. ``currency_id`` is a UUID, the figure
+  // beside it is money an owner reads at a glance, and the two were printed
+  // together: "2e654ca7-0122-4323-8ba2-38d58a2f94b8 217,377.30". The assertion
+  // is deliberately about the whole rendered tree, not one element, because the
+  // id must not appear anywhere on the band.
+  const tree = selling({
+    units: register({ sold_count: 1, available_count: 49 }),
+    currencyCode: "CYP",
+    cash: purse(CYP_ID),
+    deals: { units: 63, contracted_value: "217377.30", currency_id: CYP_ID, mixed_currency: false },
+  });
+
+  const text = textOf(tree);
+  assert.doesNotMatch(text, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/,
+    "a raw currency id is rendered where a currency code belongs");
+  assert.deepEqual(withClass(tree, "selling-money-figure").map(textOf), ["CYP 180.00", "CYP 20.00", "CYP 6.00"]);
+  assert.equal(textOf(withClass(tree, "selling-figure")[0]), "CYP 217377.30");
+});
+
+test("an unresolvable currency shows the figure undenominated rather than guessing", () => {
+  // The register's own contract: an id it cannot resolve yields no code. A
+  // figure without its code is a smaller failure than a figure wearing another
+  // currency's — or wearing a UUID.
+  const tree = selling({ units: register(), currencyCode: "CYP", cash: purse(UNKNOWN_ID) });
+
+  assert.deepEqual(withClass(tree, "selling-money-figure").map(textOf), ["180.00", "20.00", "6.00"]);
+  assert.doesNotMatch(textOf(tree), /CYP 180\.00/, "the project's base is not applied to another purse");
 });
 
 test("a sales register spanning currencies states no contracted total", () => {
@@ -119,8 +163,8 @@ test("a sales register spanning currencies states no contracted total", () => {
   assert.match(textOf(withClass(mixed, "selling-figure")[0]), /Several currencies/);
   assert.doesNotMatch(textOf(withClass(mixed, "selling-figure")[0]), /999/);
 
-  const single = selling({ units: register({ sold_count: 3 }), deals: { units: 50, contracted_value: "727431.69", currency_id: "c", mixed_currency: false } });
-  assert.equal(textOf(withClass(single, "selling-figure")[0]), "CYP 727431.69");
+  const single = selling({ units: register({ sold_count: 3 }), deals: { units: 50, contracted_value: "727431.69", currency_id: EUR_ID, mixed_currency: false } });
+  assert.equal(textOf(withClass(single, "selling-figure")[0]), "EUR 727431.69");
   assert.match(textOf(single), /3 of 50 units sold/);
 });
 

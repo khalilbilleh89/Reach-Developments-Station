@@ -3,6 +3,7 @@
 import type { ProjectSection } from "@/components/shell/navigation";
 import type { CollectionProjectSummary, SalesRegisterTotals, UnitRegister } from "@/lib/api";
 import { Button } from "@/components/ui";
+import { useCurrencyCode } from "@/lib/currency";
 import { money } from "@/lib/format";
 
 /** One band of the stock bar: a commercial state and how much of the building it holds. */
@@ -41,6 +42,7 @@ export function SellingPosition({
   currencyCode: string | null;
   onNavigate: (section: ProjectSection) => void;
 }) {
+  const codeOf = useCurrencyCode();
   if (!units) return null;
 
   const bands: Band[] = [
@@ -62,9 +64,18 @@ export function SellingPosition({
   const purses = cash?.currencies ?? [];
   const purse = purses.length === 1 ? purses[0] : null;
   const mixed = purses.length > 1;
-  const purseCode = purse ? purse.currency_id : null;
+  // A collections row names its denomination by currency id, not by code, and
+  // the two are not interchangeable: the id is a UUID. Resolving it through the
+  // register the workspace already loaded is what turns it into "CYP"; an id
+  // the register cannot resolve yields no code at all, and the figure is shown
+  // undenominated rather than labelled with the raw id.
+  const purseCode = codeOf(purse?.currency_id);
 
   const contracted = deals?.mixed_currency ? null : (deals?.contracted_value ?? null);
+  // The sales register states its own currency when every contract shares one.
+  // The project's base is the fallback for a register that named none, never an
+  // override of one that did.
+  const contractedCode = codeOf(deals?.currency_id) ?? currencyCode;
 
   return (
     <section className="selling-position" aria-label="Commercial position">
@@ -72,7 +83,7 @@ export function SellingPosition({
         <div className="selling-lead">
           <span className="selling-label">Contracted</span>
           <strong className="selling-figure num">
-            {deals?.mixed_currency ? "Several currencies" : money(contracted, currencyCode)}
+            {deals?.mixed_currency ? "Several currencies" : money(contracted, contractedCode)}
           </strong>
           <span className="selling-note">
             {units.sold_count === 0
