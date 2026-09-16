@@ -32,6 +32,10 @@
 :root {
   --workspace-blue-wash: #f0f5ff;
   --workspace-blue-line: #d7e3fa;
+  /* The stock bar's middle steps: one hue, stepped so the bands read in
+   * lifecycle order without inventing a second colour family. */
+  --stock-reserved: #8fb0ea;
+  --stock-available: #c9daf6;
   /* ---- Canvas and surfaces ------------------------------------------- */
   /* Cool neutral canvas, white working surfaces and readable ink.
    * Each has a distinct job; borders are reserved for data and controls. */
@@ -4172,6 +4176,227 @@ input[type="file"].input {
 /* --------------------------------------------------------------------------
  * Command centre
  * ------------------------------------------------------------------------ */
+
+/* The commercial position: the band an owner opens the page for.
+ *
+ * It takes the accent wash rather than a shadow, because this file's rule is
+ * that hierarchy comes from spacing and rules and a shadow is reserved for
+ * something that genuinely floats. The band is not floating; it is first. */
+.selling-position {
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.selling-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5) var(--space-7);
+  padding: var(--space-5) var(--space-6) var(--space-4);
+  background: var(--accent-soft);
+}
+
+.selling-lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.selling-label {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.selling-figure {
+  font-size: var(--metric-hero);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.03em;
+}
+
+.selling-note {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.selling-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-6);
+}
+
+.selling-count {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.selling-count-figure {
+  font-size: var(--metric-lg);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+
+.selling-count-live {
+  color: var(--accent);
+}
+
+.selling-stock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-6) var(--space-5);
+  background: var(--accent-soft);
+}
+
+/* The whole building, once, in lifecycle order. Proportion, not decoration. */
+.selling-bar {
+  display: flex;
+  height: 0.875rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--workspace-blue-line);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.selling-bar-part {
+  display: block;
+  min-width: 0;
+}
+
+.selling-bar-sold {
+  background: var(--accent);
+}
+
+.selling-bar-reserved {
+  background: var(--stock-reserved);
+}
+
+.selling-bar-available {
+  background: var(--stock-available);
+}
+
+.selling-bar-held {
+  background: var(--warning-soft);
+}
+
+.selling-bar-unreleased {
+  background: var(--surface-secondary);
+}
+
+.selling-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.selling-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.selling-key {
+  display: inline-block;
+  width: 0.5625rem;
+  height: 0.5625rem;
+  border-radius: 3px;
+}
+
+.selling-money {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--workspace-blue-line);
+}
+
+.selling-money-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-6);
+  border-left: 1px solid var(--line-soft);
+}
+
+.selling-money-item:first-child {
+  border-left: 0;
+}
+
+.selling-money-figure {
+  font-size: var(--metric);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+
+.selling-money-overdue {
+  color: var(--danger);
+}
+
+.selling-money-action {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* Where the project is: four facts, each already stated by a module. */
+.project-standing {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.project-standing-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--line-soft);
+  border-left: 1px solid var(--line-soft);
+}
+
+.project-standing-cell:nth-child(odd) {
+  border-left: 0;
+}
+
+.project-standing-label {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.project-standing-value {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+
+/* A fact nobody has recorded yet reads as an answer, not as a failed load. */
+.project-standing-absent {
+  color: var(--text-muted);
+}
+
+.project-standing-flagged {
+  color: var(--danger);
+}
+
+.project-standing-note {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
 
 /* The development's identity plate: what this project is, in the order a
  * person would say it out loud. No figure appears here. */
