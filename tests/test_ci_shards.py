@@ -67,3 +67,68 @@ def test_failed_collection_cannot_return_a_smaller_suite(tmp_path: Path) -> None
 
     with pytest.raises((subprocess.CalledProcessError, ValueError)):
         shards.collected_weights(tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# Scoping Full to the guards a frontend change can actually reach
+# --------------------------------------------------------------------------- #
+
+
+def test_the_frontend_scope_is_discovered_from_the_files_themselves(tmp_path: Path) -> None:
+    """A guard added tomorrow joins the scope by reading the tree, not by a list.
+
+    A hardcoded roster would rot into the failure this scope exists to avoid: a
+    frontend pull request running no frontend guard at all, and passing.
+    """
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests/test_reads_frontend.py").write_text(
+        "from pathlib import Path\n\n\ndef test_css():\n    Path('frontend/src/app/globals.css')\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests/test_backend_only.py").write_text(
+        "def test_service():\n    assert True\n", encoding="utf-8"
+    )
+
+    assert shards.frontend_guards(tmp_path) == ["tests/test_reads_frontend.py"]
+
+
+def test_the_real_frontend_scope_is_a_strict_and_useful_subset() -> None:
+    guards, everything = shards.frontend_guards(), shards.discover()
+
+    assert set(guards) < set(everything), "a scope that selects everything saves nothing"
+    # The guards that caught real faults in frontend work. If a change ever drops
+    # one of these from the scope, a frontend pull request stops being checked by
+    # the suite that polices the frontend.
+    for required in (
+        "tests/test_product_experience.py",
+        "tests/test_static_frontend.py",
+        "tests/test_ux_copy.py",
+    ):
+        assert required in guards
+
+
+@pytest.mark.parametrize("count", (1, 2, 4))
+def test_a_scoped_full_still_assigns_its_population_exactly_once(
+    weights: dict[str, int], count: int
+) -> None:
+    scoped = shards.population(weights, "frontend")
+    result = shards.assign(scoped, count)
+
+    assert Counter(p for group in result for p in group) == Counter(scoped.keys())
+    assert set(scoped) == set(shards.frontend_guards())
+    assert len(scoped) < len(weights)
+
+
+def test_the_default_scope_is_every_file_and_an_unknown_scope_refuses(
+    weights: dict[str, int],
+) -> None:
+    assert shards.population(weights, "all") == weights
+    with pytest.raises(ValueError):
+        shards.population(weights, "backend")
+
+
+def test_a_scope_that_selects_nothing_refuses_rather_than_running_an_empty_full() -> None:
+    # Full narrowing to nothing and reporting success is the one outcome that
+    # would be worse than running the whole suite.
+    with pytest.raises(ValueError):
+        shards.population({"tests/test_service.py": 3}, "frontend", ROOT / "does-not-exist")

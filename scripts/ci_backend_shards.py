@@ -13,10 +13,45 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+#: The scopes Full may be asked for. ``all`` is the default and the only one a
+#: push to main ever uses: nothing reaches the branch without the whole suite.
+SCOPES = ("all", "frontend")
+
+
 def discover(root: Path = ROOT) -> list[str]:
     return sorted(
         p.relative_to(root).as_posix() for p in root.glob("tests/**/test_*.py") if p.is_file()
     )
+
+
+def frontend_guards(root: Path = ROOT) -> list[str]:
+    """The test files that read the frontend tree, found rather than listed.
+
+    A backend test file cannot be affected by a change confined to ``frontend/``;
+    one that opens that tree can, and several do — the stylesheet's single-layer
+    rules, the static export, the UX copy, the deletion contracts. Discovery is
+    the point: a guard added tomorrow joins this set by reading the tree, with
+    nobody remembering to add it to a list that would otherwise rot into a
+    frontend PR running no frontend guard at all.
+    """
+    return [
+        path
+        for path in discover(root)
+        if "frontend" in (root / path).read_text(encoding="utf-8", errors="ignore")
+    ]
+
+
+def population(weights: dict[str, int], scope: str, root: Path = ROOT) -> dict[str, int]:
+    """Narrow the assignment to a scope, refusing one that selects nothing."""
+    if scope not in SCOPES:
+        raise ValueError(f"Unknown Full scope: {scope}")
+    if scope == "all":
+        return weights
+    keep = set(frontend_guards(root))
+    scoped = {path: weight for path, weight in weights.items() if path in keep}
+    if not scoped:
+        raise ValueError("The frontend scope selected no test file; refusing an empty Full")
+    return scoped
 
 
 def collected_weights(root: Path = ROOT) -> dict[str, int]:
@@ -74,15 +109,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--shard", type=int, help="One-based shard number; omit to validate all")
     parser.add_argument("--count", type=int, default=4)
     parser.add_argument("--out", help="Write one assigned test file per line")
+    parser.add_argument(
+        "--scope",
+        choices=SCOPES,
+        default="all",
+        help="Which population to assign. 'frontend' keeps only the guards that read the "
+        "frontend tree, for a pull request whose whole diff is confined to it.",
+    )
     args = parser.parse_args(argv)
     if args.shard is not None and not 1 <= args.shard <= args.count:
         parser.error("--shard must be between 1 and --count")
     if args.out and args.shard is None:
         parser.error("--out requires --shard")
     try:
-        weights = collected_weights()
+        weights = population(collected_weights(), args.scope)
         shards = assign(weights, args.count)
-        validate(shards, discover())
+        validate(shards, list(weights))
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print(f"Full shard assignment refused: {error}", file=sys.stderr)
         return 1
@@ -91,9 +133,17 @@ def main(argv: list[str] | None = None) -> int:
             f"Shard {index}/{args.count}: {len(paths)} files, "
             f"{sum(weights[p] for p in paths)} collected-test weight"
         )
+    covered = "all" if args.scope == "all" else "every frontend-guarding"
     print(
-        f"Coverage: all {len(weights)} test files assigned exactly once. Counts are not durations."
+        f"Coverage: {covered} {len(weights)} test files assigned exactly once. "
+        "Counts are not durations."
     )
+    if args.scope != "all":
+        print(
+            f"Scope: {args.scope}. The remaining {len(discover()) - len(weights)} files are not "
+            "reachable from a change confined to the frontend, and every push to main still "
+            "runs the complete suite."
+        )
     if args.out:
         Path(args.out).write_text("\n".join(shards[args.shard - 1]) + "\n", encoding="utf-8")
     return 0
