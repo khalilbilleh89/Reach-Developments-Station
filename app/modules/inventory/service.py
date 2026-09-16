@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Sequence
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -1334,6 +1335,50 @@ def release_due(
         correlation_id=correlation_id,
         reason="Release date reached.",
     )
+
+
+def release_many(
+    session: Session,
+    *,
+    project: Project,
+    units: Sequence[Unit],
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+    today: date | None = None,
+) -> list[tuple[Unit, list[str]]]:
+    """Release every unit in ``units`` that is due, and say why the rest are not.
+
+    A development launches a floor or a phase, not a unit. Releasing them one at
+    a time through a form meant somebody opening two hundred records to state a
+    decision they had already made once, and the release date this branch
+    introduced made that worse rather than better: a unit whose date was set
+    before the rule existed has nothing left to change, so no save fires and it
+    stays off the market with no way out of its own screen.
+
+    Each unit is judged on its own gates and released in its own transaction, so
+    one blocked unit never costs the others their release. The returned pairs are
+    ``(unit, blockers)``: an empty list means it went on sale, and a non-empty one
+    is the reason it did not, in the same words the unit's own tab shows. A unit
+    that was already available comes back with no blockers and nothing written,
+    because asking to release what is already released is not an error.
+    """
+    effective = today or date.today()
+    outcomes: list[tuple[Unit, list[str]]] = []
+    for unit in units:
+        blockers = release_blockers(session, unit=unit, today=effective)
+        if blockers:
+            outcomes.append((unit, blockers))
+            continue
+        released = release_due(
+            session,
+            project=project,
+            unit=unit,
+            actor_user_id=actor_user_id,
+            correlation_id=correlation_id,
+            today=effective,
+        )
+        outcomes.append((released or unit, []))
+    return outcomes
 
 
 # --------------------------------------------------------------------------- #
@@ -2733,7 +2778,18 @@ def _unit_filters(
 
     Built once so the totals can never describe a different population from the
     rows they are reported alongside.
+
+    A blank filter is no filter. A browser submitting an unset dropdown sends
+    ``commercial_status=`` rather than omitting it, and FastAPI hands that over
+    as ``""`` -- which read literally means "units whose status is the empty
+    string", a population that cannot exist. Every register asking for "all
+    statuses" therefore came back empty. The same reading applies to the other
+    string filters, so they are normalised together rather than one at a time.
     """
+    commercial_status = commercial_status or None
+    unit_type_code = unit_type_code or None
+    asset_class = asset_class or None
+    search = search or None
     clauses: list[ColumnElement[bool]] = [Unit.project_id == project_id, Unit.removed_at.is_(None)]
     if commercial_status == "sold":
         clauses.append(Unit.commercial_status.in_(("contract_pending", "contracted")))

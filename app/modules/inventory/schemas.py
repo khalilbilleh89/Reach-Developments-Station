@@ -41,6 +41,10 @@ from app.modules.projects.schemas import StrictRequest
 #: never an acceptable carrier for a measured area or a weighting factor.
 DecimalStr = Annotated[Decimal, PlainSerializer(str, return_type=str, when_used="json")]
 
+#: One release request covers a page of the register with room to spare. A cap
+#: exists because the handler holds and locks every unit it names.
+_MAX_RELEASE_BATCH = 500
+
 
 class UnitRestoreRequest(StrictRequest):
     reason: str = Field(min_length=1, max_length=500)
@@ -311,6 +315,34 @@ class CommercialTransitionRequest(StrictRequest):
     effective_date: date
     reason: str | None = Field(default=None, max_length=500)
     notes: Notes | None = None
+
+
+class UnitReleaseRequest(StrictRequest):
+    """The units an operator has chosen to put on the market together.
+
+    Identifiers rather than a filter: the caller releases exactly the rows it
+    showed somebody, not whatever a re-run of a query happens to return later.
+    """
+
+    unit_ids: list[uuid.UUID] = Field(min_length=1, max_length=_MAX_RELEASE_BATCH)
+
+
+class UnitReleaseOutcome(BaseModel):
+    """What happened to one unit, in the words its own tab uses."""
+
+    unit_id: uuid.UUID
+    unit_reference: str
+    released: bool
+    commercial_status: str
+    blockers: list[str] = Field(default_factory=list)
+
+
+class UnitReleaseResult(BaseModel):
+    """The counts an operator reads first, and the detail behind them."""
+
+    released: int
+    skipped: int
+    outcomes: list[UnitReleaseOutcome]
 
 
 class AreaLine(BaseModel):

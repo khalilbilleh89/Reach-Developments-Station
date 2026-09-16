@@ -435,3 +435,37 @@ def test_a_sales_advisor_may_read_but_not_write(
         ).status_code
         == 403
     )
+
+
+def test_a_blank_filter_is_no_filter_rather_than_a_blank_value(
+    admin_client: TestClient, project_id: str, unit_id: str
+) -> None:
+    """A browser sends an unset dropdown as an empty string, not as nothing.
+
+    ``?commercial_status=`` arrives as ``""``, and read literally that asks for
+    units whose status is the empty string -- a population no unit can join,
+    because the column is constrained to a closed list. Every register showing
+    "All statuses" therefore answered "No matching units" while holding stock,
+    which is the failure that sent an operator looking for a unit that was
+    there all along.
+    """
+    url = f"{inventory_url(project_id)}/units"
+
+    blank = admin_client.get(url, params={"commercial_status": "", "search": ""})
+
+    assert blank.status_code == 200, blank.text
+    assert [unit["id"] for unit in blank.json()["units"]] == [unit_id]
+    assert blank.json()["total"] == admin_client.get(url).json()["total"]
+
+
+def test_a_named_status_still_narrows_the_register(
+    admin_client: TestClient, project_id: str, unit_id: str
+) -> None:
+    """Reading blank as "everything" must not make every filter mean everything."""
+    url = f"{inventory_url(project_id)}/units"
+
+    matching = admin_client.get(url, params={"commercial_status": "unreleased"}).json()
+    other = admin_client.get(url, params={"commercial_status": "reserved"}).json()
+
+    assert [unit["id"] for unit in matching["units"]] == [unit_id]
+    assert other["units"] == [] and other["total"] == 0
