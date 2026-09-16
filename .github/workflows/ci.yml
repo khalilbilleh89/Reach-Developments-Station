@@ -27,12 +27,34 @@ jobs:
     outputs:
       frontend_only: ${{ steps.scope.outputs.frontend_only }}
       full_scope: ${{ steps.scope.outputs.full_scope }}
+      shards: ${{ steps.width.outputs.shards }}
+      shard_count: ${{ steps.width.outputs.shard_count }}
     steps:
       - name: Check out reviewed tree
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+      # How wide Full runs, decided in one place and read by the matrix, the
+      # shard command and the job name. It used to be the literal 4 in three
+      # spots in this file and three assertions in test_ci_workflow.py, so
+      # changing it meant changing six things and hoping.
+      #
+      # Eight, not more: a single run is then twelve jobs, and a pull request
+      # run overlapping a push to main is twenty-four against this account's
+      # twenty concurrent jobs. Wider shards would queue and give the time
+      # straight back.
+      - name: Decide how wide Full runs
+        id: width
+        env:
+          SHARD_COUNT: 8
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          count = int(os.environ["SHARD_COUNT"])
+          print(f"shard_count={count}")
+          print("shards=" + json.dumps(list(range(1, count + 1))))
+          PY
       - name: Check complete delivery scope
         id: scope
         env:
@@ -229,10 +251,10 @@ jobs:
       - name: CI contract guards
         run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py tests/test_deletion_contracts.py
       - name: Validate complete Full assignment
-        run: python scripts/ci_backend_shards.py --count 4 --scope ${{ needs.development_scope.outputs.full_scope || 'all' }}
+        run: python scripts/ci_backend_shards.py --count ${{ needs.development_scope.outputs.shard_count }} --scope ${{ needs.development_scope.outputs.full_scope || 'all' }}
 
   backend_full:
-    name: Backend Full ${{ matrix.shard }}/4
+    name: Backend Full ${{ matrix.shard }}/${{ needs.development_scope.outputs.shard_count }}
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false)
     timeout-minutes: 120
@@ -240,7 +262,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON(needs.development_scope.outputs.shards) }}
     services:
       postgres:
         image: postgres:16
@@ -282,7 +304,7 @@ jobs:
       - name: Apply migrations to this shard's own database
         run: alembic upgrade head
       - name: Assign every file exactly once
-        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 4 --out selected-tests.txt --scope ${{ needs.development_scope.outputs.full_scope || 'all' }}
+        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count ${{ needs.development_scope.outputs.shard_count }} --out selected-tests.txt --scope ${{ needs.development_scope.outputs.full_scope || 'all' }}
       - name: Test every assigned file
         run: pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20
 

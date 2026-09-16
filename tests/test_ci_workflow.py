@@ -164,11 +164,15 @@ def test_shards_are_independent_complete_and_not_fail_fast() -> None:
     content = block("backend_full")
     assert "backend_static" in (setting("backend_full", "needs") or "")
     assert "fail-fast: false" in content
-    assert "shard: [1, 2, 3, 4]" in content
+    # The matrix and the shard command read the same output, so Full cannot be
+    # widened in one place and left narrow in the other — the failure that
+    # would silently drop a quarter of the suite on the floor.
+    assert "shard: ${{ fromJSON(needs.development_scope.outputs.shards) }}" in content
     assert "image: postgres:16" in content
     assert "alembic upgrade head" in content
     assert (
-        "ci_backend_shards.py --shard ${{ matrix.shard }} --count 4 --out selected-tests.txt"
+        "ci_backend_shards.py --shard ${{ matrix.shard }} "
+        "--count ${{ needs.development_scope.outputs.shard_count }} --out selected-tests.txt"
         in content
     )
     assert "--scope ${{ needs.development_scope.outputs.full_scope || 'all' }}" in content
@@ -176,7 +180,42 @@ def test_shards_are_independent_complete_and_not_fail_fast() -> None:
     assert "--maxfail" not in content
     assert "--ignore" not in content
     assert "continue-on-error" not in source()
-    assert "ci_backend_shards.py --count 4" in block("backend_static")
+    assert (
+        "ci_backend_shards.py --count ${{ needs.development_scope.outputs.shard_count }}"
+        in block("backend_static")
+    )
+
+
+def test_the_shard_width_is_decided_in_exactly_one_place() -> None:
+    """Four literals and three assertions used to agree by hand.
+
+    Full's width was the number 4 written into the matrix, the shard command,
+    the validating command and the job name, with tests pinning three of them.
+    Widening it meant changing six things in step; getting it half right would
+    have run six shards of an eight-way split and quietly skipped the rest.
+    """
+    scope = block("development_scope")
+    assert "SHARD_COUNT:" in scope, "nothing in development_scope decides the width"
+    assert "shards: ${{ steps.width.outputs.shards }}" in source()
+    assert "shard_count: ${{ steps.width.outputs.shard_count }}" in source()
+
+    # No survivor of the old hand-written width anywhere in the workflow.
+    for stale in ("shard: [1, 2, 3, 4]", "--count 4", "Full ${{ matrix.shard }}/4"):
+        assert stale not in source(), f"a hardcoded shard width survives: {stale}"
+
+
+def test_full_is_wide_enough_to_be_worth_sharding_and_not_so_wide_it_queues() -> None:
+    """Width is a judgement, so the judgement is written down and checked.
+
+    This account runs at most twenty concurrent jobs. A run is the shards plus
+    about four other jobs, and a pull request run regularly overlaps a push to
+    main, so anything past ten shards spends its gain sitting in a queue.
+    """
+    width = int(re.search(r"SHARD_COUNT:\s*(\d+)", block("development_scope"))[1])
+    assert 4 <= width <= 10, (
+        f"Full runs {width} ways. Below four is barely sharded; above ten, two "
+        "overlapping runs exceed the concurrent-job limit and queue."
+    )
     assert all(
         path in block("backend_static")
         for path in (
