@@ -327,7 +327,9 @@ class TestEveryTabStripLooksTheSame:
         body = block.group(1)
         assert "var(--accent)" in body, "The selected section is no longer named in the accent"
         assert "var(--accent-soft)" in body, "The selected section no longer reads as a surface"
-        assert "border-bottom-color" in body, "The selected section is no longer anchored to the strip"
+        assert "border-bottom-color" in body, (
+            "The selected section is no longer anchored to the strip"
+        )
 
     def test_no_retired_tab_variant_class_survives_in_the_stylesheet(self) -> None:
         css = read(STYLESHEET)
