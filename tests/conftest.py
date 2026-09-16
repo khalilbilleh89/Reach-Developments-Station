@@ -198,16 +198,60 @@ def migrated_schema() -> None:
     command.upgrade(alembic_config(), "head")
 
 
+#: Which of the data tables actually hold a row, answered in one round trip.
+#:
+#: ``TRUNCATE`` costs roughly the same whether a table has a million rows or
+#: none: it takes a lock and rewrites the file. Naming all fifty-six of them
+#: therefore cost about 0.8 of a second per test whatever the test did, and
+#: with three and a half thousand tests that is most of an hour of CI spent
+#: emptying tables that were already empty. A typical test touches a handful.
+#:
+#: Asking first costs about a millisecond, because every branch is an
+#: ``EXISTS`` that stops at the first row.
+_OCCUPIED_TABLES = text(
+    " UNION ALL ".join(
+        f"SELECT '{table}' AS occupied WHERE EXISTS (SELECT 1 FROM {table})"
+        for table in _DATA_TABLES
+    )
+)
+
+
 @pytest.fixture(autouse=True)
 def clean_database(migrated_schema: None, isolated_configuration: None) -> None:
     """Empty every data table before each test.
 
-    One TRUNCATE covers all of them, so foreign keys between them are not an
-    ordering problem. Seeded roles survive.
+    The guarantee is unchanged — no test begins with another test's rows — and
+    so is the mechanism where it matters: one statement, so foreign keys
+    between the tables are not an ordering problem, and seeded roles survive.
+    What changed is that the statement names only the tables that have
+    something in them.
+
+    ``RESTART IDENTITY`` stays although this schema has no sequences at all —
+    every key is a UUID — so it is a no-op today and a correct instruction on
+    the day someone adds one. That is also why skipping an empty table is safe:
+    with nothing to restart, an empty table and a truncated one are the same
+    table.
+
+    ``CASCADE`` reaches no further than before. It follows references INTO what
+    is named, and a subset of these tables can only be referenced by a subset
+    of what the whole list could reach — so anything the old statement spared,
+    including the seeded roles, this one spares too.
+    """
+    empty_data_tables()
+
+
+def empty_data_tables() -> list[str]:
+    """Empty the data tables that hold anything; report which those were.
+
+    Separate from the fixture so the guarantee can be tested directly rather
+    than inferred from tests that happen to pass.
     """
     engine = get_engine()
     with engine.begin() as connection:
-        connection.execute(text(f"TRUNCATE {', '.join(_DATA_TABLES)} RESTART IDENTITY CASCADE"))
+        occupied = [row[0] for row in connection.execute(_OCCUPIED_TABLES)]
+        if occupied:
+            connection.execute(text(f"TRUNCATE {', '.join(occupied)} RESTART IDENTITY CASCADE"))
+    return occupied
 
 
 @pytest.fixture
