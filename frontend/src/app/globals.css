@@ -4489,10 +4489,50 @@ input[type="file"].input {
  * what precedes it, so the band reads as three answers rather than one wall.
  * The module's own head is not a `.section-header`, so the first block never
  * picks up a stray rule above it. */
-.module-section .section-header {
-  padding-top: var(--space-4);
-  margin-top: var(--space-5);
-  border-top: 1px solid var(--line-soft);
+/* Department positions, and why it read as a wall.
+ *
+ * Each module holds more than one answer — Commercial carries Inventory, then
+ * Sales, then Pricing — and the card put eighteen numbers on screen with
+ * nothing to tell a reader where one answer ended and the next began, and
+ * nothing to line any of them up. A rule between the blocks (the first attempt
+ * at this) separated them without giving them shape.
+ *
+ * Each position is now a block of its own on a quiet surface, and the figures
+ * inside it sit on a column grid instead of being packed left. That is what
+ * makes the card scannable: Commercial and Development read across as well as
+ * down, because the second number of one is above the second number of the
+ * other.
+ */
+.module-position {
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  margin-top: var(--space-4);
+  background-color: var(--surface-secondary);
+}
+
+.module-position .section-header {
+  margin-bottom: var(--space-3);
+}
+
+/* Confined to the band. The same compact group serves nine other screens,
+ * where a packed row of two or three figures is the right shape and a grid
+ * would only add air. */
+.module-band .metric-group-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: var(--space-3) var(--space-4);
+  align-items: start;
+  margin-bottom: 0;
+}
+
+.module-band .metric-group-compact .metric {
+  flex: none;
+  min-width: 0;
+}
+
+/* A figure is read beside its neighbours here, not across the room. */
+.module-band .metric-value {
+  font-size: var(--text-xl);
 }
 
 .module-section-head {
