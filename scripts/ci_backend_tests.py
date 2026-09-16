@@ -69,6 +69,11 @@ ALWAYS_RUN = (
     "tests/modules/test_audit.py",
     "tests/modules/test_strict_requests.py",
     "tests/modules/test_docs_exposure.py",
+    # The promise every other test in this repository stands on: no test begins
+    # with another test's rows. It belongs here rather than to a domain because
+    # it guards the harness itself, and a change anywhere can break it — the
+    # clean is an autouse fixture that runs before every test in the suite.
+    "tests/test_test_isolation.py",
     # The selector's own tests, including the guard that every test file in the
     # repository is claimed by some domain. Running it every time is what stops
     # this map rotting into a fast suite that quietly covers less each month.
