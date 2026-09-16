@@ -4495,6 +4495,18 @@ input[type="file"].input {
   margin-top: 0;
 }
 
+/* A module holds more than one position — Commercial carries Inventory, then
+ * Sales, then Pricing — and they ran together as one column of numbers with
+ * nothing between them. Each position after the first is now separated from
+ * what precedes it, so the band reads as three answers rather than one wall.
+ * The module's own head is not a `.section-header`, so the first block never
+ * picks up a stray rule above it. */
+.module-section .section-header {
+  padding-top: var(--space-4);
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--line-soft);
+}
+
 .module-section-head {
   display: flex;
   flex-wrap: wrap;
