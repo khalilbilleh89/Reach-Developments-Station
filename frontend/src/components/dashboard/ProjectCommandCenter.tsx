@@ -1,5 +1,4 @@
 "use client";
-import { Icon } from "@/components/ui/Icon";
 
 import type { ReactNode } from "react";
 
@@ -33,7 +32,6 @@ import {
   CASHFLOW_READERS,
   COLLECTION_READERS,
   CONSTRUCTION_READERS,
-  CONSULTANT_READERS,
   ECONOMICS_READERS,
   INTERNAL_PRICE_READERS,
   PLAN_READERS,
@@ -73,6 +71,8 @@ import { AttentionPanel } from "./AttentionPanel";
 import { ManagementSummary } from "@/components/portfolio/Actions";
 import type { AttentionItem } from "./AttentionPanel";
 import { ProjectAnalysis } from "./ProjectAnalysis";
+import { ProjectStanding } from "./ProjectStanding";
+import { SellingPosition } from "./SellingPosition";
 import { ProjectPlate } from "./ProjectPlate";
 import { ProjectMilestones } from "./briefing/ProjectMilestones";
 import { ManagementReports } from "./ManagementReports";
@@ -353,11 +353,20 @@ export function ProjectCommandCenter({
       />
 
       <div className="stack">
-        <div className="briefing-overview"><div className="development-entry-grid briefing-kpis" aria-label="Development at a glance">
-          <button type="button" className="development-entry" onClick={() => onNavigate("inventory")}><span className="entry-label"><Icon name="inventory" />Inventory</span><strong>{unitTotals ? unitTotals.total : "—"}</strong><small>{unitTotals ? "Units visible within your access" : operational ? "Inventory position unavailable" : "Awaiting project setup"}</small><span className="development-entry-action">Explore properties →</span></button>
-          <button type="button" className="development-entry" onClick={() => onNavigate("permits")}><span className="entry-label"><Icon name="permits" />Permit position</span><strong>{project.blocking_permit_count}</strong><small>Permits flagged as blocking</small><span className="development-entry-action">Review statutory approvals →</span></button>
-          {hasAnyRole(roles, CONSULTANT_READERS) ? <button type="button" className="development-entry" onClick={() => onNavigate("consultant")}><span className="entry-label"><Icon name="calendar" />Project programme</span><strong className="development-entry-date">{project.planned_completion ? businessDate(project.planned_completion) : "Not scheduled"}</strong><small>Planned project completion</small><span className="development-entry-action">Open consultant programme →</span></button> : null}
-        </div><ProjectMilestones projectId={id} roles={roles} refreshKey={refreshKey} onNavigate={onNavigate}/></div>
+        {/* The commercial position first, because it is the question the page
+            is opened to answer. The three tiles that stood here repeated what
+            Inventory, Permits and the programme each already say on their own
+            screens, and said it with the same weight as everything else. */}
+        {operational ? (
+          <SellingPosition
+            units={unitTotals}
+            deals={dealTotals}
+            cash={cash.status === "ready" ? cash.data : null}
+            currencyCode={project.base_currency_code}
+            onNavigate={onNavigate}
+          />
+        ) : null}
+        <ProjectMilestones projectId={id} roles={roles} refreshKey={refreshKey} onNavigate={onNavigate}/>
         {!operational ? (
           <Notice tone="info">
             This project is still in setup. Inventory, pricing, sales and everything downstream
@@ -376,6 +385,15 @@ export function ProjectCommandCenter({
             <Disclosure title="Management actions"><ManagementSummary key={refreshKey} project={id} /></Disclosure>
           </div>
           <div className="stack">
+            {/* Four facts, each already stated by a module, gathered so an
+                owner does not open four screens to learn where the build is. */}
+            <Card title="Where the project is">
+              <ProjectStanding
+                project={project}
+                build={build.status === "ready" ? build.data : null}
+                hasCostBasis={seesEconomics ? economic !== null : null}
+              />
+            </Card>
             {operational && hasPosition ? (
               <Card
                 tone="command"
@@ -459,33 +477,16 @@ export function ProjectCommandCenter({
                     </Breakdown>
                     </Disclosure>
                   </>
-                ) : unitTotals ? (
+                ) : (
                   <>
-                    <Position>
-                      <PositionFigure label="Available" value={unitTotals.available_count} />
-                      {dealTotals ? (
-                        <PositionFigure
-                          label="Contracted"
-                          value={dealTotals.contracted}
-                          note={`of ${dealTotals.units} units`}
-                        />
-                      ) : (
-                        <PositionFigure label="Held" value={unitTotals.held_count} />
-                      )}
-                      {dealTotals && !dealTotals.mixed_currency ? (
-                        <PositionFigure
-                          label="Contracted value"
-                          value={money(dealTotals.contracted_value, currencyCodeOf(dealTotals.currency_id))}
-                          note="Live contracts, ex tax"
-                        />
-                      ) : (
-                        <PositionFigure label="Unreleased" value={unitTotals.unreleased_count} />
-                      )}
-                    </Position>
+                    {/* The counts that stood here are the commercial band's now,
+                        and saying them twice on one page taught nobody
+                        anything. What is left is what only this card knows. */}
                     <PositionSupport>
-                      {dealTotals ? <PositionSupportItem label="Held" value={unitTotals.held_count} /> : null}
-                      {dealTotals && !dealTotals.mixed_currency ? <PositionSupportItem label="Unreleased" value={unitTotals.unreleased_count} /> : null}
                       {priceTotals ? <PositionSupportItem label="Priced" value={priceTotals.units_priced} /> : null}
+                      {priceTotals && priceTotals.units_not_priced > 0 ? (
+                        <PositionSupportItem label="Not priced" value={priceTotals.units_not_priced} />
+                      ) : null}
                       {plans.status === "ready" ? (
                         <PositionSupportItem label="Payment plans" value={plans.data.total} />
                       ) : null}
@@ -497,7 +498,7 @@ export function ProjectCommandCenter({
                       </p>
                     ) : null}
                   </>
-                ) : null}
+                )}
               </Card>
             ) : null}
             {operational && !hasPosition && loading ? <Loading label="Loading the position…" shape="metrics" /> : null}
@@ -505,6 +506,11 @@ export function ProjectCommandCenter({
 
 
         </div>
+
+        {/* The owner's analysis, surfaced. It was below a collapsed panel of
+            module summaries, which is a long way down a page for the block a
+            director opens the overview to read. */}
+        <ProjectAnalysis key={id} projectId={id} roles={roles} />
 
         {operational ? (
           <Disclosure title="Department positions" context="Commercial · development · delivery · finance">
@@ -681,7 +687,6 @@ export function ProjectCommandCenter({
           </Disclosure>
         ) : null}
 
-        <ProjectAnalysis key={id} projectId={id} roles={roles} />
         {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
 
         {operational && seesCollections ? (
