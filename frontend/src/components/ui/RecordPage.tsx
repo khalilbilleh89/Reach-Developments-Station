@@ -138,7 +138,7 @@ export function RecordPage({
           ) : null}
           {tabs && activeTab && onSelectTab ? (
             <div className="record-page-sections">
-              <Tabs variant="record" label="Record sections" tabs={tabs} active={activeTab} onSelect={onSelectTab} />
+              <Tabs label="Record sections" tabs={tabs} active={activeTab} onSelect={onSelectTab} />
             </div>
           ) : (
             <div className="record-page-head-pad" />

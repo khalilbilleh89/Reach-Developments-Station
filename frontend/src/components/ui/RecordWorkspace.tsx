@@ -64,7 +64,7 @@ export function RecordWorkspace({ projectId, kind, eyebrow, icon, title, subtitl
     </header>
     {status ? <div className="workspace-status">{status}</div> : null}
     {facts?.length ? <dl className="workspace-facts">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd>{fact.note ? <p>{fact.note}</p> : null}</div>)}</dl> : null}
-    {tabs?.length && activeTab && onSelectTab ? <div className="workspace-tabs"><Tabs label={group} tabs={tabs} active={activeTab} onSelect={onSelectTab} variant="record" /></div> : null}
+    {tabs?.length && activeTab && onSelectTab ? <div className="workspace-tabs"><Tabs label={group} tabs={tabs} active={activeTab} onSelect={onSelectTab} /></div> : null}
     <div className="workspace-content">{tabs?.length && activeTab ? <TabPanel group={group} tab={activeTab}>{children}</TabPanel> : children}</div>
   </article>;
 }

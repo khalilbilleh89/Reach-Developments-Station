@@ -16,6 +16,13 @@ function slug(label: string): string {
  * eight sections is showing. On a phone the row scrolls sideways rather than
  * wrapping into three ragged lines.
  *
+ * There is one appearance, and no variant to ask for another. The workspace,
+ * record and analysis strips each had their own — a dark pill, an accent
+ * underline, a raised white chip — and a reader moving between them had to
+ * learn the selected state three times. Where a strip needs different framing
+ * from its surroundings, that belongs to the container it sits in, not to the
+ * tabs.
+ *
  * Ids are derived from the group's label rather than from the tab keys alone,
  * because two tab groups can be on screen at once — the project's sections
  * behind a record record-page's — and two elements sharing an id makes both of them
@@ -27,14 +34,12 @@ export function Tabs({
   active,
   onSelect,
   group,
-  variant = "workspace",
 }: {
   label: string;
   tabs: { key: string; label: string; icon?: IconName }[];
   active: string;
   onSelect: (key: string) => void;
   group?: string;
-  variant?: "workspace" | "record" | "analysis";
 }) {
   const stem = group ?? slug(label);
   const row = useRef<HTMLDivElement>(null);
@@ -68,7 +73,7 @@ export function Tabs({
   };
 
   return (
-    <div className={`tabs tabs-${variant}`} role="tablist" aria-label={label} ref={row}>
+    <div className="tabs" role="tablist" aria-label={label} ref={row}>
       {tabs.map((tab, index) => (
         <button
           key={tab.key}
