@@ -93,7 +93,9 @@ AVAILABLE = [
 SMOKE = sorted(set(ALWAYS_RUN) & set(AVAILABLE))
 
 
-@pytest.mark.parametrize("script", ("ci_backend_smoke.py", "ci_backend_shards.py"))
+@pytest.mark.parametrize(
+    "script", ("ci_backend_smoke.py", "ci_backend_shards.py", "ci_development_ui.mjs")
+)
 def test_reviewed_ci_helpers_run_guards_without_serial_full_fallback(script: str) -> None:
     available = selector.available_test_files(ROOT)
     result = select([f"scripts/{script}"], available)
@@ -104,6 +106,35 @@ def test_reviewed_ci_helpers_run_guards_without_serial_full_fallback(script: str
         "tests/test_ci_shards.py",
         "tests/test_ci_workflow.py",
     } <= set(result.paths)
+
+
+def test_every_ci_script_is_registered_as_tooling() -> None:
+    """A new ``scripts/ci_*`` file must be classified, not left to rot.
+
+    ``ci_development_ui.mjs`` was added and never registered, so every change to
+    the scope detector ran the complete backend suite serially on one runner —
+    about an hour, to learn nothing, from a file no backend module imports. The
+    cost was invisible because the fallback is the safe direction. This asserts
+    the decision was made rather than defaulted into.
+    """
+    on_disk = {
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "scripts").glob("ci_*")
+        if path.is_file()
+    }
+    assert on_disk, "No CI scripts discovered; the guard would pass vacuously"
+    unregistered = on_disk - selector.CI_TOOLING
+    assert not unregistered, (
+        "These CI scripts run the entire backend suite on every change to them. "
+        f"Register them in CI_TOOLING or justify the fallback: {sorted(unregistered)}"
+    )
+
+
+def test_ci_tooling_never_claims_an_operational_script() -> None:
+    """The set is narrow on purpose: CI tooling only, never a deploy script."""
+    assert all(name.startswith("scripts/ci_") for name in selector.CI_TOOLING)
+    assert "scripts/render-start.sh" not in selector.CI_TOOLING
+    assert "scripts/render-build.sh" not in selector.CI_TOOLING
 
 
 def test_every_domain_has_a_representative_in_the_available_fixture() -> None:

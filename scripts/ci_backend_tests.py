@@ -251,6 +251,25 @@ INERT_FILES = (".gitignore", ".gitattributes", "LICENSE", "LICENSE.md", "LICENSE
 #: The one script that decides which tests run, and the tests that prove it.
 SELECTOR_SCRIPT = "scripts/ci_backend_tests.py"
 
+#: The scripts that decide what CI runs, as opposed to the scripts that build
+#: and start the deployed application. Nothing in ``app/`` imports any of them
+#: and no test outside the ``tests/test_ci_*`` family reads one, so a change
+#: here can break the CI guards and nothing else — which is why these run those
+#: guards instead of the full suite everything else under ``scripts/`` gets.
+#:
+#: ``ci_development_ui.mjs`` was missing from this set until PR-ENG, and the
+#: omission cost an entire serial backend suite every time the scope detector
+#: was touched. ``test_every_ci_script_is_registered_as_tooling`` now fails if
+#: a ``scripts/ci_*`` file is added without a decision being made about it.
+CI_TOOLING = frozenset(
+    {
+        SELECTOR_SCRIPT,
+        "scripts/ci_backend_smoke.py",
+        "scripts/ci_backend_shards.py",
+        "scripts/ci_development_ui.mjs",
+    }
+)
+
 #: The one-time legacy cutover package. Its own domain rather than the
 #: full-suite fallback that everything else under ``scripts/`` gets.
 CUTOVER_PACKAGE = "scripts/migration/"
@@ -512,7 +531,7 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is shared test support")
             continue
 
-        if path in (SELECTOR_SCRIPT, "scripts/ci_backend_smoke.py", "scripts/ci_backend_shards.py"):
+        if path in CI_TOOLING:
             direct.update(
                 p for p in ALWAYS_RUN if p.startswith("tests/test_ci_") and p in available_set
             )
