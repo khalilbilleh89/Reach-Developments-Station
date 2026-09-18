@@ -1752,6 +1752,13 @@ export interface CollectionCurrencyTotals {
   /** Lifetime, and named so: never subtract it from an outstanding balance. */
   confirmed_receipts_total: string;
   buckets: Record<string, string>;
+  /**
+   * Each band's share of `outstanding_total`, a percentage string to one
+   * decimal place that the server divided. Empty when nothing is outstanding.
+   * The only figure an ageing bar may be drawn from: the browser never divides
+   * one amount by another.
+   */
+  bucket_shares: Record<string, string>;
 }
 
 /**

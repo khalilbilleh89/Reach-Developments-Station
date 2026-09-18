@@ -55,17 +55,23 @@ export function Metric({
   note,
   size = "md",
   tone = "neutral",
+  wide,
 }: {
   label: string;
   value: ReactNode;
   note?: ReactNode;
   size?: "sm" | "md" | "lg";
   tone?: MetricTone;
+  /** A figure wider than a count — money — takes two tracks of a metric grid. */
+  wide?: boolean;
 }) {
   const valueClass =
     size === "sm" ? "metric-value metric-value-sm" : size === "lg" ? "metric-value metric-value-lg" : "metric-value";
+  const classes = ["metric", tone === "neutral" ? "" : `metric-tone-${tone}`, wide ? "metric-wide" : ""]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <div className={tone === "neutral" ? "metric" : `metric metric-tone-${tone}`}>
+    <div className={classes}>
       <p className="metric-label">{label}</p>
       <p className={valueClass}>{value === null || value === undefined || value === "" ? "—" : value}</p>
       {note ? <p className="metric-note">{note}</p> : null}
@@ -266,9 +272,13 @@ export function StatStripNote({ children }: { children: ReactNode }) {
  * Different from a `Waterfall`: a waterfall is a sequence the server applied
  * in order to reach a figure, and this is a set of parts the server reported
  * beside their total. Neither adds anything up in the browser.
+ *
+ * `ledger` is the same lines set beside a lead figure on its stage: reading
+ * size, the amount at the row's end, a note beneath its label and no leader,
+ * because next to a hero figure the dotted line was one more thing to read.
  */
-export function Breakdown({ children }: { children: ReactNode }) {
-  return <ul className="breakdown">{children}</ul>;
+export function Breakdown({ children, ledger }: { children: ReactNode; ledger?: boolean }) {
+  return <ul className={ledger ? "breakdown breakdown-ledger" : "breakdown"}>{children}</ul>;
 }
 
 export function BreakdownRow({
@@ -276,32 +286,45 @@ export function BreakdownRow({
   note,
   amount,
   total,
+  tone = "neutral",
+  mark,
 }: {
   label: ReactNode;
   note?: ReactNode;
   amount: ReactNode;
   /** The server's own total for these parts, ruled off beneath them. */
   total?: boolean;
+  /** The amount's colour, repeating a state the label already names. */
+  tone?: "neutral" | "danger";
+  /** A dot before the label, for a state the row's words already carry. */
+  mark?: "danger" | "warning";
 }) {
+  const amountClass = tone === "neutral" ? "breakdown-amount" : `breakdown-amount breakdown-amount-${tone}`;
   return (
     <li className={total ? "breakdown-row breakdown-row-total" : "breakdown-row"}>
       <span className="breakdown-label">
+        {mark ? <span className={`breakdown-mark breakdown-mark-${mark}`} aria-hidden="true" /> : null}
         {label}
-        {note ? <span className="breakdown-note"> · {note}</span> : null}
+        {note ? <span className="breakdown-note">{note}</span> : null}
       </span>
       <span className="breakdown-lead" aria-hidden="true" />
-      <span className="breakdown-amount">{amount}</span>
+      <span className={amountClass}>{amount}</span>
     </li>
   );
 }
 
+/** How old a band's money is, in the order the server ages it. */
+export type BandHeat = "cool" | "current" | "warm" | "hot" | "late";
+
 /**
  * A balance spread across the bands the server aged it into.
  *
- * Bands sit side by side at equal width with a hairline between and a two-pixel
- * rule above that warms as the money gets older. The rule is a band marker, not
- * a measurement: no width here encodes an amount, because the browser would
- * have to divide to know one.
+ * Bands sit side by side at equal width with a hairline between and a mark
+ * above that warms as the money gets older. The mark is a band marker, not a
+ * measurement: no width in the bands encodes an amount, because the browser
+ * would have to divide to know one. The one width that means anything is the
+ * track above the bands, and that is drawn from shares the server computed —
+ * see `DistributionTrack`.
  */
 export function Distribution({ children }: { children: ReactNode }) {
   return <ol className="distribution">{children}</ol>;
@@ -312,19 +335,62 @@ export function DistributionBand({
   value,
   note,
   heat = "cool",
+  empty,
 }: {
   label: string;
   value: ReactNode;
   note?: ReactNode;
   /** How old this band's money is, in the order the server named the bands. */
-  heat?: "cool" | "warm" | "hot" | "late";
+  heat?: BandHeat;
+  /** Nothing standing in the band: the figure recedes so the eye finds the money. */
+  empty?: boolean;
 }) {
+  const classes = [
+    "distribution-band",
+    heat === "cool" ? "" : `distribution-band-${heat}`,
+    empty ? "distribution-band-empty" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <li className={heat === "cool" ? "distribution-band" : `distribution-band distribution-band-${heat}`}>
+    <li className={classes}>
       <p className="distribution-label">{label}</p>
       <p className="distribution-value">{value}</p>
       {note ? <p className="distribution-note">{note}</p> : null}
     </li>
+  );
+}
+
+/**
+ * The bands' shares of a balance, drawn at the widths the server reported.
+ *
+ * `share` is a percentage the API computed for each band, and a segment grows
+ * by that number and nothing else: no amount is divided here, in the same way
+ * `Meter` draws the percentage it was given. A band with no positive share
+ * draws no segment, and a balance the server gave no shares for draws no track
+ * at all, so the bands beneath stand on their own.
+ */
+export function DistributionTrack({
+  label,
+  segments,
+}: {
+  label: string;
+  segments: { key: string; label: string; share: string | null | undefined; heat?: BandHeat }[];
+}) {
+  // Conversion is presentation geometry for a server percentage, never money.
+  const drawn = segments.filter((segment) => Number(segment.share) > 0);
+  if (drawn.length === 0) return null;
+  const spoken = drawn.map((segment) => `${segment.label} ${segment.share}%`).join(", ");
+  return (
+    <div className="distribution-track" role="img" aria-label={`${label}: ${spoken}`}>
+      {drawn.map((segment) => (
+        <span
+          key={segment.key}
+          className={`distribution-track-segment distribution-track-${segment.heat ?? "cool"}`}
+          style={{ flexGrow: Number(segment.share) * 10 }}
+        />
+      ))}
+    </div>
   );
 }
 

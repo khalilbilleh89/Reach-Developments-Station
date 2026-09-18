@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProjectSection } from "@/components/shell/navigation";
-import type { CollectionProjectSummary, SalesRegisterTotals, UnitRegister } from "@/lib/api";
+import type { SalesRegisterTotals, UnitRegister } from "@/lib/api";
 import { Button } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { money } from "@/lib/format";
@@ -17,27 +17,28 @@ interface Band {
  * Am I selling?
  *
  * The page's first answer, and the reason an owner opens it. Everything here
- * is a figure the overview already asked for: the unit register's own counts,
- * the sales register's contracted value, and the collections strip. Nothing is
- * derived, weighted or estimated in the browser — a number a director cannot
- * reproduce from a module is a number this band does not show.
+ * is a figure the overview already asked for: the unit register's own counts
+ * and the sales register's contracted value. Nothing is derived, weighted or
+ * estimated in the browser — a number a director cannot reproduce from a
+ * module is a number this band does not show.
  *
  * The stock bar is the whole building, once, in lifecycle order: sold, then
  * reserved, then what may still be sold, then what has not been put out. It is
  * proportion, not decoration, so a development that has sold nothing shows one
  * long band of available stock rather than an empty frame — which is the
  * honest picture, and reads as a beginning rather than a fault.
+ *
+ * The money owed on those sales is the Collections card's answer, directly
+ * beneath, and is said there once rather than here as well.
  */
 export function SellingPosition({
   units,
   deals,
-  cash,
   currencyCode,
   onNavigate,
 }: {
   units: UnitRegister | null;
   deals: SalesRegisterTotals | null;
-  cash: CollectionProjectSummary | null;
   /** The project's base currency, for the figures sales did not label. */
   currencyCode: string | null;
   onNavigate: (section: ProjectSection) => void;
@@ -56,20 +57,6 @@ export function SellingPosition({
   // does not name still takes its share of the width rather than inflating the
   // states that are named.
   const total = units.total || 1;
-
-  // One currency, or none. A development collecting in two currencies has no
-  // single "collected" figure, and inventing one by adding them would be the
-  // first lie on the page; the strip says so and sends the reader to the
-  // module that shows each currency on its own.
-  const purses = cash?.currencies ?? [];
-  const purse = purses.length === 1 ? purses[0] : null;
-  const mixed = purses.length > 1;
-  // A collections row names its denomination by currency id, not by code, and
-  // the two are not interchangeable: the id is a UUID. Resolving it through the
-  // register the workspace already loaded is what turns it into "CYP"; an id
-  // the register cannot resolve yields no code at all, and the figure is shown
-  // undenominated rather than labelled with the raw id.
-  const purseCode = codeOf(purse?.currency_id);
 
   const contracted = deals?.mixed_currency ? null : (deals?.contracted_value ?? null);
   // The sales register states its own currency when every contract shares one.
@@ -106,6 +93,11 @@ export function SellingPosition({
               {units.available_count}
             </strong>
           </div>
+          <div className="selling-action">
+            <Button small variant="quiet" onClick={() => onNavigate("sales")}>
+              Open sales
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -129,32 +121,6 @@ export function SellingPosition({
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className="selling-money">
-        <div className="selling-money-item">
-          <span className="selling-label">Collected</span>
-          <strong className="selling-money-figure num">
-            {mixed ? "Several currencies" : money(purse?.confirmed_receipts_total ?? null, purseCode)}
-          </strong>
-        </div>
-        <div className="selling-money-item">
-          <span className="selling-label">Due</span>
-          <strong className="selling-money-figure num">
-            {mixed ? "Several currencies" : money(purse?.due_total ?? null, purseCode)}
-          </strong>
-        </div>
-        <div className="selling-money-item">
-          <span className="selling-label">Overdue</span>
-          <strong className="selling-money-figure selling-money-overdue num">
-            {mixed ? "Several currencies" : money(purse?.overdue_total ?? null, purseCode)}
-          </strong>
-        </div>
-        <div className="selling-money-item selling-money-action">
-          <Button small variant="quiet" onClick={() => onNavigate("sales")}>
-            Open sales
-          </Button>
-        </div>
       </div>
     </section>
   );

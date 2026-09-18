@@ -18,7 +18,7 @@
  * would undo in the interface exactly what the schema is enforcing.
  */
 
-import type { Tone } from "@/components/ui";
+import type { BandHeat, Tone } from "@/components/ui";
 import { isPositive } from "@/lib/format";
 
 const RECEIPT_LABELS: Record<string, string> = {
@@ -217,21 +217,25 @@ export const clearanceTone = toner({
 /**
  * How old a band's money is, in the order the server ages it.
  *
- * A band marker, not a measurement: the rule above each band warms as the
- * money gets older, and no width anywhere encodes an amount. One place, so
- * the same band never reads warm on the collections summary and hot on the
- * project's front page.
+ * A band marker, not a measurement: the mark on each band warms as the money
+ * gets older, and no width here encodes an amount — the track above the bands
+ * is drawn from the server's own shares. One place, so the same band never
+ * reads warm on the collections summary and hot on the project's front page.
+ *
+ * Current money is marked in the accent rather than left cool: it is the
+ * healthy part of the balance and the part a director wants to see grow.
+ * Money awaiting its trigger is not yet anybody's concern, so it stays cool.
  */
-const BUCKET_HEAT: Record<string, "cool" | "warm" | "hot" | "late"> = {
+const BUCKET_HEAT: Record<string, BandHeat> = {
   awaiting_trigger: "cool",
-  current: "cool",
+  current: "current",
   "1_30": "warm",
   "31_60": "warm",
   "61_90": "hot",
   "91_plus": "late",
 };
 
-export type BucketHeat = "cool" | "warm" | "hot" | "late";
+export type BucketHeat = BandHeat;
 
 export const bucketHeat = (value: string | null | undefined): BucketHeat =>
   value ? (BUCKET_HEAT[value] ?? "cool") : "cool";

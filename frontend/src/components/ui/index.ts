@@ -26,6 +26,7 @@ export {
   BreakdownRow,
   Distribution,
   DistributionBand,
+  DistributionTrack,
   IdentityCell,
   InlineMeta,
   InlineMetaItem,
@@ -47,7 +48,7 @@ export {
   WaterfallRow,
 } from "./Data";
 export { ExternalLink, isUrl } from "./Link";
-export type { MetricTone } from "./Data";
+export type { BandHeat, MetricTone } from "./Data";
 export { EmptyState, Loading, Notice } from "./Feedback";
 export {
   DataToolbar,
