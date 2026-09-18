@@ -52,7 +52,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
@@ -3497,6 +3497,35 @@ class CurrencyTotals:
     unapplied_cash: Decimal
     confirmed_receipts_total: Decimal
     buckets: dict[str, Decimal]
+    #: Each band's share of ``outstanding_total``, to one decimal place. See
+    #: :func:`bucket_shares`.
+    bucket_shares: dict[str, Decimal]
+
+
+#: One decimal place is what a bar can show and what a reader can check.
+SHARE_PLACES = Decimal("0.1")
+
+
+def bucket_shares(buckets: dict[str, Decimal], outstanding: Decimal) -> dict[str, Decimal]:
+    """Each band's share of ``outstanding``, as a percentage to one decimal.
+
+    Divided here, once, so that no screen has to divide money to draw an ageing
+    bar. The frontend's rule is that the browser never derives a ratio from two
+    amounts; this is the server-side figure that rule sends it to, in the same
+    way sales penetration arrives as a percentage rather than as two counts.
+
+    A balance of nothing has no shares at all rather than six zeros, and a band
+    with nothing in it is ``0.0`` rather than absent, so a screen sees every
+    band the report ages into. Shares are rounded half up independently and are
+    not forced to sum to a hundred: the exact amounts beside them are the
+    partition, and the shares only describe it.
+    """
+    if outstanding <= ZERO:
+        return {}
+    return {
+        bucket: (amount / outstanding * Decimal(100)).quantize(SHARE_PLACES, rounding=ROUND_HALF_UP)
+        for bucket, amount in buckets.items()
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -3558,11 +3587,12 @@ def project_summary(
         for entry in entries:
             for view in entry.summary.rows:
                 buckets[view.bucket] = buckets[view.bucket] + view.outstanding
+        outstanding = sum((r.summary.outstanding_total for r in entries), ZERO)
         currencies.append(
             CurrencyTotals(
                 currency_id=currency_id,
                 accounts=len(entries),
-                outstanding_total=sum((r.summary.outstanding_total for r in entries), ZERO),
+                outstanding_total=outstanding,
                 due_total=sum((r.summary.due_total for r in entries), ZERO),
                 overdue_total=sum((r.summary.overdue_total for r in entries), ZERO),
                 unapplied_cash=sum((r.summary.unapplied_cash for r in entries), ZERO),
@@ -3570,6 +3600,7 @@ def project_summary(
                     (r.summary.confirmed_receipts_total for r in entries), ZERO
                 ),
                 buckets=buckets,
+                bucket_shares=bucket_shares(buckets, outstanding),
             )
         )
 

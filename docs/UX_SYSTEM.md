@@ -20,23 +20,25 @@ A page is not a collection of equal KPI cards. Use open bands for counts, ink fo
 
 ## 2. Tokens and theme
 
-There is one explicit light theme. Ink navigation and executive positions are part of that theme; they do not change with the operating system. All literal colours belong to the one top-level `:root` block. Semantic aliases inside a component scope may refer to these tokens. Responsive token changes belong in the existing media queries.
+There is one explicit white theme. The rail, the working surfaces and the executive positions are white; the tonal ladder above the canvas is canvas, working surface, and one stage surface a card may give the single figure it is opened for. Nothing changes with the operating system. All literal colours belong to the one top-level `:root` block. Semantic aliases inside a component scope may refer to these tokens. Responsive token changes belong in the existing media queries.
 
 | Role | Token | Value |
 | --- | --- | --- |
-| Mineral canvas | `--canvas` | `#f2f2ee` |
+| Cool canvas | `--canvas` | `#f7f9fc` |
 | Working surface | `--surface` | `#ffffff` |
-| Supporting ground | `--surface-secondary` | `#f7f7f4` |
-| Navigation | `--nav-bg` | `#14232e` |
-| Executive ground | `--command-bg` | `#1b333e` |
-| Executive text | `--command-text` | `#f4f8f7` |
-| Executive secondary text | `--command-muted` | `#b1c8ce` |
+| Supporting ground | `--surface-secondary` | `#f5f7fb` |
+| Stage surface, once per card | `--surface-stage` | the accent tint |
+| Navigation | `--nav-bg` | `#ffffff` |
+| Executive ground | `--command-bg` | `#ffffff` |
+| Executive text | `--command-text` | `#17272e` |
+| Executive secondary text | `--command-muted` | `#526369` |
 | Primary text | `--text-primary` | `#17272e` |
 | Secondary text | `--text-secondary` | `#526369` |
 | Quiet text | `--text-muted` | `#5b6c70` |
 | Accent | `--accent` | `#245cce` |
 | Success / warning / danger | `--success`, `--warning`, `--danger` | Emerald, amber, restrained red |
-| Controls / surfaces / tags | `--radius-control`, `--radius-card`, `--radius-tag` | 8px / 16px / 5px |
+| Warning mark, fills only | `--warning-mark` | `#e2a93b`: the warning and danger text tones are one colour to a deuteranope, so adjacent fills use this lighter mark and text never does |
+| Controls / surfaces / tags | `--radius-control`, `--radius-card`, `--radius-tag` | 8px / 12px / 5px |
 | Rail / context bar | `--sidebar-width`, `--context-bar-height` | 15.5rem / 4rem |
 | Record width | `--drawer-width` | 70rem maximum |
 
@@ -59,7 +61,7 @@ Use the installed system sans stack. Inter is used only where already installed;
 | Supporting financial value | `--metric` | 1.625rem |
 | Body / register | `--text-base`, `--text-sm` | 14px / 13px |
 
-The page title remains prominent on a compact register page; `compact` reduces spacing, not the title's importance. Labels below numbers explain their basis. Long amounts must not overlap neighbouring figures or escape the viewport. Preserve the amount and currency; adapt layout before truncating information.
+The page title remains prominent on a compact register page; `compact` reduces spacing, not the title's importance. Labels below numbers explain their basis. A card has at most one lead figure, on its stage at `--metric-hero`; the figures beside it are a ledger at `--text-lg`. Four hero figures in a row is a card with no lead. Colour on a figure is reserved for danger; a warning is a mark beside the label, never an amber amount. Long amounts must not overlap neighbouring figures or escape the viewport. Preserve the amount and currency; adapt layout before truncating information.
 
 ## 4. Shell and navigation
 
@@ -87,7 +89,7 @@ Import from `@/components/ui`. Extend the canonical component where it already o
 | `Position`, `PositionFigure` | Exact reported figures with one lead; inline or split composition |
 | `PositionSupport` | The supporting facts and basis of the position |
 | `Metric`, `MetricGroup`, `StatStrip` | Smaller measurements and count bands |
-| `Breakdown`, `Waterfall`, `Distribution`, `Meter` | Reported components or progress, with explicit labels |
+| `Breakdown`, `Waterfall`, `Distribution`, `Meter` | Reported components or progress, with explicit labels; `Breakdown` `ledger` is the lines beside a stage, `DistributionTrack` draws the server's share per band |
 | `CountComposition`, `CountSeries` | Server count composition and signed count observations, with exact text equivalents |
 | `AttentionList` | Reported severity or count, reason, context, optional source evidence, and an action to the owning workflow |
 | `DataToolbar`, `ToolbarFilter` | Search, filters, result count, reset and register actions |
@@ -132,11 +134,11 @@ Forms retain field labels, optional markers, validation, busy state, exact input
 
 ## 8. Executive and operational workspaces
 
-**Project Overview:** development identity, economic position and exception queue lead. Department detail is available through a labelled disclosure. Analysis follows with its own context and evidence; collections and management reports retain their owning-source data. Unavailable attention sources must be reported before claiming nothing is flagged.
+**Project Overview:** development identity and the selling position lead. Collections stands beside the exception queue as the page's second answer: one lead figure on the stage, the ledger beside it, the ageing track and bands beneath, and the account counts once. Where the project is and the economic position follow, then the diary and Analysis with their own context and evidence. Department detail is available through a labelled disclosure, each department a block on the same surface with its glyph; management reports retain their owning-source data. The selling band does not repeat the money the Collections card owns. Unavailable attention sources must be reported before claiming nothing is flagged.
 
 **Portfolio:** development counts and the server's sales penetration establish the executive position. Prioritized risks use the same `AttentionList` as Project, retaining the server's severity, category, reason, project identity, source value/currency, observation date and source basis. Open-source actions lead to the existing owner; attention rows do not dismiss, score or resolve risks. Capital bands select original `money` records by currency and metric code without summing them. Contracted value, confirmed receipts, unrestricted cash and construction EAC are labelled separately; the complete monetary register, contributing/missing coverage and risk-evaluation coverage remain available. Prose source values wrap; decimal amounts retain their exact digits.
 
-**Project Analysis:** observation period and snapshot context precede reported findings. Inventory absorption and the run-rate estimate occupy distinct surfaces. Display partial/unavailable coverage and sample size explicitly. Detailed source explanations and secondary tables are disclosed on demand. Financial analysis leads with one selected month's reported cash movement, showing every returned currency separately; the full monthly register and refund/financing detail remain disclosed evidence. Selecting an existing month must never aggregate, convert or calculate amounts. Contracted demand remains distinct from actual cash. Technical product mix and recorded feature coverage occupy distinct surfaces, retaining their populations, denominators and availability. Never fabricate a management score, trend or comparison.
+**Project Analysis:** observation period and snapshot context precede reported findings. A server ratio in a register is drawn as a `Meter` with its counts beneath; the three status dimensions are `CountComposition` bars. The monthly series is as tall as its data, marks a zero as a tick and names a period's detail in its caption on hover. Inventory absorption and the run-rate estimate occupy distinct surfaces. Display partial/unavailable coverage and sample size explicitly. Detailed source explanations and secondary tables are disclosed on demand. Financial analysis leads with one selected month's reported cash movement, showing every returned currency separately; the full monthly register and refund/financing detail remain disclosed evidence. Selecting an existing month must never aggregate, convert or calculate amounts. Contracted demand remains distinct from actual cash. Technical product mix and recorded feature coverage occupy distinct surfaces, retaining their populations, denominators and availability. Never fabricate a management score, trend or comparison.
 
 **Sales and payment plans:** lead with contracted value or the agreed schedule, then the register and the owning deal/plan file. A scheduled instalment is not a receipt. Preserve approval gates, legal status, cancellation behavior, trigger controls and reconciliation.
 
@@ -158,7 +160,8 @@ Forms retain field labels, optional markers, validation, busy state, exact input
 - Portfolio uses the neutral `Meter` with `sales_penetration.percentage`; numerator, denominator and availability remain visible. Neutral styling does not imply a risk threshold.
 - `CountComposition` consumes `analysis/fundamental.position.commercial` and labels the full `position.total_units` population and `context.snapshot_as_of`. CSS distributes the returned non-negative counts; no displayed ratio or total is calculated. Legal and delivery counts remain separate dimensions.
 - `CountSeries` consumes `analysis/fundamental.monthly_sales[].net_absorption` and `month`, with `context.period_from`, `period_to` and `sales_basis` coverage. SVG arithmetic determines coordinates of integer counts only. Preserve negative observations, zero, exact printed counts, period labels and accessible units. Keep the source monthly table and suppress the plot for unavailable or absent observations.
-- Financial series, a cashflow curve or collections composition require an owning API's comparable source series and safe normalized geometry/basis before new plots can be introduced. Current money remains in exact labelled figures and source tables. Do not normalize financial decimal strings in the browser, combine financial with physical construction progress, or invent a collection ratio.
+- `DistributionTrack` consumes `collections/summary.currencies[].bucket_shares`, the percentage of `outstanding_total` the server computed for each band; the bands beside it print the exact amounts. A denomination without shares is aged in bands alone.
+- Financial series, a cashflow curve or collections composition require an owning API's comparable source series and safe normalized geometry/basis before new plots can be introduced; the ageing track is that rule met, not an exception to it. Current money remains in exact labelled figures and source tables. Do not normalize financial decimal strings in the browser, combine financial with physical construction progress, or invent a collection ratio.
 - Preserve API payloads, backend formulas, schema, authentication, role checks and approval workflows.
 - Distinguish loading, absent, denied, failed, partial and zero. Keep a failure visible; never replace it with a comforting zero or a false empty state.
 

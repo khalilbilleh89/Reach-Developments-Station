@@ -46,9 +46,8 @@ import {
   Button,
   Card,
   Disclosure,
-  Distribution,
-  DistributionBand,
   EmptyState,
+  Icon,
   KeyValue,
   KeyValueGrid,
   Loading,
@@ -61,13 +60,10 @@ import {
   PositionSupportItem,
   SectionHeader,
 } from "@/components/ui";
-import {
-  AGING_BUCKETS,
-  bucketHeatForAmount,
-  bucketLabel,
-} from "@/components/projects/collections/labels";
+import type { IconName } from "@/components/ui";
 import { varianceNote, varianceTone } from "@/components/projects/construction/labels";
 import { AttentionPanel } from "./AttentionPanel";
+import { CollectionsPosition } from "./CollectionsPosition";
 import { ManagementSummary } from "@/components/portfolio/Actions";
 import type { AttentionItem } from "./AttentionPanel";
 import { ProjectAnalysis } from "./ProjectAnalysis";
@@ -80,10 +76,11 @@ import { ManagementReports } from "./ManagementReports";
 /**
  * The project's front page: a developer's command centre.
  *
- * Read top to bottom the way a director reads it: where the project stands
- * (the position), what needs somebody today (attention), and then the four
- * departments — commercial, development, delivery, finance — each as a ruled
- * section with its own way in, never as a card per figure.
+ * Read top to bottom the way a director reads it: am I selling (the position),
+ * what is owed and what needs somebody today (collections beside attention),
+ * where the build is, the owner's analysis, and then the four departments —
+ * commercial, development, delivery, finance — each as a ruled section with
+ * its own way in, never as a card per figure.
  *
  * Every figure is a value one of the module summary endpoints returned on
  * this request, laid out so related facts sit together. Nothing is added,
@@ -361,12 +358,10 @@ export function ProjectCommandCenter({
           <SellingPosition
             units={unitTotals}
             deals={dealTotals}
-            cash={cash.status === "ready" ? cash.data : null}
             currencyCode={project.base_currency_code}
             onNavigate={onNavigate}
           />
         ) : null}
-        <ProjectMilestones projectId={id} roles={roles} refreshKey={refreshKey} onNavigate={onNavigate}/>
         {!operational ? (
           <Notice tone="info">
             This project is still in setup. Inventory, pricing, sales and everything downstream
@@ -375,16 +370,47 @@ export function ProjectCommandCenter({
           </Notice>
         ) : null}
 
-        {/* Two columns that stack on their own rather than a twelve-column grid.
-            A grid row is as tall as its tallest card, so a project with eleven
-            things needing attention would open a hand's depth of empty page
-            under the position beside it. */}
-        <div className="overview-position">
+        {/* The money owed beside what needs somebody: the two things a director
+            reads first after the selling position, and the two that most often
+            explain each other. A reader who may not see collections gets the
+            queue at full width rather than beside an empty column. Each card
+            ends where its facts end; the grid never stretches one to match. */}
+        <div className={operational && seesCollections ? "overview-money" : "overview-money overview-money-single"}>
+          {operational && seesCollections ? (
+            <Card
+              title="Collections"
+              description="What has arrived, what is owed, and how old it is."
+              actions={
+                <Button small onClick={() => onNavigate("collections")}>
+                  Open Collections <Icon name="chevron" />
+                </Button>
+              }
+            >
+              <Section answer={cash} name="Collections" off="Opens after setup.">
+                {(data) =>
+                  data.currencies.length === 0 ? (
+                    <EmptyState
+                      compact
+                      icon="collections"
+                      title="Nothing to collect yet"
+                      hint="No sale in this project has an active payment schedule."
+                    />
+                  ) : (
+                    <CollectionsPosition summary={data} currencyCodeOf={currencyCodeOf} />
+                  )
+                }
+              </Section>
+            </Card>
+          ) : null}
           <div className="stack">
             <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
             <Disclosure title="Management actions"><ManagementSummary key={refreshKey} project={id} /></Disclosure>
           </div>
-          <div className="stack">
+        </div>
+
+        {/* Where the project is, and what it is worth: two columns that stack
+            on their own rather than a twelve-column grid. */}
+        <div className="overview-position">
             {/* Four facts, each already stated by a module, gathered so an
                 owner does not open four screens to learn where the build is. */}
             <Card title="Where the project is">
@@ -502,10 +528,9 @@ export function ProjectCommandCenter({
               </Card>
             ) : null}
             {operational && !hasPosition && loading ? <Loading label="Loading the position…" shape="metrics" /> : null}
-          </div>
-
-
         </div>
+
+        <ProjectMilestones projectId={id} roles={roles} refreshKey={refreshKey} onNavigate={onNavigate}/>
 
         {/* The owner's analysis, surfaced. It was below a collapsed panel of
             module summaries, which is a long way down a page for the block a
@@ -518,19 +543,23 @@ export function ProjectCommandCenter({
             <div className="module-band">
               <ModuleSection
                 title="Commercial"
+                icon="inventory"
                 description="Units, where they stand, and what has been agreed."
                 section="inventory"
                 onNavigate={onNavigate}
               >
                 <Section answer={units} name="Inventory" off="Inventory opens after setup." block>
                   {(data) => (
-                    <MetricGroup compact>
-                      <Metric label="Units" value={data.total} />
-                      <Metric label="Available" value={data.available_count} />
-                      {dealTotals ? <Metric label="Contracted" value={dealTotals.contracted} /> : null}
-                      <Metric label="Held" value={data.held_count} size="sm" />
-                      <Metric label="Unreleased" value={data.unreleased_count} size="sm" />
-                    </MetricGroup>
+                    <>
+                      <SectionHeader title="Inventory" />
+                      <MetricGroup compact>
+                        <Metric label="Units" value={data.total} />
+                        <Metric label="Available" value={data.available_count} />
+                        {dealTotals ? <Metric label="Contracted" value={dealTotals.contracted} /> : null}
+                        <Metric label="Held" value={data.held_count} size="sm" />
+                        <Metric label="Unreleased" value={data.unreleased_count} size="sm" />
+                      </MetricGroup>
+                    </>
                   )}
                 </Section>
                 {seesSales ? (
@@ -551,6 +580,7 @@ export function ProjectCommandCenter({
                           <Metric label="Active contracts" value={data.totals.active_contracts} size="sm" />
                           <Metric label="Returned" value={data.totals.returned} size="sm" />
                           <Metric
+                            wide
                             label="Contracted value"
                             value={
                               data.totals.mixed_currency
@@ -623,11 +653,14 @@ export function ProjectCommandCenter({
 
               <ModuleSection
                 title="Development"
+                icon="land"
                 description="The land, the consents, and the programme."
                 section="permits"
                 onNavigate={onNavigate}
               >
-                <MetricGroup compact>
+                <div className="module-position">
+                  <SectionHeader title="Land and permits" />
+                  <MetricGroup compact>
                   <Metric label="Parcels" value={project.parcel_count} size="sm" />
                   <Metric label="Permits" value={project.permit_count} size="sm" />
                   <Metric
@@ -643,9 +676,11 @@ export function ProjectCommandCenter({
                     size="sm"
                     tone={project.overdue_permit_count > 0 ? "danger" : "neutral"}
                   />
-                </MetricGroup>
-                <SectionHeader title="Programme" />
-                <KeyValueGrid columns={2}>
+                  </MetricGroup>
+                </div>
+                <div className="module-position">
+                  <SectionHeader title="Programme" />
+                  <KeyValueGrid columns={2}>
                   <KeyValue label="Planned start" mono value={businessDate(project.planned_start)} />
                   <KeyValue label="Planned completion" mono value={businessDate(project.planned_completion)} />
                   <KeyValue
@@ -654,12 +689,14 @@ export function ProjectCommandCenter({
                     value={project.planned_duration_days === null ? null : `${project.planned_duration_days} days`}
                   />
                   <KeyValue label="Fiscal year starts" value={`Month ${project.fiscal_year_start_month}`} />
-                </KeyValueGrid>
+                  </KeyValueGrid>
+                </div>
               </ModuleSection>
 
               {seesConstruction ? (
                 <ModuleSection
                   title="Delivery"
+                  icon="building"
                   description="What the build was authorised to cost, and where it now lands."
                   section="construction"
                   onNavigate={onNavigate}
@@ -673,6 +710,7 @@ export function ProjectCommandCenter({
               {seesCashflow ? (
                 <ModuleSection
                   title="Finance"
+                  icon="money"
                   description="What the project can spend, and what it must raise."
                   section="cashflow"
                   onNavigate={onNavigate}
@@ -689,99 +727,6 @@ export function ProjectCommandCenter({
 
         {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
 
-        {operational && seesCollections ? (
-          <Card
-            title="Collections"
-            description="What has arrived, what is owed, and how old it is."
-            actions={
-              <Button small variant="quiet" onClick={() => onNavigate("collections")}>
-                Collections
-              </Button>
-            }
-          >
-            <Section answer={cash} name="Collections" off="Opens after setup.">
-              {(data) =>
-                data.currencies.length === 0 ? (
-                  <EmptyState
-                    compact
-                    icon="collections"
-                    title="Nothing to collect yet"
-                    hint="No sale in this project has an active payment schedule."
-                  />
-                ) : (
-                  <>
-                    {data.currencies.map((totals) => {
-                      const code = currencyCodeOf(totals.currency_id);
-                      // Each currency is its own position. A project selling in two
-                      // currencies has two answers, and one figure covering both
-                      // could only be produced by adding unlike money.
-                      return (
-                        <div key={totals.currency_id} className="currency-block">
-                          {data.currencies.length > 1 ? (
-                            <p className="currency-block-title">
-                              {code ?? "Unknown currency"}
-                              <span className="muted">· {totals.accounts} accounts</span>
-                            </p>
-                          ) : null}
-                          <Position compact>
-                            <PositionFigure lead label="Outstanding" value={money(totals.outstanding_total, code)} />
-                            <PositionFigure label="Due now" value={money(totals.due_total, code)} />
-                            <PositionFigure
-                              label="Overdue"
-                              value={money(totals.overdue_total, code)}
-                              tone={isPositive(totals.overdue_total) ? "danger" : "neutral"}
-                            />
-                            <PositionFigure
-                              label="Unapplied cash"
-                              value={money(totals.unapplied_cash, code)}
-                              tone={isPositive(totals.unapplied_cash) ? "warning" : "neutral"}
-                              note="Received, not yet applied"
-                            />
-                          </Position>
-                          <PositionSupport>
-                            <PositionSupportItem
-                              label="Confirmed receipts, lifetime"
-                              value={money(totals.confirmed_receipts_total, code)}
-                            />
-                            <PositionSupportItem label="Accounts" value={totals.accounts} />
-                          </PositionSupport>
-                          <SectionHeader title="Ageing" />
-                          <Distribution>
-                            {AGING_BUCKETS.filter((bucket) => totals.buckets[bucket] !== undefined).map((bucket) => (
-                              <DistributionBand
-                                key={bucket}
-                                label={bucketLabel(bucket)}
-                                value={money(totals.buckets[bucket], code)}
-                                heat={bucketHeatForAmount(bucket, totals.buckets[bucket])}
-                              />
-                            ))}
-                          </Distribution>
-                        </div>
-                      );
-                    })}
-                    <MetricGroup compact>
-                      <Metric label="Accounts" value={data.accounts} size="sm" />
-                      <Metric
-                        label="Overdue"
-                        value={data.accounts_overdue}
-                        size="sm"
-                        tone={data.accounts_overdue > 0 ? "danger" : "neutral"}
-                      />
-                      <Metric
-                        label="Disputed"
-                        value={data.accounts_disputed}
-                        size="sm"
-                        tone={data.accounts_disputed > 0 ? "warning" : "neutral"}
-                      />
-                      <Metric label="Cleared" value={data.accounts_cleared} size="sm" />
-                    </MetricGroup>
-                    <p className="footnote">As at {businessDate(data.as_of)}.</p>
-                  </>
-                )
-              }
-            </Section>
-          </Card>
-        ) : null}
       </div>
     </>
   );
@@ -793,12 +738,15 @@ export function ProjectCommandCenter({
  */
 function ModuleSection({
   title,
+  icon,
   description,
   section,
   onNavigate,
   children,
 }: {
   title: string;
+  /** The department's glyph, the same one the navigation rail draws for it. */
+  icon: IconName;
   description: string;
   section: ProjectSection;
   onNavigate: (section: ProjectSection) => void;
@@ -807,12 +755,17 @@ function ModuleSection({
   return (
     <section className="module-section">
       <div className="module-section-head">
-        <div>
-          <h3 className="module-section-title">{title}</h3>
-          <p className="module-section-description">{description}</p>
+        <div className="module-section-identity">
+          <span className="module-glyph">
+            <Icon name={icon} />
+          </span>
+          <div>
+            <h3 className="module-section-title">{title}</h3>
+            <p className="module-section-description">{description}</p>
+          </div>
         </div>
-        <Button small variant="quiet" onClick={() => onNavigate(section)}>
-          Open
+        <Button small onClick={() => onNavigate(section)}>
+          Open <Icon name="chevron" />
         </Button>
       </div>
       {children}

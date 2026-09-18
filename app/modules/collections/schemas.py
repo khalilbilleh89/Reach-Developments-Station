@@ -48,6 +48,8 @@ DecimalStr = Annotated[Decimal, PlainSerializer(str, return_type=str, when_used=
 Money = Annotated[DecimalStr, Field(ge=0, max_digits=18, decimal_places=2)]
 #: An amount of cash actually moving. Zero is not a transaction.
 PositiveMoney = Annotated[DecimalStr, Field(gt=0, max_digits=18, decimal_places=2)]
+#: A percentage of a balance, to one decimal place: a share, never an amount.
+Share = Annotated[DecimalStr, Field(ge=0, max_digits=4, decimal_places=1)]
 
 ReceiptStatus = Literal[RECEIPT_STATUSES]  # type: ignore[valid-type]
 AllocationStatus = Literal[ALLOCATION_STATUSES]  # type: ignore[valid-type]
@@ -257,6 +259,10 @@ class CollectionCurrencyTotals(BaseModel):
     unapplied_cash: Money
     confirmed_receipts_total: Money
     buckets: dict[str, Money]
+    #: Each band's share of ``outstanding_total`` as a percentage to one decimal
+    #: place, divided on the server so no screen divides money to draw a bar.
+    #: Empty when nothing is outstanding.
+    bucket_shares: dict[str, Share]
 
 
 class CollectionProjectSummary(BaseModel):

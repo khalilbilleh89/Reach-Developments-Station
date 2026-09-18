@@ -14,7 +14,7 @@ report showing different outstanding amounts for the same buyer.
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -230,6 +230,38 @@ class TestTheRegisterAgreesWithTheAccount:
         for totals in strip["currencies"]:
             banded = sum(Decimal(v) for v in totals["buckets"].values())
             assert banded == Decimal(totals["outstanding_total"])
+
+    def test_each_band_reports_its_share_of_outstanding(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        two_accounts: tuple[str, str],
+        historical_schedule: str,
+    ) -> None:
+        """The share is the server's division, so no screen divides money.
+
+        One decimal place, rounded half up, for every band the report ages
+        into — including the empty ones, which are ``0.0`` rather than absent.
+        A denomination with nothing outstanding reports no shares at all.
+        """
+        del two_accounts, historical_schedule
+        params = {"as_of": "2026-04-01"}
+        strip = collections_client.get(
+            f"{collections_url(project_id)}/summary", params=params
+        ).json()
+        assert strip["currencies"]
+        for totals in strip["currencies"]:
+            outstanding = Decimal(totals["outstanding_total"])
+            if outstanding == 0:
+                assert totals["bucket_shares"] == {}
+                continue
+            assert set(totals["bucket_shares"]) == set(totals["buckets"])
+            for bucket, share in totals["bucket_shares"].items():
+                expected = (Decimal(totals["buckets"][bucket]) / outstanding * 100).quantize(
+                    Decimal("0.1"), rounding=ROUND_HALF_UP
+                )
+                assert Decimal(share) == expected, bucket
+                assert Decimal(share).as_tuple().exponent == -1, share
 
 
 class TestRegisterContent:

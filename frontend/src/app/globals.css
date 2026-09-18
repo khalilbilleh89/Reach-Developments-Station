@@ -46,6 +46,10 @@
   --surface-selected: #edf2fc;
   --surface-command: #f0f3f5;
   --surface-elevated: #ffffff;
+  /* The one tint a card may give the single figure it is opened for. Every
+   * other surface is white, so this is the whole tonal ladder above the
+   * canvas: canvas, working surface, stage. */
+  --surface-stage: var(--accent-soft);
 
   --command-bg: #ffffff;
   --command-text: #17272e;
@@ -80,6 +84,12 @@
   --warning-soft: #fbf1dc;
   --danger: #a8231a;
   --danger-soft: #fbe9e7;
+  /* A fill for a warning band drawn beside a danger one. The warning and
+   * danger text tones are the same colour to a deuteranope, which words fix
+   * on a label and nothing fixes on two adjacent fills; this lighter mark keeps
+   * the bands apart. Text never wears it: it does not clear the contrast a
+   * word needs. */
+  --warning-mark: #e2a93b;
   --info: var(--accent);
   --info-soft: var(--accent-soft);
 
@@ -3127,6 +3137,10 @@ input[type="file"].input {
   font-weight: 400;
 }
 
+.breakdown-note::before {
+  content: " · ";
+}
+
 /* The leader that carries the eye from a line to its amount. A financial
  * document convention, and the reason this reads as a statement rather than
  * as two columns that happen to be near each other. */
@@ -3159,6 +3173,65 @@ input[type="file"].input {
 
 .breakdown-row-total .breakdown-lead {
   border-bottom-style: none;
+}
+
+/* The ledger: the same lines at reading size beside a lead figure on its
+ * stage. The amount sits at the row's end and the note beneath its label; the
+ * leader goes, because next to a hero figure the dotted line was one more
+ * thing to read. A mark before a label repeats a state the words carry. */
+.breakdown-ledger .breakdown-row {
+  padding: 0.65rem 0;
+}
+
+.breakdown-ledger .breakdown-row:first-child {
+  padding-top: 0;
+}
+
+.breakdown-ledger .breakdown-label {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.breakdown-ledger .breakdown-note {
+  flex-basis: 100%;
+}
+
+.breakdown-ledger .breakdown-note::before {
+  content: none;
+}
+
+.breakdown-ledger .breakdown-lead {
+  display: none;
+}
+
+.breakdown-ledger .breakdown-amount {
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+}
+
+.breakdown-amount-danger {
+  color: var(--danger);
+}
+
+.breakdown-mark {
+  display: inline-block;
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.breakdown-mark-danger {
+  background-color: var(--danger);
+}
+
+.breakdown-mark-warning {
+  background-color: var(--warning-mark);
 }
 
 /* -- Waterfall: the lines a price or a profit is made of ------------------- */
@@ -3242,22 +3315,27 @@ input[type="file"].input {
   border-left: 0;
 }
 
-/* The rule is a band marker, not a measurement: no width here encodes an
- * amount, because the browser would have to divide to know one. */
+/* The mark is a band marker, not a measurement: no width in a band encodes
+ * an amount, because the browser would have to divide to know one. The mark
+ * colours are the track's, so a band and its segment read as one thing. */
 .distribution-band::before {
   content: "";
   position: absolute;
   inset: 0 0 auto;
-  height: 2px;
+  height: 3px;
   background-color: var(--line-default);
 }
 
+.distribution-band-current::before {
+  background-color: var(--accent);
+}
+
 .distribution-band-warm::before {
-  background-color: color-mix(in srgb, var(--warning) 55%, var(--line-default));
+  background-color: var(--warning-mark);
 }
 
 .distribution-band-hot::before {
-  background-color: var(--warning);
+  background-color: color-mix(in srgb, var(--danger) 60%, var(--line-default));
 }
 
 .distribution-band-late::before {
@@ -3279,8 +3357,52 @@ input[type="file"].input {
   white-space: nowrap;
 }
 
+.distribution-band-hot .distribution-value,
 .distribution-band-late .distribution-value {
   color: var(--danger);
+}
+
+/* A band with nothing in it recedes, so the eye finds the money. */
+.distribution-band-empty .distribution-value {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* The track above the bands: the server's shares, and the only width in a
+ * Distribution that means anything. The gaps are the surface, not a stroke. */
+.distribution-track {
+  display: flex;
+  gap: 2px;
+  height: 0.625rem;
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-tag);
+}
+
+.distribution-track-segment {
+  display: block;
+  flex-basis: 0;
+  min-width: 2px;
+}
+
+.distribution-track-cool {
+  background-color: var(--line-strong);
+}
+
+.distribution-track-current {
+  background-color: var(--accent);
+}
+
+.distribution-track-warm {
+  background-color: var(--warning-mark);
+}
+
+.distribution-track-hot {
+  background-color: color-mix(in srgb, var(--danger) 60%, var(--line-default));
+}
+
+.distribution-track-late {
+  background-color: var(--danger);
 }
 
 .distribution-note {
@@ -3337,6 +3459,10 @@ input[type="file"].input {
   display: block;
   color: var(--text-muted);
   font-size: var(--text-xs);
+}
+
+.table td.num .meter-block {
+  align-items: flex-end;
 }
 
 /* -- External destination ------------------------------------------------- */
@@ -4238,6 +4364,11 @@ input[type="file"].input {
   color: var(--accent);
 }
 
+.selling-action {
+  display: flex;
+  align-items: flex-end;
+}
+
 .selling-stock {
   display: flex;
   flex-direction: column;
@@ -4305,39 +4436,11 @@ input[type="file"].input {
   border-radius: 3px;
 }
 
-.selling-money {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--workspace-blue-line);
-}
 
-.selling-money-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-4) var(--space-6);
-  border-left: 1px solid var(--line-soft);
-}
 
-.selling-money-item:first-child {
-  border-left: 0;
-}
 
-.selling-money-figure {
-  font-size: var(--metric);
-  font-weight: 600;
-  line-height: var(--leading-tight);
-  letter-spacing: -0.02em;
-}
 
-.selling-money-overdue {
-  color: var(--danger);
-}
 
-.selling-money-action {
-  align-items: flex-start;
-  justify-content: center;
-}
 
 /* Where the project is: four facts, each already stated by a module. */
 .project-standing {
@@ -4390,9 +4493,63 @@ input[type="file"].input {
  * person would say it out loud. No figure appears here. */
 .overview-position {
   display: grid;
-  grid-template-columns: minmax(18rem, 1fr) minmax(0, 1.65fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: var(--space-5);
+}
+
+/* The money owed beside what needs somebody: the two things a director reads
+ * first after the selling position, and the two that explain each other. */
+.overview-money {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 1fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+
+.overview-money-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A money card's answer: one lead figure on the card's stage, and its ledger
+ * beside it. Four figures at hero size were four headlines; a reader's eye
+ * needs one, and the rest at reading size. */
+.ledger-position {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--space-4) var(--space-6);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.position-stage {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-radius: var(--radius-control);
+  background-color: var(--surface-stage);
+}
+
+.position-stage .position-figure {
+  min-width: 0;
+}
+
+/* The stage's figure is large but not the page's largest: a card's answer,
+ * not the page's. It wraps rather than escaping its tint. */
+.position-stage .position-value {
+  font-size: var(--metric-hero);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.position-stage .position-label {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .plate {
@@ -4533,6 +4690,46 @@ input[type="file"].input {
 /* A figure is read beside its neighbours here, not across the room. */
 .module-band .metric-value {
   font-size: var(--text-xl);
+}
+
+/* Money is wider than a count and was printing over the figure beside it;
+ * it takes two tracks of the grid instead. */
+.module-band .metric-wide {
+  grid-column: span 2;
+}
+
+/* Inside a block the heading is an eyebrow: the block's surface already says
+ * where the answer begins, and a full heading over five figures was louder
+ * than the figures. */
+.module-position .section-heading {
+  font-size: var(--text-2xs);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.module-section-identity {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.module-glyph {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 7px;
+  background-color: var(--nav-glyph-bg);
+  color: var(--accent);
+}
+
+.module-glyph .icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .module-section-head {
@@ -4750,6 +4947,10 @@ input[type="file"].input {
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: var(--space-4);
   margin-top: var(--space-4);
+}
+
+.analysis-dimensions .count-visual {
+  margin-top: 0;
 }
 
 .analysis-counts {
@@ -5218,12 +5419,19 @@ a:not([class]):hover { color: var(--accent-hover); }
 .count-legend > div, .count-legend dt { display: flex; gap: var(--space-2); align-items: center; }
 .count-legend dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .count-swatch { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 2px; }
+.count-visual .count-hover { min-height: 1.2em; color: var(--text-secondary); font-size: var(--text-xs); }
 .count-series-scroll { max-width: 100%; overflow-x: auto; }
 .count-series { display: block; max-width: none; }
 .count-zero { stroke: var(--line-strong); stroke-width: 1; }
+.count-grid { stroke: var(--line-soft); stroke-width: 1; }
+.count-axis { fill: var(--text-muted); font-size: var(--text-xs); text-anchor: end; }
+.count-hit { fill: transparent; }
+.count-tick { fill: var(--line-strong); }
 .count-bar { fill: var(--accent); }
 .count-bar-negative { fill: var(--warning); }
+.count-slot:hover .count-bar { fill: var(--accent-hover); }
 .count-value { fill: var(--text-primary); font-size: var(--text-sm); font-weight: 650; text-anchor: middle; }
+.count-value-zero { fill: var(--text-muted); font-size: var(--text-xs); font-weight: 500; }
 .count-period { fill: var(--text-muted); font-size: var(--text-xs); text-anchor: middle; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5304,7 +5512,8 @@ a:not([class]):hover { color: var(--accent-hover); }
     padding: var(--space-4);
   }
 
-  .overview-position {
+  .overview-position,
+  .overview-money {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -5421,6 +5630,10 @@ a:not([class]):hover { color: var(--accent-hover); }
   .position-figure {
     min-width: 0;
     max-width: 100%;
+  }
+
+  .ledger-position {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .position-value,
