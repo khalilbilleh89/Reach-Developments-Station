@@ -50,4 +50,19 @@ to the canonical sources; they do not replace them.
 One skill is the single source of truth for its subject. Do not copy skill content into
 this file or into `CLAUDE.md`.
 
+## Agent automation
+
+Reusable safety and preflight checks live under `scripts/`, not inside any one agent's
+configuration. Before declaring implementation work complete, run:
+
+```
+python scripts/agent_preflight.py
+```
+
+It checks only what changed — formatting, lint, JSON that no longer parses, conflict
+markers, tracked secret files — and reports what it could not run rather than passing
+silently. CI remains the authority on correctness. See `docs/AGENT_AUTOMATION.md`.
+
+Do not reimplement these checks in agent-specific instructions.
+
 The user's explicit instructions take precedence over repository guidance.
