@@ -1,0 +1,55 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/agent_guard.py", "shell"],
+            "timeout": 20,
+            "statusMessage": "Checking the command against the repository guards"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/agent_guard.py", "write"],
+            "timeout": 20,
+            "statusMessage": "Checking the branch and the path"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*merge_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/agent_guard.py", "shell"],
+            "timeout": 20,
+            "statusMessage": "A human merges"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/agent_preflight.py", "--hook"],
+            "timeout": 180,
+            "statusMessage": "Running the agent preflight"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -94,6 +94,11 @@ ALWAYS_RUN = (
     # reach this file, and the one defect it exists to catch would land
     # unnoticed. Text and metadata reading, four seconds.
     "tests/modules/test_cutover_intake_contract.py",
+    # The agent guardrails: which commands an agent may run, what it may write
+    # and on which branch. They belong here rather than to a domain because
+    # they guard the repository itself rather than any part of the product,
+    # and because a guard nobody runs is a guard that silently stops guarding.
+    "tests/test_agent_guardrails.py",
 )
 
 #: Which test files belong to which domain, matched against the file name with
@@ -274,6 +279,27 @@ CI_TOOLING = frozenset(
         "scripts/ci_development_ui.mjs",
     }
 )
+
+#: The agent guardrails: the deterministic checks a coding agent's tool calls
+#: and a finished change are put through, and the settings file that tells
+#: Claude Code when to run them. They are not CI tooling — they decide nothing
+#: about which tests run — and they are not operational infrastructure: nothing
+#: in ``app/`` imports them and the deployed application never executes one. A
+#: change here can break ``tests/test_agent_guardrails.py`` and nothing else,
+#: so that is what it runs, rather than the full suite every other unclassified
+#: file conservatively gets.
+#:
+#: ``.claude/settings.json`` is named here rather than made inert because the
+#: guardrail tests read it: a hook pointed at a script that no longer exists is
+#: a guard that stops guarding without anything going red.
+AGENT_TOOLING = frozenset(
+    {
+        "scripts/agent_guard.py",
+        "scripts/agent_preflight.py",
+        ".claude/settings.json",
+    }
+)
+AGENT_TESTS = "tests/test_agent_guardrails.py"
 
 #: The one-time legacy cutover package. Its own domain rather than the
 #: full-suite fallback that everything else under ``scripts/`` gets.
@@ -542,6 +568,10 @@ def select(changed: list[str], available: list[str]) -> Selection:
             )
             if SELECTOR_TESTS in available_set:
                 direct.add(SELECTOR_TESTS)
+            continue
+        if path in AGENT_TOOLING:
+            if AGENT_TESTS in available_set:
+                direct.add(AGENT_TESTS)
             continue
         if path.startswith(CUTOVER_PACKAGE):
             # One-time cutover tooling. Named rather than left to the fallback
