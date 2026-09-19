@@ -31,4 +31,23 @@ Keep Back navigation, register state, unsaved-change protection and deletion con
 Small centered confirmations, reason prompts and short forms are allowed.
 Mobile navigation must also use a full-width page. See `docs/UX_PAGE_AUDIT.md`.
 
+## Task-specific skills
+
+`.claude/skills/` holds task-specific expertise that does not belong in these permanent
+rules. Each skill is one `SKILL.md` with a `description` saying when it applies. Before
+starting a task, read the description of each skill below and open the matching
+`.claude/skills/<skill>/SKILL.md` in full when the current task matches it. Skills point
+to the canonical sources; they do not replace them.
+
+| Skill | Read it when |
+| --- | --- |
+| `frontend-product-design` | Designing or redesigning a page, workspace, card, register, record header or analysis section |
+| `frontend-implementation` | Writing TypeScript or CSS under `frontend/`, or before pushing a frontend diff |
+| `frontend-review` | Reviewing a frontend change, your own or someone else's, or when a UI guard fails |
+| `financial-ui-integrity` | Touching an amount, currency, total, ratio, progress bar, chart, business date, or the states around them |
+| `real-estate-product-workflow` | Changing what a record means — inventory, pricing, sales, payment plans, collections, commissions, construction, cashflow or management actions |
+
+One skill is the single source of truth for its subject. Do not copy skill content into
+this file or into `CLAUDE.md`.
+
 The user's explicit instructions take precedence over repository guidance.
