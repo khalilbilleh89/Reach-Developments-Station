@@ -13,7 +13,10 @@ def test_every_record_creator_has_a_reviewed_deletion_contract() -> None:
     indexed = {row["handler"]: row for row in contracts}
     assert len(indexed) == len(contracts), "Duplicate deletion contract"
     creators = {}
-    for path in (ROOT / "app/modules").glob("*/api.py"):
+    for path in [
+        *(ROOT / "app/modules").glob("*/api.py"),
+        ROOT / "app/modules/projects/company_api.py",
+    ]:
         for function in ast.parse(path.read_text(encoding="utf-8")).body:
             if not isinstance(function, ast.FunctionDef):
                 continue

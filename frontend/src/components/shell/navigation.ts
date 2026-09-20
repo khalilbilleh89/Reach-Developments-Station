@@ -8,6 +8,7 @@ import {
   COMMISSION_READERS,
   ECONOMICS_READERS,
   PLAN_READERS,
+  PROJECT_FINANCIAL_READERS,
   ROLE_SYSTEM_ADMIN,
   SALES_READERS,
   hasAnyRole,
@@ -35,6 +36,7 @@ import type { Roles } from "@/lib/roles";
 
 export type ProjectSection =
   | "overview"
+  | "company"
   | "land"
   | "permits"
   | "prelaunch"
@@ -90,6 +92,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "development",
     label: "Development",
     items: [
+      {
+        key: "company",
+        label: "Company",
+        icon: "inventory",
+        description: "Company information and registered bank accounts.",
+        visible: (roles) => hasAnyRole(roles, PROJECT_FINANCIAL_READERS),
+      },
       {
         key: "land",
         label: "Land",

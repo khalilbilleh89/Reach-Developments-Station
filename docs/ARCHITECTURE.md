@@ -1235,10 +1235,11 @@ any per-phase balance would be an allocation the business does not have.
 
 ### Deferred by design
 
-**Company-scoped custom fields wait for a Company entity.** A definition may be
-scoped to a country pack, a project or a unit type. Inventing a Company table to
-satisfy a scope label would be the abstraction-first mistake this rebuild exists
-to avoid.
+**Company-scoped custom fields remain deferred.** A definition may be scoped to a
+country pack, a project or a unit type. Development Company now records optional
+project-owned company information and bank instructions in the Projects module;
+it introduces no shared group-company master or new custom-field scope.
+See [Development Company](DEVELOPMENT_COMPANY.md) for access, retention and rollback.
 
 **Unit cost, margin and profitability wait for PR-MVP-08.** PR-MVP-04 builds the
 complete revenue side and stops. Combining an approved price with a governed

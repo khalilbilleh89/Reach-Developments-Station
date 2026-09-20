@@ -222,6 +222,7 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "inventory",
         ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
     ),
+    "0033_project_company.py": ("projects", ("tests/modules/test_project_company.py",)),
     "0032_building_units.py": (
         "inventory",
         (

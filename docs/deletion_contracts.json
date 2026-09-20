@@ -646,5 +646,21 @@
     "removal_route": "DELETE /technical-specifications/{specification_id}",
     "ui_file": "frontend/src/components/projects/construction/TechnicalSpecifications.tsx",
     "notes": "Whole-project technical writers delete drafts or remove confirmed specifications with retained data and audit; reason required. No dependent transactions are deleted."
+  },
+  {
+    "handler": "projects.create_company",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{company_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
+    "notes": "Whole-project authorized writers remove records after reasoned confirmation. Company removal blocks active bank accounts; rows and audit history are retained."
+  },
+  {
+    "handler": "projects.create_bank_account",
+    "create_route": "POST /{company_id}/bank-accounts",
+    "status": "implemented",
+    "removal_route": "POST /{company_id}/bank-accounts/{account_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
+    "notes": "Whole-project authorized writers remove records after reasoned confirmation. Company removal blocks active bank accounts; rows and audit history are retained."
   }
 ]
