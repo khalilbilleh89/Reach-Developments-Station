@@ -609,6 +609,21 @@ overdue, aging bucket and collection status are all computed from rows at read
 time, because a stored total becomes the wrong one the first time a write path
 forgets it.
 
+**A cancelled contract is history, not a receivable.** Once a cancellation has
+taken effect as at the reporting date, the contract's instalments stop counting
+towards the active receivable: `outstanding_total`, `due_total`, `overdue_total`,
+`oldest_overdue_days`, `installments_overdue`, the aging bands and the aging
+report all read as though the developer is no longer expecting that money,
+because it is not. What the schedule said, what the buyer paid and what each
+instalment was short stay on the rows untouched — they are the evidence the
+forfeiture and the refund are worked out from, and the deal file still shows
+them. The distinction is one pair of names on `InstallmentView`, `outstanding`
+for the contractual shortfall and `receivable` for the part still collectible,
+so that every screen and report inherits one answer rather than deciding for
+itself. Cancellation also blocks collection clearance on its own terms: an
+account with no balance because the contract ended is not a cleared account.
+See [CANCELLED_SALE_RECEIVABLE.md](CANCELLED_SALE_RECEIVABLE.md).
+
 ### Inventory integrity
 
 Membership is proved by the database, not by the service layer. Every level of
