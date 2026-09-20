@@ -926,11 +926,12 @@ def summarise(
             ),
         )
     rows = _installment_views(position, as_of=as_of)
-    # The instalments still owed under a live contract. A cancelled contract
-    # keeps every row above — the schedule, the cash against it and what it was
-    # short — and contributes nothing to the four figures below, because those
-    # four are what the developer still expects to collect and chases somebody
-    # for. See :attr:`ledger.InstallmentView.is_active_receivable`.
+    # The rows that are still an obligation. A cancelled contract keeps every
+    # row above — the schedule, the cash against it and what it was short — and
+    # is worth nothing to the active figures below, because those figures are
+    # what the developer still expects to collect and chases somebody for. The
+    # money leaves through ``receivable``, ``due_amount`` and ``overdue_amount``,
+    # which already know; the two day-counts are what need telling.
     active = [row for row in rows if row.is_active_receivable]
     confirmed_total = sum((r.amount for r in position.confirmed_receipts), ZERO)
     confirmed_ids = {receipt.id for receipt in position.confirmed_receipts}
@@ -1021,12 +1022,13 @@ def clearance_blockers_of(summary: SaleSummary) -> list[str]:
     is unavailable opens a support ticket.
     """
     blockers: list[str] = []
-    # First, because it is the one that stops the rest being asked at all. A
+    # First, because it is the reason the others may have nothing to say. A
     # cancelled contract has no active receivable by construction — that is what
-    # cancelling it did — and without this the absence of a balance would read
-    # as a clear account and let Collections sign off a terminated deal for
+    # cancelling it did — and without this line the absence of a balance would
+    # read as a clear account and let Collections sign a terminated deal off for
     # handover. Nothing was cleared; the obligation was cancelled, and those are
-    # different facts about different buyers.
+    # different facts about different buyers. Anything else still true is listed
+    # underneath it rather than hidden, the same as every other blocker here.
     if summary.derived_collection_status == ledger.UNIT_CANCELLED:
         blockers.append("this contract has been cancelled")
     if summary.active_payment_plan_version_id is None:
@@ -1718,7 +1720,12 @@ def suggest_allocation(
         return []
     rows = _installment_views(position, as_of=business_today())
 
-    actionable = [row for row in rows if row.due_date is not None and row.outstanding > ZERO]
+    # ``receivable`` and not ``outstanding``: ``SALE_COLLECTABLE`` already stops
+    # a cancelled contract taking new cash, and cash confirmed before it was
+    # cancelled has no live instalment left to land on either. Offering one
+    # beside an account reporting nothing outstanding would be the screen
+    # contradicting itself; what is owed back is a refund, not an allocation.
+    actionable = [row for row in rows if row.due_date is not None and row.receivable > ZERO]
     actionable.sort(key=lambda row: (row.due_date or date.max, row.sequence))
 
     suggestions: list[SuggestedAllocation] = []

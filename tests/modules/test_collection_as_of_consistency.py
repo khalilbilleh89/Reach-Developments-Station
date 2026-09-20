@@ -1198,6 +1198,44 @@ class TestACancelledContractLeavesActiveCollections:
         assert clearance.status_code == 200, clearance.text
         assert "this contract has been cancelled" in clearance.json()["blockers"]
 
+    def test_no_cash_is_suggested_for_a_cancelled_schedule(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        """The screen must not offer a home for money the account says is not owed.
+
+        ``SALE_COLLECTABLE`` already stops a cancelled contract taking new cash.
+        This is the other half: cash confirmed while the contract was live, left
+        unapplied when it ended, has no live instalment to land on. What is owed
+        back is a refund.
+        """
+        del paid_then_cancelled
+        unallocated = record_receipt(
+            collections_client, project_id, collecting_sale, "1000.00", "2026-02-12"
+        )
+        # A cancelled contract does not take new cash at all, which is the first
+        # half of the rule and is already enforced.
+        assert unallocated.status_code == 409, unallocated.text
+        del finance_client
+
+        account = collection_account(collections_client, project_id, collecting_sale)
+        assert account["outstanding_total"] == "0.00"
+        receipts = collections_client.get(
+            f"{collections_url(project_id)}/sales/{collecting_sale}/receipts"
+        ).json()
+        for receipt in receipts:
+            if Decimal(receipt["unapplied_amount"]) <= 0:
+                continue
+            suggested = collections_client.get(
+                f"{collections_url(project_id)}/receipts/{receipt['id']}/suggested-allocations"
+            )
+            assert suggested.status_code == 200, suggested.text
+            assert suggested.json() == []
+
     def test_signing_the_cancelled_account_off_is_refused(
         self,
         collections_client: TestClient,
