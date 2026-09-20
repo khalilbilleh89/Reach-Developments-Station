@@ -37,6 +37,7 @@ import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { ProjectEdit } from "@/components/projects/ProjectEdit";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
+import { CompanyTab } from "@/components/projects/CompanyTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
 import { PreLaunchTab } from "@/components/projects/PreLaunchTab";
@@ -219,6 +220,7 @@ export function ProjectWorkspace({
     }
     return (
       <>
+        {section === "company" ? <CompanyTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "land" ? (
           <LandTab
             projectId={projectId}

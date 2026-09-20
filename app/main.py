@@ -50,6 +50,7 @@ from app.modules.prelaunch.api import router as prelaunch_router
 from app.modules.pricing.api import router as pricing_router
 from app.modules.project_analysis.api import router as project_analysis_router
 from app.modules.projects.api import router as projects_router
+from app.modules.projects.company_api import router as company_router
 from app.modules.sales.api import router as sales_router
 from app.modules.settings.api import router as settings_router
 from app.modules.unit_economics.api import router as unit_economics_router
@@ -236,6 +237,7 @@ def create_app() -> FastAPI:
         admin_router,
         settings_router,
         projects_router,
+        company_router,
         inventory_router,
         pricing_router,
         sales_router,
