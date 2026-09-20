@@ -945,3 +945,270 @@ class TestTodayIsUnchanged:
             "installments_total",
         ):
             assert before[field] == today[field], field
+
+
+class TestACancelledContractLeavesActiveCollections:
+    """Given a contract cancelled after cash was taken, when collections is read.
+
+    The owner's words: a cancelled purchase should stop sitting in the normal
+    active-sale reconciliation as though the developer still expects to collect
+    the purchase price. The cancellation does not rewrite what happened; it
+    changes what the transaction *is*.
+
+    So each test below asserts the pair. The receivable, the demand, the arrears
+    and the ageing all go to nothing — on the account, on the register, on the
+    project strip and on the aging report, because those are four screens
+    totalling one derivation and they have to agree. And the receipts, the
+    schedule and the shortfall on every row stay exactly where they were,
+    because that is the evidence of what the buyer actually paid before the
+    contract ended and what the refund will be worked out from.
+
+    The cancellation is dated deliberately: its instalments are months overdue
+    by the time it takes effect, so a fix that only hid future instalments and
+    left the arrears behind would fail here rather than pass.
+    """
+
+    @pytest.fixture
+    def paid_then_cancelled(
+        self,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        sales_ops_client: TestClient,
+        cfo_client: TestClient,
+        db: Session,
+        project_id: str,
+        collecting_sale: str,
+        january_schedule: str,
+    ) -> dict[str, object]:
+        """Cash in, then the contract unwound, with the unit back on 15 June."""
+        del january_schedule
+        recorded = record_receipt(
+            collections_client, project_id, collecting_sale, "20000.00", "2026-02-10"
+        )
+        assert recorded.status_code == 201, recorded.text
+        receipt_id = recorded.json()["id"]
+        confirmed = confirm_receipt(finance_client, project_id, receipt_id)
+        assert confirmed.status_code == 200, confirmed.text
+        # Finance accepted it in February. Confirmation stamps ``now`` and no
+        # route can say otherwise, so the moment is moved here — the passage of
+        # time simulated, never a figure — and every read below goes through the
+        # ordinary route.
+        backdate(db, table="collection_receipts", row_id=receipt_id, confirmed_at=at("2026-02-11"))
+
+        opened = sales_ops_client.post(
+            f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
+            json={
+                "initiated_by_party": "buyer",
+                "initiation_date": "2026-05-01",
+                "reason": "Buyer withdrew after failing to secure finance",
+                "refund_due_amount": "18000.00",
+                "forfeiture_amount": "2000.00",
+            },
+        )
+        assert opened.status_code == 201, opened.text
+        cancellation_id = opened.json()["id"]
+        approved = cfo_client.post(
+            f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
+            json={"reason": "Terms reviewed"},
+        )
+        assert approved.status_code == 200, approved.text
+
+        base = f"{sales_url(project_id)}/cancellations/{cancellation_id}"
+        for to_status in ("termination_pending_approval", "ready_for_unit_return"):
+            moved = sales_ops_client.post(f"{base}/advance", json={"to_status": to_status})
+            assert moved.status_code == 200, moved.text
+        completed = sales_ops_client.post(f"{base}/complete", json={})
+        assert completed.status_code == 200, completed.text
+
+        # Same simulation of elapsed time the rest of this file uses: inventory
+        # refuses a commercial change dated before the unit's last one, so the
+        # return completes today and its effective date is moved afterwards.
+        _stamp(db, "sale_cancellations", cancellation_id, "unit_return_date", date(2026, 6, 15))
+        # The account on the last day the contract was still live. Read after
+        # the arrangement is complete so that the only difference between it and
+        # 15 June is the cancellation itself.
+        before = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-14"
+        )
+        return {"cancellation_id": cancellation_id, "before": before}
+
+    def test_the_receivable_was_real_before_the_unwinding(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        """The control. A test that only ever saw zeroes would prove nothing."""
+        del collections_client, project_id, collecting_sale
+        before = paid_then_cancelled["before"]
+        assert isinstance(before, dict)
+        assert before["derived_collection_status"] != "cancelled"
+        assert Decimal(before["outstanding_total"]) > 0
+        assert Decimal(before["overdue_total"]) > 0
+        assert before["oldest_overdue_days"] > 0
+        assert before["installments_overdue"] > 0
+        # Every row still carries the receivable it was about to stop being.
+        assert any(Decimal(row["receivable"]) > 0 for row in before["installments"])
+
+    def test_the_account_stops_reporting_an_active_receivable(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        del paid_then_cancelled
+        after = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-15"
+        )
+        assert after["derived_collection_status"] == "cancelled"
+        assert after["outstanding_total"] == "0.00"
+        assert after["due_total"] == "0.00"
+        assert after["overdue_total"] == "0.00"
+        assert after["oldest_overdue_days"] == 0
+        assert after["installments_overdue"] == 0
+
+    def test_the_history_behind_it_is_untouched(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        """Everything the refund will be worked out from is still there."""
+        before = paid_then_cancelled["before"]
+        assert isinstance(before, dict)
+        after = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-15"
+        )
+
+        # The cash the buyer actually paid. This is what a refund is calculated
+        # against, and a cancellation that reset it would make the refund
+        # unworkable as well as untrue.
+        assert after["confirmed_receipts_total"] == "20000.00"
+        assert after["scheduled_total"] == before["scheduled_total"]
+        assert after["spa_total_payable"] == before["spa_total_payable"]
+        assert len(after["installments"]) == len(before["installments"])
+
+        by_id = {row["installment_id"]: row for row in before["installments"]}
+        for row in after["installments"]:
+            was = by_id[row["installment_id"]]
+            assert row["status"] == "cancelled"
+            assert row["scheduled"] == was["scheduled"]
+            assert row["paid"] == was["paid"]
+            # What the schedule was short when the contract ended. Kept.
+            assert row["outstanding"] == was["outstanding"]
+            # What is still collectible. Nothing.
+            assert row["receivable"] == "0.00"
+
+    def test_the_register_and_the_account_still_agree(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        del paid_then_cancelled
+        rows = collections_client.get(
+            f"{collections_url(project_id)}/receivables", params={"as_of": "2026-06-15"}
+        ).json()
+        row = next(r for r in rows if r["sale_id"] == collecting_sale)
+        account = collection_account(
+            collections_client, project_id, collecting_sale, as_of="2026-06-15"
+        )
+        for figure in ("outstanding_total", "due_total", "overdue_total"):
+            assert row["summary"][figure] == account[figure] == "0.00"
+
+    def test_the_project_strip_stops_counting_it(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        """The executive figure, and the ageing bands that partition it."""
+        del collecting_sale, paid_then_cancelled
+        summary = collections_client.get(
+            f"{collections_url(project_id)}/summary", params={"as_of": "2026-06-15"}
+        ).json()
+        assert summary["currencies"], "the account is still on the register"
+        for totals in summary["currencies"]:
+            assert totals["outstanding_total"] == "0.00"
+            assert totals["due_total"] == "0.00"
+            assert totals["overdue_total"] == "0.00"
+            assert all(amount == "0.00" for amount in totals["buckets"].values())
+            # No balance, so no shares to draw a bar from.
+            assert totals["bucket_shares"] == {}
+        assert summary["accounts_overdue"] == 0
+
+    def test_the_lifetime_cash_is_still_reported(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        """Cash collected on a cancelled sale is a figure, not an absence."""
+        del paid_then_cancelled
+        summary = collections_client.get(
+            f"{collections_url(project_id)}/summary", params={"as_of": "2026-06-15"}
+        ).json()
+        collected = sum(
+            Decimal(totals["confirmed_receipts_total"]) for totals in summary["currencies"]
+        )
+        assert collected == Decimal("20000.00")
+
+    def test_the_aging_report_drops_the_cancelled_rows(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        del paid_then_cancelled
+        before = collections_client.get(
+            f"{collections_url(project_id)}/aging", params={"as_of": "2026-06-14"}
+        ).json()
+        assert any(row["sale_id"] == collecting_sale for row in before)
+
+        after = collections_client.get(
+            f"{collections_url(project_id)}/aging", params={"as_of": "2026-06-15"}
+        ).json()
+        assert not any(row["sale_id"] == collecting_sale for row in after)
+
+    def test_an_emptied_receivable_is_not_a_cleared_account(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        """The interlock that removing the balance would otherwise have opened.
+
+        Collection clearance is checked against the ledger, and until now a
+        cancelled contract was held back by the arrears that should never have
+        been there. Take those away and the absence of a balance reads as a
+        clear account — so cancellation has to block the sign-off on its own
+        terms. Nothing was cleared here; the obligation was cancelled.
+        """
+        del paid_then_cancelled
+        clearance = collections_client.get(
+            f"{collections_url(project_id)}/sales/{collecting_sale}/collection-clearance"
+        )
+        assert clearance.status_code == 200, clearance.text
+        assert "this contract has been cancelled" in clearance.json()["blockers"]
+
+    def test_signing_the_cancelled_account_off_is_refused(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        del paid_then_cancelled
+        granted = collections_client.post(
+            f"{collections_url(project_id)}/sales/{collecting_sale}/collection-clearance",
+            json={"evidence_reference": "CLR-1"},
+        )
+        assert granted.status_code == 409, granted.text
+        assert "cancelled" in granted.text

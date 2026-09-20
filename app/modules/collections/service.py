@@ -926,16 +926,22 @@ def summarise(
             ),
         )
     rows = _installment_views(position, as_of=as_of)
+    # The instalments still owed under a live contract. A cancelled contract
+    # keeps every row above — the schedule, the cash against it and what it was
+    # short — and contributes nothing to the four figures below, because those
+    # four are what the developer still expects to collect and chases somebody
+    # for. See :attr:`ledger.InstallmentView.is_active_receivable`.
+    active = [row for row in rows if row.is_active_receivable]
     confirmed_total = sum((r.amount for r in position.confirmed_receipts), ZERO)
     confirmed_ids = {receipt.id for receipt in position.confirmed_receipts}
     allocated_total = sum(
         (a.amount for a in position.allocations if a.receipt_id in confirmed_ids), ZERO
     )
     unapplied = confirmed_total - allocated_total
-    outstanding = sum((r.outstanding for r in rows), ZERO)
+    outstanding = sum((r.receivable for r in rows), ZERO)
     due_total = sum((r.due_amount for r in rows), ZERO)
     overdue_total = sum((r.overdue_amount for r in rows), ZERO)
-    oldest = max((r.overdue_days for r in rows), default=0)
+    oldest = max((r.overdue_days for r in active), default=0)
 
     status = ledger.unit_collection_status(
         sale_cancelled=position.sale_cancelled,
@@ -967,7 +973,7 @@ def summarise(
         installments_total=len(rows),
         installments_paid=sum(1 for r in rows if r.status == ledger.INSTALLMENT_PAID),
         installments_partial=sum(1 for r in rows if r.paid > ZERO and r.outstanding > ZERO),
-        installments_overdue=sum(1 for r in rows if r.overdue_days > 0),
+        installments_overdue=sum(1 for r in active if r.overdue_days > 0),
         installments_awaiting_trigger=sum(1 for r in rows if r.due_date is None),
         open_disputes=len(position.open_disputes),
         active_waivers=sum(1 for r in rows if r.has_active_waiver),
@@ -1015,6 +1021,14 @@ def clearance_blockers_of(summary: SaleSummary) -> list[str]:
     is unavailable opens a support ticket.
     """
     blockers: list[str] = []
+    # First, because it is the one that stops the rest being asked at all. A
+    # cancelled contract has no active receivable by construction — that is what
+    # cancelling it did — and without this the absence of a balance would read
+    # as a clear account and let Collections sign off a terminated deal for
+    # handover. Nothing was cleared; the obligation was cancelled, and those are
+    # different facts about different buyers.
+    if summary.derived_collection_status == ledger.UNIT_CANCELLED:
+        blockers.append("this contract has been cancelled")
     if summary.active_payment_plan_version_id is None:
         blockers.append("this sale has no active payment schedule")
     if summary.outstanding_total > ZERO:
@@ -3469,6 +3483,12 @@ def aging_report(
     rows: list[AgingRow] = []
     for entry in collection_register(session, project=project, actor=actor, as_of=as_of):
         for view in entry.summary.rows:
+            # "Live" is the word in the docstring and this is where it is kept.
+            # An instalment under a contract that was unwound by ``as_of`` is
+            # not a debt anybody is ageing; it belongs to the cancellation, and
+            # the cancelled account still lists every one of these rows.
+            if not view.is_active_receivable:
+                continue
             if overdue_only and view.overdue_days <= 0:
                 continue
             rows.append(
@@ -3586,7 +3606,13 @@ def project_summary(
         buckets: dict[str, Decimal] = dict.fromkeys(ledger.AGING_BUCKETS, ZERO)
         for entry in entries:
             for view in entry.summary.rows:
-                buckets[view.bucket] = buckets[view.bucket] + view.outstanding
+                # ``receivable`` and not ``outstanding``: the bands partition the
+                # active book, and ``outstanding_total`` below is the same
+                # partition totalled. Aging a terminated contract's shortfall
+                # would put money in a band that no longer has a debtor, and the
+                # shares drawn from these bands would describe a book that is
+                # not the one being collected.
+                buckets[view.bucket] = buckets[view.bucket] + view.receivable
         outstanding = sum((r.summary.outstanding_total for r in entries), ZERO)
         currencies.append(
             CurrencyTotals(

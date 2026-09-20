@@ -176,7 +176,16 @@ class CollectionInstallmentRow(BaseModel):
     grace_days: int
     scheduled: Money
     paid: Money
+    #: What the schedule was short. Survives a cancellation, because what the
+    #: buyer had not paid when the contract was unwound is part of the record
+    #: of that unwinding.
     outstanding: Money
+    #: The part of ``outstanding`` still owed under a live contract, and nothing
+    #: at all once the contract is cancelled. Sent separately so that a screen
+    #: showing a cancelled deal file never has to decide for itself which of the
+    #: two it is looking at, and never subtracts one figure from another to find
+    #: out. This is the one that totals into ``outstanding_total``.
+    receivable: Money
     overdue_days: int
     bucket: AgingBucket
     status: InstallmentCollectionStatus
@@ -201,6 +210,9 @@ class CollectionSaleSummary(BaseModel):
     collected_percentage: DecimalStr | None
     allocated_total: Money
     unapplied_cash: Money
+    #: Every figure from here to ``installments_overdue`` describes the *active*
+    #: receivable. A cancelled contract contributes nothing to any of them; its
+    #: instalments are still listed below, with what each one was short.
     outstanding_total: Money
     due_total: Money
     overdue_total: Money

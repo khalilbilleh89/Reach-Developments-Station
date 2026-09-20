@@ -661,3 +661,70 @@ class TestDueNow:
         # Its forecast date is two hundred days behind us and moves nothing.
         assert Decimal(account["due_total"]) == Decimal(rows[0]["outstanding"])
         assert Decimal(account["overdue_total"]) == Decimal(rows[0]["outstanding"])
+
+
+class TestACancelledContractLeavesTheActiveReceivable:
+    """Given a contract that was unwound, when the receivable is read.
+
+    The owner's complaint in one sentence: a cancelled purchase was still
+    sitting in the collections figures as though the developer expected to
+    collect the rest of the purchase price. It is not a display problem — the
+    arithmetic below is what the register, the aging report, the project strip,
+    the portfolio risk figures and management reporting all total.
+
+    Both halves are asserted everywhere, because only one of them is a fix. The
+    money must leave the active figures *and* the row must keep what it was
+    short, what was scheduled and what was paid. A cancellation that erased the
+    schedule would answer the owner and lose the evidence.
+    """
+
+    def test_a_live_contract_is_unaffected(self) -> None:
+        """The control. Nothing below is worth anything if this moves."""
+        view = _view(as_of=date(2026, 7, 2), grace_days=0)
+        assert view.is_active_receivable is True
+        assert view.receivable == FIVE_K
+        assert view.receivable == view.outstanding
+        assert view.due_amount == FIVE_K
+        assert view.overdue_amount == FIVE_K
+        assert view.overdue_days == 31
+
+    def test_the_money_stops_being_collectible(self) -> None:
+        view = _view(as_of=date(2026, 7, 2), grace_days=0, sale_cancelled=True)
+        assert view.is_active_receivable is False
+        assert view.receivable == ZERO
+        assert view.due_amount == ZERO
+        assert view.overdue_amount == ZERO
+
+    def test_the_schedule_and_the_shortfall_survive(self) -> None:
+        """What the buyer was asked for, and had not paid, stays on the row."""
+        view = _view(
+            as_of=date(2026, 7, 2), grace_days=0, paid=Decimal("2000.00"), sale_cancelled=True
+        )
+        assert view.scheduled == FIVE_K
+        assert view.paid == Decimal("2000.00")
+        assert view.outstanding == Decimal("3000.00")
+        # scheduled - paid = outstanding still holds. A row whose own three
+        # numbers stopped adding up would be a second kind of untrue answer.
+        assert view.scheduled - view.paid == view.outstanding
+
+    def test_the_days_behind_are_kept_but_age_nothing(self) -> None:
+        """How late it got is a fact about the unwinding. It is not a debt."""
+        view = _view(as_of=date(2026, 7, 2), grace_days=0, sale_cancelled=True)
+        assert view.overdue_days == 31
+        assert view.bucket == ledger.BUCKET_31_60
+        assert view.overdue_amount == ZERO
+
+    def test_a_settled_instalment_is_unchanged_by_cancellation(self) -> None:
+        """Nothing was owed, so nothing had to leave."""
+        view = _view(paid=FIVE_K, sale_cancelled=True)
+        assert view.outstanding == ZERO
+        assert view.receivable == ZERO
+
+    def test_only_cancellation_removes_an_obligation(self) -> None:
+        """A dispute or a waiver is a reason it is unpaid, not a reason it ended."""
+        disputed = _view(as_of=date(2026, 7, 2), disputed=True)
+        waived = _view(as_of=date(2026, 7, 2), waived_until=date(2026, 8, 1))
+        assert disputed.is_active_receivable is True
+        assert disputed.receivable == FIVE_K
+        assert waived.is_active_receivable is True
+        assert waived.receivable == FIVE_K
