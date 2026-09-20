@@ -654,5 +654,13 @@
     "removal_route": "DELETE /technical-specifications/{specification_id}",
     "ui_file": "frontend/src/components/projects/construction/TechnicalSpecifications.tsx",
     "notes": "Whole-project technical writers delete drafts or remove confirmed specifications with retained data and audit; reason required. No dependent transactions are deleted."
+  },
+  {
+    "handler": "unit_economics.record_current_cost_settings",
+    "create_route": "PUT /current-cost-analysis/settings",
+    "status": "implemented",
+    "removal_route": "DELETE /current-cost-analysis/settings",
+    "ui_file": "frontend/src/components/projects/economics/CurrentCostAnalysis.tsx",
+    "notes": "Finance whole-project removal with reason and revision check; retains audit before-image, does not delete source contracts, payments, land or historical allocations."
   }
 ]

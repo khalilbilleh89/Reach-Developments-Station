@@ -486,3 +486,21 @@ def reverse(
     session.commit()
     session.refresh(row)
     return out(session, row)
+
+
+def current_unit_cost_grants(
+    session: Session, *, project_id: uuid.UUID
+) -> list[models.CommissionGrant]:
+    """Recorded commission commitments for current analysis; draft is labelled a provision.
+
+    Beneficiary distributions divide this amount and must never be added to it.
+    Reversed grants and grants for a different sale cannot reduce the current deal.
+    """
+    return list(
+        session.scalars(
+            select(models.CommissionGrant).where(
+                models.CommissionGrant.project_id == project_id,
+                models.CommissionGrant.status.in_(("draft", "released")),
+            )
+        )
+    )

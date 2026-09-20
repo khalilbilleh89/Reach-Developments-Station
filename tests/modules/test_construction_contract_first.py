@@ -191,7 +191,7 @@ def test_payment_migration_roundtrip(
     assert paid.status_code == 201, paid.text
     with pytest.raises(RuntimeError, match="history must be retained"):
         command.downgrade(config, "0032_building_units")
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0033_contract_payments"
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0034_unit_current_costs"
 
 
 def test_existing_draft_signed_activation_preserves_lines(

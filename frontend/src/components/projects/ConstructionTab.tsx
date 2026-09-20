@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
 import { ContractHeaderEditor } from "./construction/ContractWorkflow";
-import { CONSTRUCTION_READERS, hasAnyRole } from "@/lib/roles";
+import { CONSTRUCTION_READERS, ECONOMICS_READERS, hasAnyRole } from "@/lib/roles";
 import { TechnicalSpecifications } from "./construction/TechnicalSpecifications";
 
 import {
@@ -60,8 +60,11 @@ function contractCurrency(contracts: ConstructionContract[], contractId: string 
   return contracts.find((contract) => contract.id === contractId)?.currency_code ?? "Currency unavailable";
 }
 
+import { CurrentCostAnalysis } from "./economics/CurrentCostAnalysis";
+
 const SECTIONS = [
   { key: "overview", label: "Overview" },
+  { key: "unit-costs", label: "Unit cost analysis" },
   { key: "technical-specifications", label: "Technical Specifications" },
   { key: "contracts", label: "Contracts" },
   { key: "variations", label: "Variations & reductions" },
@@ -74,7 +77,7 @@ const SECTIONS = [
 /** Contract-first costing. All financial totals arrive from the server. */
 export function ConstructionTab({ projectId, roles = new Set<string>(), currencyId = "", currencyCode = null }: { projectId: string; roles?: Set<string>; currencyId?: string; currencyCode?: string | null }) {
   const canReadCosts = hasAnyRole(roles, CONSTRUCTION_READERS);
-  const sections = canReadCosts ? SECTIONS : SECTIONS.filter(item => item.key === "technical-specifications");
+  const sections = canReadCosts ? SECTIONS.filter(item => item.key !== "unit-costs" || hasAnyRole(roles, ECONOMICS_READERS)) : SECTIONS.filter(item => item.key === "technical-specifications");
   const [view, setView] = useRegisterFields({ constructionTab: "contracts" });
   const section = sections.some(item => item.key === view.constructionTab) ? view.constructionTab : sections[0].key;
   const setSection = (constructionTab: string) => setView({ constructionTab });
@@ -140,6 +143,7 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
       />
 
       <TabPanel group="construction" tab={section}>
+      {section === "unit-costs" ? <CurrentCostAnalysis key={projectId} projectId={projectId} roles={roles} /> : null}
       {section === "technical-specifications" ? <TechnicalSpecifications key={projectId} projectId={projectId} roles={roles} /> : null}
       {section === "overview" ? (
         summary ? (

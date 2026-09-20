@@ -1346,3 +1346,15 @@ and floor creation/moves share the project lock so they cannot race into mixed
 placement. Building and phase labels, filtering, permissions and downstream
 reports resolve either path. No synthetic floor or duplicate building reference
 is stored for a floor-level unit. See INVENTORY_LAUNCH.md for migration rollback.
+
+
+### Live contract-based unit costing
+
+Unit Economics owns the current-cost report shared by Construction and Unit
+Economics. It consumes named source readers for standing construction commitments,
+approved gross-built measurements, complete land acquisition costs, and commission
+grants. Audited project inputs and Decimal allocations produce unit, floor and
+building costs/profits; the frontend performs no financial arithmetic. The live
+report is independent of frozen approved allocation versions. See
+[CURRENT_UNIT_COSTS.md](CURRENT_UNIT_COSTS.md) for coverage, tax, denomination,
+de-duplication and rollback rules. Migration 0034 stores editable inputs only.

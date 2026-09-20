@@ -6,6 +6,7 @@
 
 import { download, get, patch, post, postBinary, postCsv, put, remove } from "./client";
 import type {
+  CurrentCostAnalysis, CurrentCostSettingsWrite,
   UnitPurgePreview, UnitPurgeRequest,
   RemovedUnit,
   InventoryOption,
@@ -1594,6 +1595,9 @@ export const collections = {
  * margin — because the backend is the one place the arithmetic is tested.
  */
 export const unitEconomics = {
+  currentCosts: (projectId: string) => get<CurrentCostAnalysis>(`/projects/${projectId}/unit-economics/current-cost-analysis`),
+  writeCurrentCostSettings: (projectId: string, body: CurrentCostSettingsWrite) => put<CurrentCostAnalysis>(`/projects/${projectId}/unit-economics/current-cost-analysis/settings`, body),
+  deleteCurrentCostSettings: (projectId: string, revision: number, reason: string) => remove(`/projects/${projectId}/unit-economics/current-cost-analysis/settings?${new URLSearchParams({ revision: String(revision), reason })}`),
   summary: (projectId: string) =>
     get<ProjectEconomics>(`/projects/${projectId}/unit-economics/summary`),
   units: (projectId: string) =>

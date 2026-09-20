@@ -1364,7 +1364,7 @@ def register_signed_contract(
             actor=actor,
             code=contract.id.hex,
             name=f"Contract {contract.contract_number}",
-            cost_category=CATEGORY_HARD,
+            cost_category="soft" if contract.contract_type == "consultancy" else CATEGORY_HARD,
             notes="Contract allocation created with the signed agreement; not a budget.",
         )
         set_contract_line(
@@ -5223,3 +5223,59 @@ def cashflow_forecast_position(
         remaining_by_cost_code=remaining,
         cost_code_labels=labels,
     )
+
+
+def current_unit_cost_sources(session: Session, *, project_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Current signed commitment by category, never payments plus contract value.
+
+    Values include approved reductions/additions and exclude draft/cancelled
+    agreements. Return denominations with each source; the consumer must compare them.
+    """
+    contracts = {
+        c.id: c
+        for c in session.scalars(
+            select(Contract).where(
+                Contract.project_id == project_id, Contract.status.in_(CONTRACT_COMMITTING)
+            )
+        )
+    }
+    if not contracts:
+        return []
+    totals: dict[tuple[uuid.UUID, str], Decimal] = {}
+    for model, parent, amount, extra in (
+        (
+            ContractLine,
+            Contract,
+            ContractLine.original_amount_ex_tax,
+            Contract.status.in_(CONTRACT_COMMITTING),
+        ),
+        (
+            VariationLine,
+            Variation,
+            VariationLine.value_delta_ex_tax,
+            Variation.status == VARIATION_APPROVED,
+        ),
+    ):
+        parent_key = model.contract_id if model is ContractLine else model.variation_id
+        contract_key = parent.id if parent is Contract else parent.contract_id
+        for contract_id, category, value in session.execute(
+            select(contract_key, CostCode.cost_category, func.sum(amount))
+            .select_from(model)
+            .join(parent, parent.id == parent_key)
+            .join(CostCode, CostCode.id == model.cost_code_id)
+            .where(contract_key.in_(contracts), extra)
+            .group_by(contract_key, CostCode.cost_category)
+        ):
+            key = (contract_id, category)
+            totals[key] = money(totals.get(key, ZERO) + value)
+    return [
+        {
+            "contract_id": c.id,
+            "reference": c.contract_number,
+            "currency_id": c.currency_id,
+            "category": category,
+            "amount": amount,
+        }
+        for (contract_id, category), amount in totals.items()
+        for c in [contracts[contract_id]]
+    ]

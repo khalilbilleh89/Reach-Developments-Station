@@ -589,3 +589,58 @@ for (const kind of ["payment", "reduction"]) test(`${kind} entry sends exact val
   else { assert.equal(payload.adjustment_kind, "reduction"); assert.equal(payload.cost_code_id, "scope"); }
   fail = false; submit(); await settle(); assert.equal(closed, 1);
 });
+
+test("current unit costs show server totals, separate forecasts and a full-page breakdown", () => {
+  const figures = { gross_area_sqm: "120.0000", hard_cost_per_sqm: "500.00", hard_cost: "60000.00", land_cost: "40000.00", soft_cost: "10000.00", additional_cost: "0.00", finance_cost: "0.00", direct_cost: "0.00", seller_cost: "0.00", commission_cost: "2000.00", total_cost: "112000.00", total_cost_per_sqm: "933.33", revenue: "165000.00", profit_before_tax: "53000.00", tax_amount: null, net_profit: null };
+  const unit = { ...figures, unit_id: "u", unit_reference: "B1-101", building_id: "b", building_name: "Building 1", floor_name: "First floor", revenue_basis: "sold", commission_basis: "released grant", issues: [] };
+  const group = { ...figures, id: "b", building_id: "b", label: "Building 1", unit_count: 1, sold_count: 1, cost_complete_count: 1, net_profit_complete_count: 0, sold_revenue: "165000.00", forecast_revenue: "0.00" };
+  const report = { as_of_date: "2026-09-20", currency_id: "f63c733c-bfaa-4236-8ab4-ea103f265854", currency_code: "EUR", settings: { revision: 2 }, project: group, buildings: [group], floors: [group], units: [unit], sources: [], issues: ["Profit tax rate not entered"] };
+  const render = mount("projects/economics/CurrentCostAnalysis", "AnalysisView", { "@/lib/format": contractFormat, "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" } }, { report, projectId: "project", canWrite: true, onRefresh() {} });
+  let tree = nodes(render());
+  assert.equal(tree.find(n => n.type === "KeyValue" && n.props.label === "Total project cost").props.value, "EUR 112,000.00");
+  assert.ok(tree.some(n => n.type === "KeyValue" && n.props.label === "Unsold asking-price forecast"));
+  assert.ok(tree.some(n => n.type === "DeleteRecordButton"));
+  assert.ok(!JSON.stringify(tree).includes(report.currency_id));
+  tree.find(n => n.type === "Button" && n.props.children === "B1-101").props.onClick();
+  tree = nodes(render());
+  assert.ok(tree.some(n => n.type === "RecordPage"));
+  assert.equal(tree.find(n => n.type === "KeyValue" && n.props.label === "Estimated net profit").props.value, "—");
+});
+
+test("current cost read failures offer retry and forbidden readers never fetch", () => {
+  let enabled; let retries = 0;
+  const dependencies = { "../DeleteRecordButton": {}, "@/lib/answer": { useAnswer: (flag) => { enabled = flag; return { status: flag ? "failed" : "off", message: "Connection lost", retry: () => retries++ }; } }, "@/lib/roles": { ECONOMICS_READERS: new Set(["finance"]), hasAnyRole: (roles, allowed) => [...roles].some(r => allowed.has(r)) } };
+  const props = { projectId: "project", roles: new Set(["sales_advisor"]) };
+  const render = mount("projects/economics/CurrentCostAnalysis", "CurrentCostAnalysis", dependencies, props);
+  assert.ok(nodes(render()).some(n => n.type === "EmptyState"));
+  assert.equal(enabled, false);
+  props.roles = new Set(["finance"]);
+  nodes(render()).find(n => n.type === "Button").props.onClick();
+  assert.equal(enabled, true); assert.equal(retries, 1);
+});
+
+test("current cost inputs preserve exact amounts, explicit zero tax and failed drafts", async () => {
+  let sent; let saved = 0; let fail = true;
+  const area = { id: "area", label: "Gross built", area_role: "gross", is_active: true, unit_of_measure: "sqm" };
+  const render = mount("projects/economics/CurrentCostAnalysis", "SettingsEditor", {
+    "../DeleteRecordButton": {}, "@/lib/format": contractFormat,
+    "@/lib/answer": { useAnswer: () => ({ status: "ready", data: [area] }) },
+    "@/lib/api": { unitEconomics: { writeCurrentCostSettings: async (_id, body) => { sent = body; if (fail) throw new Error("Inputs changed; refresh before saving"); } } },
+  }, { projectId: "project", settings: null, code: "EUR", onClose() {}, onSaved() { saved++; } });
+  const field = label => nodes(render()).find(n => n.type === "Field" && n.props.label === label).props.children;
+  field("Approved gross-built area").props.onChange({ target: { value: "area" } });
+  field("Supplemental soft costs").props.onChange("123456789.12");
+  field("Profit tax %").props.onChange("0");
+  field("Reason for saving").props.onChange({ target: { value: "Recorded signed costs" } });
+  const submit = () => nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  submit(); await settle();
+  assert.equal(sent.supplemental_soft_cost, "123456789.12");
+  assert.equal(sent.additional_cost, null);
+  assert.equal(sent.profit_tax_rate_fraction, "0");
+  assert.equal(sent.expected_revision, 0);
+  assert.equal(saved, 0);
+  assert.equal(field("Supplemental soft costs").props.value, "123456789.12");
+  assert.ok(nodes(render()).find(n => n.type === "DraftBoundary").props.dirty);
+  assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children.includes("Could not save cost inputs")));
+  fail = false; submit(); await settle(); assert.equal(saved, 1);
+});

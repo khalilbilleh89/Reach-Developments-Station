@@ -3058,3 +3058,53 @@ export interface InventoryOption {
   id: string; project_id: string; category: string; code: string; label: string;
   sort_order: number; is_active: boolean;
 }
+
+
+export interface CurrentCostSettings {
+  gross_area_type_id: string;
+  supplemental_soft_cost: string | null;
+  additional_cost: string | null;
+  finance_cost: string | null;
+  commission_rate_fraction: string | null;
+  profit_tax_rate_fraction: string | null;
+  notes: string | null;
+  currency_id: string;
+  revision: number;
+}
+export type CurrentCostSettingsWrite = Omit<CurrentCostSettings, "currency_id" | "revision"> & { expected_revision: number; reason: string };
+export interface CurrentCostFigures {
+  gross_area_sqm: string | null;
+  hard_cost: string | null;
+  hard_cost_per_sqm: string | null;
+  land_cost: string | null;
+  soft_cost: string | null;
+  additional_cost: string | null;
+  finance_cost: string | null;
+  direct_cost: string | null;
+  seller_cost: string | null;
+  commission_cost: string | null;
+  total_cost: string | null;
+  total_cost_per_sqm: string | null;
+  revenue: string | null;
+  profit_before_tax: string | null;
+  tax_amount: string | null;
+  net_profit: string | null;
+}
+export interface CurrentUnitCost extends CurrentCostFigures {
+  unit_id: string; unit_reference: string; building_id: string; building_name: string;
+  floor_id: string | null; floor_name: string; sale_id: string | null;
+  revenue_basis: "sold" | "asking_price" | "unavailable";
+  commission_basis: string; issues: string[];
+}
+export interface CurrentCostGroup extends CurrentCostFigures {
+  id: string; label: string; building_id: string | null; unit_count: number; sold_count: number;
+  cost_complete_count: number; net_profit_complete_count: number;
+  sold_revenue: string | null; forecast_revenue: string | null;
+}
+export interface CurrentCostAnalysis {
+  as_of_date: string; currency_id: string; currency_code: string; gross_area_label: string | null;
+  settings: CurrentCostSettings | null; issues: string[];
+  sources: { category: string; reference: string; amount: string | null }[];
+  units: CurrentUnitCost[]; buildings: CurrentCostGroup[]; floors: CurrentCostGroup[];
+  project: CurrentCostGroup;
+}

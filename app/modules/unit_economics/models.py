@@ -717,3 +717,40 @@ class UnitCost(Base):
         Index("ix_ue_unit_costs_project_status", "project_id", "status"),
         Index("ix_ue_unit_costs_sale", "sale_contract_id"),
     )
+
+
+class CurrentCostSettings(Base):
+    """Audited inputs for the live analysis, separate from approved cost snapshots."""
+
+    __tablename__ = "ue_current_cost_settings"
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), primary_key=True
+    )
+    currency_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("currencies.id", ondelete="RESTRICT"), nullable=False
+    )
+    gross_area_type_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    supplemental_soft_cost: Mapped[Decimal | None] = mapped_column(MONEY)
+    additional_cost: Mapped[Decimal | None] = mapped_column(MONEY)
+    finance_cost: Mapped[Decimal | None] = mapped_column(MONEY)
+    commission_rate_fraction: Mapped[Decimal | None] = mapped_column(RATE)
+    profit_tax_rate_fraction: Mapped[Decimal | None] = mapped_column(RATE)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    notes: Mapped[str | None] = mapped_column(String(1000))
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["gross_area_type_id", "project_id"],
+            ["area_types.id", "area_types.project_id"],
+            name="fk_ue_current_gross_area",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("revision > 0", name="revision_positive"),
+        *(
+            CheckConstraint(f"{field} IS NULL OR {field} >= 0", name=f"{field}_nonnegative")
+            for field in ("supplemental_soft_cost", "additional_cost", "finance_cost")
+        ),
+        *(
+            CheckConstraint(f"{field} IS NULL OR {field} BETWEEN 0 AND 1", name=f"{field}_range")
+            for field in ("commission_rate_fraction", "profit_tax_rate_fraction")
+        ),
+    )

@@ -121,6 +121,7 @@ def postgres() -> None:
 #: Emptied before every test. `roles` is excluded: it is seeded by migration and
 #: is reference data, not test state.
 _DATA_TABLES = (
+    "ue_current_cost_settings",
     # Retained reporting documents require privileged test lifecycle cleanup.
     # Do not rely on their foreign keys making an unrelated TRUNCATE cascade to
     # them: migration tests must start with no retained history. TRUNCATE is

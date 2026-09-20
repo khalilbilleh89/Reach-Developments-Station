@@ -182,7 +182,7 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # is not why its tests run.
     "payment_plans": ("collections", "construction"),
     "collections": ("cashflow",),
-    "commissions": ("portfolio",),
+    "commissions": ("portfolio", "unit_economics"),
     "consultant_engineering": ("project_analysis",),
     "project_analysis": ("portfolio",),
     "portfolio": ("management_reporting",),
@@ -395,6 +395,8 @@ def domain_of_migration(path: str) -> str | None:
             continue
         if stem.endswith(domain) or stem.endswith(domain.rstrip("s")):
             return domain
+    if stem == "0034_unit_current_costs":
+        return "unit_economics"
     if stem == "0033_contract_payments":
         return "construction"
     if stem == "0026_installment_tax":
