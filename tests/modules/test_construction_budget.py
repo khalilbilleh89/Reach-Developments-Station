@@ -300,8 +300,8 @@ class TestActivationProvesCoverage:
         assert "HRD-01" in refused.json()["detail"]
 
 
-class TestHeadroomGovernsCommitment:
-    def test_a_contract_beyond_the_authorisation_cannot_be_activated(
+class TestBudgetsDoNotGateSignedCommitments:
+    def test_a_contract_beyond_the_legacy_budget_can_be_activated(
         self,
         finance_client: TestClient,
         cfo_client: TestClient,
@@ -310,7 +310,7 @@ class TestHeadroomGovernsCommitment:
         cost_codes: dict[str, str],
         active_budget: str,
     ) -> None:
-        """The budget is a limit on commitment, not a note beside it."""
+        """Historical budgets remain readable but no longer block contract activation."""
         created = create_contract(
             finance_client,
             project_id,
@@ -330,8 +330,17 @@ class TestHeadroomGovernsCommitment:
         )
         assert line.status_code == 200, line.text
 
-        refused = govern_contract(finance_client, cfo_client, project_id, contract_id)
-        assert refused.status_code == 409, refused.text
+        base = construction_url(project_id)
+        before = finance_client.get(f"{base}/budgets/{active_budget}").json()
+        activated = govern_contract(finance_client, cfo_client, project_id, contract_id)
+        assert activated.status_code == 200, activated.text
+        assert activated.json()["status"] == "active"
+        assert activated.json()["revised_commitment"] == "11000000.00"
+        after = finance_client.get(f"{base}/budgets/{active_budget}").json()
+        assert after["status"] == before["status"] == "active"
+        assert [(r["approved_budget_amount"], r["contingency_amount"]) for r in after["lines"]] == [
+            (r["approved_budget_amount"], r["contingency_amount"]) for r in before["lines"]
+        ]
 
 
 class TestBudgetWorkspaceEligibility:

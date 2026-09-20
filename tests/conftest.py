@@ -121,6 +121,7 @@ def postgres() -> None:
 #: Emptied before every test. `roles` is excluded: it is seeded by migration and
 #: is reference data, not test state.
 _DATA_TABLES = (
+    "ue_current_cost_settings",
     "company_bank_accounts",
     "project_companies",
     # Retained reporting documents require privileged test lifecycle cleanup.

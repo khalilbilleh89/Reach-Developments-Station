@@ -230,3 +230,38 @@ def component_measurements(lines: list[dict[str, Any]]) -> dict[str, dict[str, A
             "unit": matches[0]["unit_of_measure"] if len(matches) == 1 else None,
         }
     return result
+
+
+def approved_gross_built_areas(
+    session: Session, *, project_id: uuid.UUID, area_type_id: uuid.UUID
+) -> dict[uuid.UUID, Decimal]:
+    """Named gross-built measurement only: never add gardens or plot area implicitly.
+
+    Inventory's display gross includes outdoor gardens. Construction instead
+    chooses a gross-role measurement containing the surveyed built/covered area.
+    Approved raw sqm are returned without pricing weights. Sqft converts exactly.
+    """
+    from app.modules.inventory.models import AreaType, UnitAreaSchedule, UnitAreaValue
+
+    area_type = session.scalar(
+        select(AreaType).where(
+            AreaType.id == area_type_id,
+            AreaType.project_id == project_id,
+            AreaType.area_role == "gross",
+        )
+    )
+    if area_type is None or area_type.unit_of_measure not in {"sqm", "sqft"}:
+        return {}
+    factor = Decimal("0.09290304") if area_type.unit_of_measure == "sqft" else Decimal("1")
+    return {
+        unit_id: raw * factor
+        for unit_id, raw in session.execute(
+            select(UnitAreaSchedule.unit_id, UnitAreaValue.raw_area)
+            .join(UnitAreaValue, UnitAreaValue.unit_area_schedule_id == UnitAreaSchedule.id)
+            .where(
+                UnitAreaSchedule.project_id == project_id,
+                UnitAreaSchedule.status == "approved",
+                UnitAreaValue.area_type_id == area_type_id,
+            )
+        )
+    }

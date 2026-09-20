@@ -34,7 +34,8 @@ from sqlalchemy.orm import Session
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.inventory.models import Unit
 from app.modules.projects.models import Project
-from app.modules.unit_economics import permissions, service
+from app.modules.unit_economics import current_costs, permissions, service
+from app.modules.unit_economics.current_schemas import CostSettingsWrite, CurrentCostAnalysis
 from app.modules.unit_economics.models import (
     UNIT_COST_CLASS_OF,
     Allocation,
@@ -797,3 +798,33 @@ def reverse_unit_cost(
     session.commit()
     session.refresh(cost)
     return _unit_cost_read(cost)
+
+
+@router.get("/current-cost-analysis", response_model=CurrentCostAnalysis)
+def current_cost_analysis(
+    project: GovernedProject, session: DbSession, actor: ActiveActor
+) -> CurrentCostAnalysis:
+    return current_costs.read_analysis(session, project=project, actor=actor)
+
+
+@router.put("/current-cost-analysis/settings", response_model=CurrentCostAnalysis)
+def record_current_cost_settings(
+    payload: CostSettingsWrite, project: GovernedProject, session: DbSession, actor: ActiveActor
+) -> CurrentCostAnalysis:
+    current_costs.write_settings(session, project=project, actor=actor, payload=payload)
+    session.commit()
+    return current_costs.read_analysis(session, project=project, actor=actor)
+
+
+@router.delete("/current-cost-analysis/settings", status_code=204)
+def delete_current_cost_settings(
+    project: GovernedProject,
+    session: DbSession,
+    actor: ActiveActor,
+    revision: int = Query(ge=1),
+    reason: str = Query(min_length=1, max_length=1000),
+) -> None:
+    current_costs.delete_settings(
+        session, project=project, actor=actor, revision=revision, reason=reason
+    )
+    session.commit()

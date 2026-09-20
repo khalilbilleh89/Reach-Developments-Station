@@ -204,3 +204,18 @@ def write_market_assumption(
         },
     )
     session.commit()
+
+
+def complete_project_acquisition_cost(session: Session, *, project_id: uuid.UUID) -> Decimal | None:
+    """A complete acquisition basis, never a partial sum presented as full land cost."""
+    parcels = list(
+        session.scalars(
+            select(LandParcel).where(
+                LandParcel.project_id == project_id, LandParcel.is_active.is_(True)
+            )
+        )
+    )
+    values = [cost_breakdown(parcel)["total_acquisition_cost"] for parcel in parcels]
+    if not values or any(value is None for value in values):
+        return None
+    return amount(sum(values, ZERO))

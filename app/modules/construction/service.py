@@ -10,11 +10,9 @@ the other way.
 
 Five invariants are worth naming, because everything else is bookkeeping.
 
-**A commitment fits inside its authorisation.** Activating a contract or
-approving a variation proves, per cost code and under lock, that the revised
-standing commitment does not exceed the approved budget plus its contingency.
-Two Finance users approving two variations against the same headroom is the
-race this exists to lose exactly once.
+**The signed contract is the commitment authority.** An already signed agreement
+can be registered as active immediately. Neither activation nor variations
+require a budget. Legacy draft authorization remains available.
 
 **Certified work fits inside its commitment.** Certification proves, per cost
 code and under lock, that everything certified so far plus this certificate does
@@ -192,6 +190,7 @@ _INVOICE_FIELDS = (
 )
 
 _PAYMENT_FIELDS = (
+    "direct_contract_payment",
     "payment_reference",
     "payment_date",
     "value_date",
@@ -1338,6 +1337,148 @@ def create_contract(
     return contract
 
 
+def register_signed_contract(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    contract: Contract,
+    signed_reference: str,
+) -> None:
+    """Register an already signed agreement atomically, without a budget or second approval.
+    The original agreement is the authority. Its single initial allocation is
+    bookkeeping, not an estimate or a fabricated budget.
+    """
+    permissions.require_construction_preparer(actor)
+    lock_project(session, project.id)
+    contract = _lock_contract(session, project_id=project.id, contract_id=contract.id)
+    validate_signed_registration(session, project=project, contract=contract)
+    if not signed_reference.strip():
+        raise ValidationError("Enter the signed contract document reference.")
+    if not session.scalar(
+        select(ContractLine.id).where(ContractLine.contract_id == contract.id).limit(1)
+    ):
+        code = create_cost_code(
+            session,
+            project=project,
+            actor=actor,
+            code=contract.id.hex,
+            name=f"Contract {contract.contract_number}",
+            cost_category="soft" if contract.contract_type == "consultancy" else CATEGORY_HARD,
+            notes="Contract allocation created with the signed agreement; not a budget.",
+        )
+        set_contract_line(
+            session,
+            project=project,
+            actor=actor,
+            contract_id=contract.id,
+            sequence=1,
+            description="Signed contract scope",
+            cost_code_id=code.id,
+            original_amount_ex_tax=contract.original_contract_value_ex_tax,
+        )
+    before = _snapshot(contract, _CONTRACT_FIELDS)
+    contract.status = CONTRACT_ACTIVE
+    contract.activated_at = _now()
+    contract.activated_by_user_id = actor.user_id
+    _flush(session)
+    record_event(
+        session,
+        action="construction.signed_contract_registered",
+        entity_type=ENTITY_CONTRACT,
+        entity_id=contract.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=signed_reference.strip(),
+        before=before,
+        after=_snapshot(contract, _CONTRACT_FIELDS),
+    )
+
+
+def validate_signed_registration(session: Session, *, project: Project, contract: Contract) -> None:
+    if contract.currency_id != project.base_currency_id:
+        raise ConflictError("The signed contract must use the project's base currency.")
+    if contract.status not in {CONTRACT_DRAFT, CONTRACT_SUBMITTED}:
+        raise ConflictError("Only a draft or submitted agreement can be registered as signed.")
+    if session.scalar(
+        select(ContractLine.id).where(ContractLine.contract_id == contract.id).limit(1)
+    ):
+        _require_lines_reconcile(session, contract=contract)
+
+
+def delete_unused_contract(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    contract_id: uuid.UUID,
+    reason: str,
+) -> None:
+    """Remove an unused draft, or cancel a mistaken signed entry with evidence retained."""
+    lock_project(session, project.id)
+    contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
+    if contract.status not in {CONTRACT_DRAFT, CONTRACT_SUBMITTED, CONTRACT_ACTIVE}:
+        raise ConflictError("This contract is already closed; its history is retained.")
+    for model in (Variation, Certificate, Invoice, Payment):
+        if session.scalar(select(model.id).where(model.contract_id == contract.id).limit(1)):
+            raise ConflictError(
+                "This contract has linked records. Keep its history "
+                "and use variations or termination."
+            )
+    before = _snapshot(contract, _CONTRACT_FIELDS)
+    if contract.status == CONTRACT_DRAFT:
+        for line in session.scalars(
+            select(ContractLine).where(ContractLine.contract_id == contract.id)
+        ):
+            session.delete(line)
+        _flush(session)
+        session.delete(contract)
+    else:
+        contract.status = CONTRACT_CANCELLED
+        contract.cancelled_at = _now()
+        contract.cancellation_reason = reason.strip()
+    record_event(
+        session,
+        action="construction.unused_contract_removed",
+        entity_type=ENTITY_CONTRACT,
+        entity_id=contract.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+    )
+    _flush(session)
+
+
+def delete_draft_variation(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    variation_id: uuid.UUID,
+    reason: str,
+) -> None:
+    lock_project(session, project.id)
+    variation = get_variation(session, project=project, variation_id=variation_id)
+    if variation.status != VARIATION_DRAFT:
+        raise ConflictError(
+            "Only a draft change can be deleted. Withdraw a submitted change; "
+            "correct approved changes with a new variation."
+        )
+    record_event(
+        session,
+        action="construction.variation_deleted",
+        entity_type=ENTITY_VARIATION,
+        entity_id=variation.id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=_snapshot(variation, _VARIATION_FIELDS),
+    )
+    session.delete(variation)
+    _flush(session)
+
+
 def validate_contract_editing(contract: Contract) -> None:
     if contract.status not in CONTRACT_EDITABLE:
         raise ConflictError(
@@ -1551,30 +1692,11 @@ def validate_contract_activation(
         )
     _require_lines_reconcile(session, contract=contract)
 
-    budget = active_budget(session, project_id=project.id)
-    if budget is None:
-        raise ConflictError(
-            "This project has no active construction budget. A commitment needs an "
-            "authorisation to sit inside."
-        )
-    lines = budget_lines_by_cost_code(session, budget_version_id=budget.id)
-    others = committed_by_cost_code(session, project_id=project.id, exclude_contract_id=contract.id)
-    mine = contract_committed_by_cost_code(session, project_id=project.id, contract_id=contract.id)
-    _require_headroom(session, budget_lines=lines, standing=others, additional=mine)
-
 
 def activate_contract(
     session: Session, *, project: Project, actor: ActorContext, contract_id: uuid.UUID
 ) -> Contract:
-    """Make a submitted contract a commitment, having proved the budget covers it.
-
-    Everything is re-proved here under lock rather than trusted from submission:
-    the lines still reconcile, the currency is still the project's, a budget is
-    still in force, and every cost code this contract touches still has room for
-    it beside whatever else has been committed since. The last of those is the
-    race — two contracts submitted against the same headroom, both activated,
-    neither aware of the other.
-    """
+    """Activate a legacy submitted contract after currency, line and authority checks."""
     lock_project(session, project.id)
     contract = _lock_contract(session, project_id=project.id, contract_id=contract_id)
     validate_contract_activation(session, project=project, actor=actor, contract=contract)
@@ -1995,20 +2117,7 @@ def variation_requires_escalation(
 def approve_variation(
     session: Session, *, project: Project, actor: ActorContext, variation_id: uuid.UUID
 ) -> Variation:
-    """Approve a change, having proved the budget can carry it.
-
-    Two guards, in this order. The threshold decides who may sign — and it is
-    evaluated here, on the server, against the pack's configured amount rather
-    than trusted from whatever the client believed when it drew the button. Then
-    the headroom is re-read under lock: a variation that would push a cost code
-    past its authorisation is refused with the code and the shortfall named, so
-    the next step is obvious rather than a mystery.
-
-    Contingency is not moved into the approved budget by any of this. The two
-    stay separately visible and only their total constrains the commitment; a
-    reserve that silently became budget the first time it was used would stop
-    being a reserve anybody could report on.
-    """
+    """Approve an addition or reduction, preserving escalation and certified-work floors."""
     lock_project(session, project.id)
     variation = get_variation(session, project=project, variation_id=variation_id)
     if variation.status != VARIATION_SUBMITTED:
@@ -2056,20 +2165,6 @@ def approve_variation(
             + "; ".join(sorted(below))
             + ". Work that has been certified was authorised when it was certified, "
             "and an omission cannot take that authorisation away afterwards."
-        )
-
-    if any(delta > ZERO for delta in deltas.values()):
-        budget = active_budget(session, project_id=project.id)
-        if budget is None:
-            raise ConflictError(
-                "This project has no active construction budget, so there is no "
-                "authorisation for this variation to sit inside."
-            )
-        _require_headroom(
-            session,
-            budget_lines=budget_lines_by_cost_code(session, budget_version_id=budget.id),
-            standing=committed_by_cost_code(session, project_id=project.id),
-            additional={code: delta for code, delta in deltas.items() if delta > ZERO},
         )
 
     before = _snapshot(variation, _VARIATION_FIELDS)
@@ -3006,17 +3101,40 @@ def record_payment(
     bank_reference: str | None = None,
     proof_reference: str | None = None,
     notes: str | None = None,
+    direct_contract_payment: bool = False,
 ) -> Payment:
-    """Prepare a disbursement. Recorded is not paid."""
+    """Prepare an invoice disbursement, or register evidenced cash already paid.
+    Direct entry records a historical fact; it neither authorizes nor initiates
+    a transfer. Overpayment stays visible as a negative contract balance.
+    """
     lock_project(session, project.id)
     contract = get_contract(session, project=project, contract_id=contract_id)
+    if not payment_reference.strip():
+        raise ValidationError("Enter the payment reference.")
+    if session.scalar(
+        select(Payment.id)
+        .where(
+            Payment.project_id == project.id,
+            Payment.payment_reference == payment_reference.strip(),
+        )
+        .limit(1)
+    ):
+        raise ConflictError("This payment reference is already recorded in the project.")
     if currency_id != contract.currency_id:
         raise ValidationError(
             "A payment must be denominated in the contract's currency. There are no "
             "exchange rates in this platform, so a second denomination could not be "
             "applied to the invoice it is meant to settle."
         )
+    if direct_contract_payment:
+        if contract.status not in CONTRACT_COMMITTING:
+            raise ConflictError(
+                "Record payments against an active, completed or terminated contract."
+            )
+        if not (proof_reference or "").strip():
+            raise ValidationError("Enter a payment proof reference for money already paid.")
     payment = Payment(
+        direct_contract_payment=direct_contract_payment,
         project_id=project.id,
         contract_id=contract.id,
         payment_reference=payment_reference.strip(),
@@ -3027,14 +3145,20 @@ def record_payment(
         bank_reference=(bank_reference or "").strip() or None,
         proof_reference=(proof_reference or "").strip() or None,
         notes=(notes or "").strip() or None,
-        status=PAYMENT_RECORDED,
+        status=PAYMENT_CONFIRMED if direct_contract_payment else PAYMENT_RECORDED,
+        confirmed_at=_now() if direct_contract_payment else None,
+        confirmed_by_user_id=actor.user_id if direct_contract_payment else None,
         recorded_by_user_id=actor.user_id,
     )
     session.add(payment)
     _flush(session)
     record_event(
         session,
-        action="construction.payment_recorded",
+        action=(
+            "construction.paid_contract_payment_registered"
+            if direct_contract_payment
+            else "construction.payment_recorded"
+        ),
         entity_type=ENTITY_PAYMENT,
         entity_id=payment.id,
         correlation_id=actor.correlation_id,
@@ -4464,7 +4588,15 @@ def payable_position(session: Session, *, project: Project) -> Payable:
     ).first()
     approved_total = money(approved or ZERO)
     disputed_total = money(disputed or ZERO)
-    paid_total = money(paid or ZERO)
+    allocated_total = money(paid or ZERO)
+    paid_total = money(
+        session.scalar(
+            select(func.sum(Payment.amount)).where(
+                Payment.project_id == project.id, Payment.status == PAYMENT_CONFIRMED
+            )
+        )
+        or ZERO
+    )
 
     held = released = advance_paid = advance_recovered = ZERO
     for contract in session.scalars(
@@ -4490,7 +4622,7 @@ def payable_position(session: Session, *, project: Project) -> Payable:
         confirmed_paid=paid_total,
         # A disputed invoice is still owed. Subtracting it would make the
         # obligation fall the moment somebody objected to it.
-        invoice_outstanding=money(approved_total + disputed_total - paid_total),
+        invoice_outstanding=money(approved_total + disputed_total - allocated_total),
         retention_outstanding=calculator.retention_outstanding(held=held, released=released),
         advance_paid=advance_paid,
         advance_recovered=advance_recovered,
@@ -5091,3 +5223,59 @@ def cashflow_forecast_position(
         remaining_by_cost_code=remaining,
         cost_code_labels=labels,
     )
+
+
+def current_unit_cost_sources(session: Session, *, project_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Current signed commitment by category, never payments plus contract value.
+
+    Values include approved reductions/additions and exclude draft/cancelled
+    agreements. Return denominations with each source; the consumer must compare them.
+    """
+    contracts = {
+        c.id: c
+        for c in session.scalars(
+            select(Contract).where(
+                Contract.project_id == project_id, Contract.status.in_(CONTRACT_COMMITTING)
+            )
+        )
+    }
+    if not contracts:
+        return []
+    totals: dict[tuple[uuid.UUID, str], Decimal] = {}
+    for model, parent, amount, extra in (
+        (
+            ContractLine,
+            Contract,
+            ContractLine.original_amount_ex_tax,
+            Contract.status.in_(CONTRACT_COMMITTING),
+        ),
+        (
+            VariationLine,
+            Variation,
+            VariationLine.value_delta_ex_tax,
+            Variation.status == VARIATION_APPROVED,
+        ),
+    ):
+        parent_key = model.contract_id if model is ContractLine else model.variation_id
+        contract_key = parent.id if parent is Contract else parent.contract_id
+        for contract_id, category, value in session.execute(
+            select(contract_key, CostCode.cost_category, func.sum(amount))
+            .select_from(model)
+            .join(parent, parent.id == parent_key)
+            .join(CostCode, CostCode.id == model.cost_code_id)
+            .where(contract_key.in_(contracts), extra)
+            .group_by(contract_key, CostCode.cost_category)
+        ):
+            key = (contract_id, category)
+            totals[key] = money(totals.get(key, ZERO) + value)
+    return [
+        {
+            "contract_id": c.id,
+            "reference": c.contract_number,
+            "currency_id": c.currency_id,
+            "category": category,
+            "amount": amount,
+        }
+        for (contract_id, category), amount in totals.items()
+        for c in [contracts[contract_id]]
+    ]

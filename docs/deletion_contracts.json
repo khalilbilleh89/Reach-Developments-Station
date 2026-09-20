@@ -146,10 +146,18 @@
   {
     "handler": "construction.create_contract",
     "create_route": "POST /contracts",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+    "status": "implemented",
+    "removal_route": "DELETE /contracts/{contract_id}",
+    "ui_file": "frontend/src/components/projects/construction/ContractFile.tsx",
+    "notes": "Unused drafts are removed; unused signed/submitted entries are cancelled with legal and audit history retained. All linked transaction types block removal. Existing terminal records retain history."
+  },
+  {
+    "handler": "construction.register_signed_contract",
+    "create_route": "POST /contracts/{contract_id}/register-signed",
+    "status": "implemented",
+    "removal_route": "DELETE /contracts/{contract_id}",
+    "ui_file": "frontend/src/components/projects/construction/ContractFile.tsx",
+    "notes": "Unused drafts are removed; unused signed/submitted entries are cancelled with legal and audit history retained. All linked transaction types block removal. Existing terminal records retain history."
   },
   {
     "handler": "construction.create_cost_code",
@@ -186,10 +194,10 @@
   {
     "handler": "construction.create_variation",
     "create_route": "POST /contracts/{contract_id}/variations",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+    "status": "implemented",
+    "removal_route": "DELETE /variations/{variation_id}",
+    "ui_file": "frontend/src/components/projects/construction/ContractTransactions.tsx",
+    "notes": "Draft changes and lines can be deleted with audit. Submitted changes may be withdrawn. Approved changes remain immutable and corrections use an opposite approved variation."
   },
   {
     "handler": "construction.record_invoice",
@@ -205,7 +213,7 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+    "notes": "Direct already-paid contract entry has a visible audited Reverse payment action in ContractTransactions.tsx. Legacy recorded invoice disbursements retain their existing draft-delete gap; this change adds no draft direct-payment state."
   },
   {
     "handler": "construction.record_unit_stage",
@@ -646,6 +654,14 @@
     "removal_route": "DELETE /technical-specifications/{specification_id}",
     "ui_file": "frontend/src/components/projects/construction/TechnicalSpecifications.tsx",
     "notes": "Whole-project technical writers delete drafts or remove confirmed specifications with retained data and audit; reason required. No dependent transactions are deleted."
+  },
+  {
+    "handler": "unit_economics.record_current_cost_settings",
+    "create_route": "PUT /current-cost-analysis/settings",
+    "status": "implemented",
+    "removal_route": "DELETE /current-cost-analysis/settings",
+    "ui_file": "frontend/src/components/projects/economics/CurrentCostAnalysis.tsx",
+    "notes": "Finance whole-project removal with reason and revision check; retains audit before-image, does not delete source contracts, payments, land or historical allocations."
   },
   {
     "handler": "projects.create_company",

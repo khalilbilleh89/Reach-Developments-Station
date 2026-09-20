@@ -19,6 +19,9 @@ import {
   SectionHeader,
   TableScroll,
 } from "@/components/ui";
+import { ContractTransactions } from "./ContractTransactions";
+import { DeleteRecordButton } from "../DeleteRecordButton";
+import { hasAnyRole } from "@/lib/roles";
 import { ContractWorkflow } from "./ContractWorkflow";
 import { useRegisterFields } from "@/components/shell/registerState";
 import { useAnswer } from "@/lib/answer";
@@ -46,8 +49,8 @@ import {
 } from "./labels";
 
 const TABS = [
-  { key: "manage", label: "Manage contract" },
-  { key: "position", label: "Position" },
+  { key: "position", label: "Contract & payments" },
+  { key: "manage", label: "Contract details" },
   { key: "lines", label: "Lines" },
   { key: "variations", label: "Variations" },
   { key: "certificates", label: "Certificates" },
@@ -73,16 +76,18 @@ const TABS = [
 export function ContractFile({
   projectId,
   contractId,
+  roles = new Set<string>(),
   onClose,
   onChanged = async () => {},
 }: {
   projectId: string;
   contractId: string;
+  roles?: Set<string>;
   onClose: () => void;
   onChanged?: () => Promise<void>;
 }) {
-  const [view, setView] = useRegisterFields({ contractTab: "manage" });
-  const tab = TABS.some(item => item.key === view.contractTab) ? view.contractTab : "manage";
+  const [view, setView] = useRegisterFields({ contractTab: "position" });
+  const tab = TABS.some(item => item.key === view.contractTab) ? view.contractTab : "position";
   const setTab = (contractTab: string) => setView({ contractTab });
   const [reading, setReading] = useState(false);
   const [supportError, setSupportError] = useState<string | null>(null);
@@ -170,10 +175,17 @@ export function ContractFile({
       {supportError ? <Notice tone="warning">{supportError}</Notice> : null}
       <Button small disabled={reading} onClick={() => void load()}>{reading ? "Refreshing…" : "Refresh contract and related records"}</Button>
       {codes.status === "failed" ? <><Notice tone="error">Cost codes could not be loaded. Line editing is unavailable until they recover.</Notice><Button onClick={codes.retry}>Retry contract cost codes</Button></> : null}
+      {hasAnyRole(roles, new Set(["finance", "project_manager"])) && ["draft", "submitted", "active"].includes(contract.status) ? <DeleteRecordButton label="unused contract" recordName={contract.contract_number} description="Unused drafts are removed. Signed entries are cancelled with their history retained. Any linked variation, certificate, invoice or payment blocks removal." confirmLabel="Remove unused contract" onDelete={reason => construction.deleteUnusedContract(projectId, contract.id, reason)} onDeleted={async () => { onClose(); await onChanged(); }} /> : null}
       {tab === "manage" ? <ContractWorkflow projectId={projectId} detail={contract} codes={codes.status === "ready" ? codes.data : []} codesReady={codes.status === "ready"} reading={reading} unavailable={!!error} onRefresh={load} onChanged={async () => { await load(); await onChanged(); }} /> : null}
-      {uncommitted && tab !== "manage" ? <Notice tone="info">These are proposed contract values. No financial commitment exists until independent authorization and activation.</Notice> : null}
+      {uncommitted && tab !== "manage" ? <Notice tone="info">Draft values do not commit funds. If the agreement is already signed, open Contract details and choose Activate signed contract. Cancelled agreements remain as history.</Notice> : null}
       {tab === "position" ? (
         <div className="stack">
+          <Position compact layout="split">
+            <PositionFigure lead label="Remaining contract balance" value={money(contract.remaining_contract_balance, code)} note={uncommitted ? "No standing contract balance for a draft, submitted or cancelled agreement." : contract.remaining_contract_balance === null ? "Unavailable until the contract tax rate is stated." : "Including the stated contract tax, less all confirmed payments. A negative balance is an overpayment / credit."} />
+            <PositionFigure label="Revised contract including tax" value={money(contract.revised_contract_value_inc_tax, code)} />
+            <PositionFigure label="Paid to date" value={money(contract.confirmed_paid, code)} />
+          </Position>
+          <ContractTransactions projectId={projectId} contract={contract} roles={roles} variations={variations} payments={payments} unavailable={!!error || reading} onChanged={async () => { await load(); await onChanged(); }} />
           <section className="stack stack-tight">
             <SectionHeader
               title={uncommitted ? "Proposed contract" : "Commitment"}
@@ -186,9 +198,14 @@ export function ContractFile({
                 note={uncommitted ? "Frozen on submission" : "Never moves"}
               />
               <PositionFigure
-                label="Approved variations"
-                value={money(contract.approved_variation_delta, code)}
-                note="Only approved change counts"
+                label="Approved additions"
+                value={money(contract.approved_additions, code)}
+                note="Added to the signed amount"
+              />
+              <PositionFigure
+                label="Approved reductions"
+                value={money(contract.approved_reductions, code)}
+                note="Client-supplied items and omitted scope"
               />
               <PositionFigure
                 lead
@@ -232,7 +249,7 @@ export function ContractFile({
               <PositionFigure
                 label="Standing outstanding"
                 value={money(contract.invoice_outstanding, code)}
-                note="Approved and disputed, less cash confirmed as gone"
+                note="Approved and disputed invoices, less payments allocated to them"
               />
               <PositionFigure
                 label="Paid"
@@ -242,7 +259,7 @@ export function ContractFile({
             </Position>
             <p className="footnote">
               A dispute blocks payment; it does not reduce the obligation, so
-              outstanding includes disputed invoices.
+              outstanding includes disputed invoices. Direct contract payments reduce the contract balance; they do not automatically settle a specific invoice.
             </p>
             <PositionSupport>
               <PositionSupportItem

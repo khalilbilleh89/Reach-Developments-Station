@@ -73,6 +73,13 @@ import {
   versionTone,
 } from "./economics/labels";
 
+import { CurrentCostAnalysis } from "./economics/CurrentCostAnalysis";
+
+export function UnitEconomicsTab(props: { projectId: string; roles: Set<string> }) {
+  const [view, setView] = useState("current");
+  return <div className="stack">{view === "current" ? <PageHeader icon="economics" title="Unit Economics" subtitle="Current unit costs, construction cost per sqm and estimated profit." compact /> : null}<Tabs label="Economics basis" tabs={[{ key: "current", label: "Current costs & profit" }, { key: "approved", label: "Approved basis & unit costs" }]} active={view} onSelect={setView} /><TabPanel group="Economics basis" tab={view}>{view === "current" ? <CurrentCostAnalysis key={props.projectId} {...props} /> : <ApprovedUnitEconomicsTab {...props} />}</TabPanel></div>;
+}
+
 const TABS = [
   { key: "overview", icon: "overview" as const, label: "Overview" },
   { key: "units", icon: "inventory" as const, label: "Units" },
@@ -101,7 +108,7 @@ const VERSION_SEQUENCE = ["draft", "submitted", "approved", "active"];
  * subset, which is exactly the failure this platform refuses everywhere money is
  * added up.
  */
-export function UnitEconomicsTab({ projectId, roles }: { projectId: string; roles: Set<string> }) {
+function ApprovedUnitEconomicsTab({ projectId, roles }: { projectId: string; roles: Set<string> }) {
   const currencyCodeOf = useCurrencyCode();
   const [tab, setTab] = useState("overview");
   const [summary, setSummary] = useState<ProjectEconomics | null>(null);

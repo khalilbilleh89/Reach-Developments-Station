@@ -231,6 +231,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `construction_milestones` | Milestones drive payment-plan triggers; a migrated milestone with no dependency graph fires nothing correctly. |
 | `construction_milestone_dependencies` | As above. |
 | `unit_economics_cost_pools` | Pool definitions are configuration. |
+| `ue_current_cost_settings` | Owner-entered assumptions behind the live current-cost analysis — supplemental soft cost, additional and finance cost, commission and profit-tax rates. Entered and audited through the application, like `land_market_assumptions`; a legacy source carries no Reach revision of them. |
 
 <!-- /disposition -->
 

@@ -144,7 +144,7 @@ Forms retain field labels, optional markers, validation, busy state, exact input
 
 **Collections and commissions:** overdue, outstanding, collected and unapplied amounts remain separately labelled. Ageing uses the selected date. Commission grant, rate, base, beneficiary distribution and release checks retain their original meanings. Never infer a financial total from visible rows.
 
-**Construction:** completion variance leads the cost-control view; budget, revised commitment and certified work remain labelled. Cost control excludes tax. Payable includes tax and has a separate surface. Forecast-cutoff certified work must not be presented as today's certified figure. Preserve dispute, retention, variation and approval semantics.
+**Construction:** signed contracts lead the workspace. Original value, approved additions/reductions, revised commitment, paid and remaining contract balance remain labelled. No budget is required for contracts, variations or payments. Cost control excludes tax. Payable includes tax and has a separate surface. Forecast-cutoff certified work must not be presented as today's certified figure. Preserve dispute, retention, variation and approval semantics.
 
 **Cashflow:** unrestricted cash leads, with total and restricted cash alongside. Basis and forecast status remain visible. Funding windows, lowest cash position, peak requirement, NPV and equity IRR use the server's values and availability. A missing or stale forecast must remain apparent.
 

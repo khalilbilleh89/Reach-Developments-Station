@@ -273,7 +273,7 @@ class TestContractWorkspace:
         assert completed.json()["completed_at"]
         assert completed.json()["workflow"]["completion_blocker"]
 
-    def test_submitted_contract_explains_missing_budget_and_can_be_cancelled_with_history(
+    def test_submitted_contract_needs_no_budget_and_can_be_cancelled_with_history(
         self,
         finance_client: TestClient,
         cfo_client: TestClient,
@@ -296,10 +296,7 @@ class TestContractWorkspace:
         )
         assert finance_client.post(f"{base}/submit", json={}).status_code == 200
         blocker = cfo_client.get(base).json()["workflow"]["activation_blocker"]
-        assert "no active construction budget" in blocker
-        refused = cfo_client.post(f"{base}/activate", json={})
-        assert refused.status_code == 409
-        assert refused.json()["detail"] == blocker
+        assert blocker is None
         cancelled = finance_client.post(
             f"{base}/cancel", json={"reason": "Prepare corrected terms instead"}
         )

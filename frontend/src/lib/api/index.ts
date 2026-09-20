@@ -6,6 +6,7 @@
 
 import { download, get, patch, post, postBinary, postCsv, put, remove } from "./client";
 import type {
+  CurrentCostAnalysis, CurrentCostSettingsWrite,
   UnitPurgePreview, UnitPurgeRequest,
   RemovedUnit,
   InventoryOption,
@@ -1594,6 +1595,9 @@ export const collections = {
  * margin — because the backend is the one place the arithmetic is tested.
  */
 export const unitEconomics = {
+  currentCosts: (projectId: string) => get<CurrentCostAnalysis>(`/projects/${projectId}/unit-economics/current-cost-analysis`),
+  writeCurrentCostSettings: (projectId: string, body: CurrentCostSettingsWrite) => put<CurrentCostAnalysis>(`/projects/${projectId}/unit-economics/current-cost-analysis/settings`, body),
+  deleteCurrentCostSettings: (projectId: string, revision: number, reason: string) => remove(`/projects/${projectId}/unit-economics/current-cost-analysis/settings?${new URLSearchParams({ revision: String(revision), reason })}`),
   summary: (projectId: string) =>
     get<ProjectEconomics>(`/projects/${projectId}/unit-economics/summary`),
   units: (projectId: string) =>
@@ -1729,6 +1733,12 @@ export const unitEconomics = {
  * can disagree with the one the server will enforce.
  */
 export const construction = {
+  registerSignedContract: (projectId: string, contractId: string, reason: string) =>
+    post<ContractDetail>(`/projects/${projectId}/construction/contracts/${contractId}/register-signed`, { reason }),
+  deleteUnusedContract: (projectId: string, contractId: string, reason: string) =>
+    remove(`/projects/${projectId}/construction/contracts/${contractId}?reason=${encodeURIComponent(reason)}`),
+  deleteDraftVariation: (projectId: string, variationId: string, reason: string) =>
+    remove(`/projects/${projectId}/construction/variations/${variationId}?reason=${encodeURIComponent(reason)}`),
   summary: (projectId: string) =>
     get<ConstructionSummary>(`/projects/${projectId}/construction/summary`),
   reconciliation: (projectId: string) =>
