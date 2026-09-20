@@ -1676,7 +1676,15 @@ export interface CollectionInstallmentRow {
   grace_days: number;
   scheduled: string;
   paid: string;
+  /** What the schedule was short. Survives a cancellation as part of its record. */
   outstanding: string;
+  /**
+   * The part of `outstanding` still owed under a live contract, and `"0.00"`
+   * once the contract is cancelled. The server sends both so no screen has to
+   * decide which one it is looking at, and none subtracts to find out. This is
+   * what totals into `outstanding_total`.
+   */
+  receivable: string;
   overdue_days: number;
   bucket: AgingBucket;
   status: InstallmentCollectionStatus;

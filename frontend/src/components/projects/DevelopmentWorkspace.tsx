@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { PROJECT_NAVIGATION, type ProjectSection } from "@/components/shell/navigation";
 import { Icon } from "@/components/ui";
 
-const DEVELOPMENT = new Set<ProjectSection>(["overview", "land", "permits", "prelaunch", "consultant", "inventory"]);
+const DEVELOPMENT = new Set<ProjectSection>(["overview", "company", "land", "permits", "prelaunch", "consultant", "inventory"]);
 
 /** Development has a property-focused treatment; other project modules share the platform theme. */
 export function DevelopmentWorkspace({projectId, section, roles, children}: {

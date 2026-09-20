@@ -662,5 +662,21 @@
     "removal_route": "DELETE /current-cost-analysis/settings",
     "ui_file": "frontend/src/components/projects/economics/CurrentCostAnalysis.tsx",
     "notes": "Finance whole-project removal with reason and revision check; retains audit before-image, does not delete source contracts, payments, land or historical allocations."
+  },
+  {
+    "handler": "projects.create_company",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{company_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
+    "notes": "Whole-project authorized writers remove records after reasoned confirmation. Company removal blocks active bank accounts; rows and audit history are retained."
+  },
+  {
+    "handler": "projects.create_bank_account",
+    "create_route": "POST /{company_id}/bank-accounts",
+    "status": "implemented",
+    "removal_route": "POST /{company_id}/bank-accounts/{account_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
+    "notes": "Whole-project authorized writers remove records after reasoned confirmation. Company removal blocks active bank accounts; rows and audit history are retained."
   }
 ]

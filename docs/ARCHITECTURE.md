@@ -609,6 +609,21 @@ overdue, aging bucket and collection status are all computed from rows at read
 time, because a stored total becomes the wrong one the first time a write path
 forgets it.
 
+**A cancelled contract is history, not a receivable.** Once a cancellation has
+taken effect as at the reporting date, the contract's instalments stop counting
+towards the active receivable: `outstanding_total`, `due_total`, `overdue_total`,
+`oldest_overdue_days`, `installments_overdue`, the aging bands and the aging
+report all read as though the developer is no longer expecting that money,
+because it is not. What the schedule said, what the buyer paid and what each
+instalment was short stay on the rows untouched — they are the evidence the
+forfeiture and the refund are worked out from, and the deal file still shows
+them. The distinction is one pair of names on `InstallmentView`, `outstanding`
+for the contractual shortfall and `receivable` for the part still collectible,
+so that every screen and report inherits one answer rather than deciding for
+itself. Cancellation also blocks collection clearance on its own terms: an
+account with no balance because the contract ended is not a cleared account.
+See [CANCELLED_SALE_RECEIVABLE.md](CANCELLED_SALE_RECEIVABLE.md).
+
 ### Inventory integrity
 
 Membership is proved by the database, not by the service layer. Every level of
@@ -1232,10 +1247,11 @@ any per-phase balance would be an allocation the business does not have.
 
 ### Deferred by design
 
-**Company-scoped custom fields wait for a Company entity.** A definition may be
-scoped to a country pack, a project or a unit type. Inventing a Company table to
-satisfy a scope label would be the abstraction-first mistake this rebuild exists
-to avoid.
+**Company-scoped custom fields remain deferred.** A definition may be scoped to a
+country pack, a project or a unit type. Development Company now records optional
+project-owned company information and bank instructions in the Projects module;
+it introduces no shared group-company master or new custom-field scope.
+See [Development Company](DEVELOPMENT_COMPANY.md) for access, retention and rollback.
 
 **Unit cost, margin and profitability wait for PR-MVP-08.** PR-MVP-04 builds the
 complete revenue side and stops. Combining an approved price with a governed

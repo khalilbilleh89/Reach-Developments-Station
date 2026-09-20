@@ -94,6 +94,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | Table | Why |
 |---|---|
 | `roles` | Authorisation configuration. |
+| `project_companies` | Company information entered in Development; not imported by legacy bundles. |
+| `company_bank_accounts` | Company bank instructions maintained by authorized project users; not imported by legacy bundles. |
 | `user_roles` | Authorisation configuration. |
 | `user_sessions` | Runtime state; meaningless outside a live session. |
 | `users` | Never fabricated. Administrators create them. |

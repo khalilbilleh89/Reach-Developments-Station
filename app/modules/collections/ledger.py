@@ -35,6 +35,17 @@ is in on any given morning.
 status *and* the flags beside it, so an instalment can be disputed, forty-seven
 days overdue and eight thousand short all at once. Collapsing that into one
 badge is how a receivables report stops reconciling to its own rows.
+
+**A cancelled contract is history, not a receivable.** When the contract behind
+an instalment has been unwound, what the buyer was scheduled to pay is still a
+fact worth keeping — it is what the developer agreed to collect and what was
+short when the unwinding took effect — but it is no longer money anybody expects
+to receive. So the row keeps ``scheduled``, ``paid``, ``outstanding``,
+``overdue_days`` and its band, and :attr:`InstallmentView.receivable`,
+:attr:`~InstallmentView.due_amount` and :attr:`~InstallmentView.overdue_amount`
+all go to nothing. The distinction has a name because the alternative is an
+active receivables report that quietly includes contracts the developer has
+already terminated, and a collections officer chasing a buyer who left.
 """
 
 from __future__ import annotations
@@ -229,15 +240,50 @@ class InstallmentView:
     owner_user_id: uuid.UUID | None
 
     @property
+    def is_active_receivable(self) -> bool:
+        """Whether this instalment is still money the developer expects to collect.
+
+        One predicate, stated once, because the alternative is every register,
+        report and strip deciding for itself whether a terminated contract still
+        counts — and the way that disagreement surfaces is an aging report and a
+        cancellation register describing the same buyer differently.
+
+        A cancelled contract is the only thing that makes an instalment inactive
+        here. Disputes, waivers and restructures all leave the obligation in
+        place; they are reasons it is not being met, not reasons it stopped
+        existing.
+        """
+        return self.status != INSTALLMENT_CANCELLED
+
+    @property
+    def receivable(self) -> Decimal:
+        """The part of :attr:`outstanding` still owed under a live contract.
+
+        The same number as ``outstanding`` for every contract that has not been
+        unwound, and nothing at all for one that has. Both are on the row on
+        purpose: ``outstanding`` says what the schedule was short, which stays
+        true after a cancellation and is what a cancelled deal file has to show;
+        this says what is still collectible, which does not.
+        """
+        return self.outstanding if self.is_active_receivable else ZERO
+
+    @property
     def overdue_amount(self) -> Decimal:
-        """The part of this instalment that is actually late."""
+        """The part of this instalment that is actually late.
+
+        A terminated contract is not late. The days behind the grace boundary
+        stay on :attr:`overdue_days` as the record of how the account stood when
+        it was unwound; the money does not follow them into an overdue total.
+        """
+        if not self.is_active_receivable:
+            return ZERO
         return self.outstanding if self.overdue_days > 0 else ZERO
 
     @property
     def due_amount(self) -> Decimal:
         """What the buyer is being asked for as at ``as_of``, and nothing more.
 
-        Three conditions, all of them necessary. The instalment must have a due
+        Four conditions, all of them necessary. The instalment must have a due
         date at all — a contingent one still awaiting its trigger asks for
         nothing. That date must have arrived: an instalment falling due next
         March is a commitment, not a demand, and putting it in "due now" turns
@@ -248,7 +294,13 @@ class InstallmentView:
         Grace does not appear here, deliberately. A payment inside its grace
         period is due — that is why the buyer has been asked for it — and it is
         simply not yet *late*. Grace moves :attr:`overdue_amount`, never this.
+
+        A cancelled contract asks the buyer for nothing, whatever its schedule
+        still says, which is the fourth condition and the one that arrived with
+        the cancellation rules rather than with the instalment.
         """
+        if not self.is_active_receivable:
+            return ZERO
         if self.due_date is None or self.due_date > self.as_of:
             return ZERO
         return self.outstanding if self.outstanding > ZERO else ZERO

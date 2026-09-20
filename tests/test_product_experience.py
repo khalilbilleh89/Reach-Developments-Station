@@ -608,6 +608,7 @@ class TestOnlyEntitledReadersAsk:
         items = re.findall(r'\n        key: "([a-z-]+)",', block)
         assert items == [
             "overview",
+            "company",
             "land",
             "permits",
             "prelaunch",
