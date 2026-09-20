@@ -1729,6 +1729,12 @@ export const unitEconomics = {
  * can disagree with the one the server will enforce.
  */
 export const construction = {
+  registerSignedContract: (projectId: string, contractId: string, reason: string) =>
+    post<ContractDetail>(`/projects/${projectId}/construction/contracts/${contractId}/register-signed`, { reason }),
+  deleteUnusedContract: (projectId: string, contractId: string, reason: string) =>
+    remove(`/projects/${projectId}/construction/contracts/${contractId}?reason=${encodeURIComponent(reason)}`),
+  deleteDraftVariation: (projectId: string, variationId: string, reason: string) =>
+    remove(`/projects/${projectId}/construction/variations/${variationId}?reason=${encodeURIComponent(reason)}`),
   summary: (projectId: string) =>
     get<ConstructionSummary>(`/projects/${projectId}/construction/summary`),
   reconciliation: (projectId: string) =>

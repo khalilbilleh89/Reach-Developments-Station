@@ -12,36 +12,10 @@ import {
   SectionHeader,
 } from "@/components/ui";
 import type { ConstructionSummary } from "@/lib/api";
-import { businessDate, money } from "@/lib/format";
+import { money } from "@/lib/format";
 
-import { varianceNote, varianceTone } from "./labels";
 
-/**
- * The project's construction position: two bases, never one blended figure.
- *
- * The whole design of this screen is the separation between them, and it is
- * why they are two compositions with two headings rather than one strip of
- * eleven numbers.
- *
- * **Cost control is stated excluding tax.** What was authorised, what has been
- * committed, what has been certified and what it is now forecast to finish at.
- * Tax is recoverable in most of the jurisdictions this product serves, so a
- * cost figure that included it would overstate what the building cost.
- *
- * **Payable is stated including tax, on a cash basis.** What is owed, what has
- * actually left the bank, and what is held back. That is the number a treasury
- * function works from, and it necessarily includes the tax the company will
- * actually pay out.
- *
- * A screen that put "certified 4,200,000" next to "paid 3,900,000" without
- * saying that one excludes tax and the other includes it would invite a
- * subtraction whose answer means nothing. So the two never share a row, never
- * share a heading, and each says its basis in words above the figures.
- *
- * Every value arrived on this request. Nothing here is summed, netted or
- * projected in the browser — including the variance, whose sign convention
- * (**positive is over budget**) is the server's and is never re-derived here.
- */
+/** Signed commitments exclude tax; cash and invoice liabilities include tax. */
 export function ConstructionSummaryView({
   summary,
 }: {
@@ -54,92 +28,13 @@ export function ConstructionSummaryView({
 
   return (
     <div className="stack">
-      <Card tone="command"
-          title="Cost control"
-          description={
-            summary.budget_version_number === null
-              ? "Excluding tax. No budget is in force, so there is nothing authorised to measure against."
-              : `Excluding tax, against budget version ${summary.budget_version_number}.`
-          }
-        >
+      <Card tone="command" title="Contract costs" description="Excluding tax. Signed contracts plus approved additions and reductions.">
         <Position compact layout="split">
-          <PositionFigure
-            lead
-            label="Variance at completion"
-            value={money(cost.variance_at_completion, code)}
-            tone={varianceTone(cost.variance_at_completion)}
-            note={varianceNote(cost.variance_at_completion)}
-          />
-          <PositionFigure
-            label="Control budget"
-            value={money(cost.control_budget, code)}
-            note="Approved budget plus contingency"
-          />
-          <PositionFigure
-            label="Revised commitment"
-            value={money(cost.revised_commitment, code)}
-            note="Signed contracts and approved variations"
-          />
-          <PositionFigure
-            label="Certified to date"
-            value={money(cost.certified_to_date, code)}
-            note="Work formally certified, as at today"
-          />
+          <PositionFigure lead label="Revised contract value" value={money(cost.revised_commitment, code)} note="Original agreements plus approved changes" />
+          <PositionFigure label="Original contract value" value={money(cost.original_commitment, code)} />
+          <PositionFigure label="Variations & reductions" value={money(cost.approved_variation_delta, code)} note="Reductions lower the signed value" />
+          <PositionFigure label="Certified to date" value={money(cost.certified_to_date, code)} note="Work formally certified" />
         </Position>
-        <Disclosure title="Budget, commitments & forecast basis">
-        {summary.forecast_version_number === null ? null : (
-          <p className="footnote">
-            Certified to date is today&apos;s figure. The estimate at completion
-            is not: it is the work certified by the forecast&apos;s own cutoff
-            plus what that forecast said was still to come, and it stays on that
-            basis until a new forecast is activated. Certifying work after the
-            cutoff therefore moves the first figure and leaves the second alone,
-            which is the only way the two avoid counting the same work twice.
-          </p>
-        )}
-        <PositionSupport>
-          <PositionSupportItem
-            label="Original baseline"
-            value={money(cost.original_baseline, code)}
-          />
-          <PositionSupportItem
-            label="Approved budget"
-            value={money(cost.current_approved_budget, code)}
-          />
-          <PositionSupportItem
-            label="Contingency"
-            value={money(cost.approved_contingency, code)}
-          />
-          <PositionSupportItem
-            label="Original commitment"
-            value={money(cost.original_commitment, code)}
-          />
-          <PositionSupportItem
-            label="Approved variations"
-            value={money(cost.approved_variation_delta, code)}
-          />
-          <PositionSupportItem
-            label="Certified at forecast cutoff"
-            value={money(cost.forecast_certified_as_of, code)}
-          />
-          <PositionSupportItem
-            label="Forecast remaining"
-            value={money(cost.forecast_remaining, code)}
-          />
-          <PositionSupportItem
-            label="Estimate at completion"
-            value={money(cost.estimate_at_completion, code)}
-          />
-          <PositionSupportItem
-            label="Forecast"
-            value={
-              summary.forecast_version_number === null
-                ? "None in force"
-                : `Version ${summary.forecast_version_number}, as at ${businessDate(summary.forecast_as_of)}`
-            }
-          />
-        </PositionSupport>
-        </Disclosure>
       </Card>
 
       <section className="record-section stack stack-tight">
@@ -161,7 +56,7 @@ export function ConstructionSummaryView({
           <PositionFigure
             label="Standing outstanding"
             value={money(payable.invoice_outstanding, code)}
-            note="Approved and disputed, less cash confirmed as gone"
+            note="Approved and disputed, less payments allocated to those invoices"
           />
           <PositionFigure
             label="Paid"
@@ -216,24 +111,6 @@ export function ConstructionSummaryView({
             size="sm"
             note="Above the review amount"
             tone={controls.escalated_variations > 0 ? "warning" : "neutral"}
-          />
-          <Metric
-            label="Over budget"
-            value={controls.over_budget_cost_codes}
-            size="sm"
-            note="Cost codes committed past their limit"
-            tone={controls.over_budget_cost_codes > 0 ? "danger" : "neutral"}
-          />
-          <Metric
-            label="Forecast under commitment"
-            value={controls.forecast_below_commitment_cost_codes}
-            size="sm"
-            note="Forecast to spend less than is signed"
-            tone={
-              controls.forecast_below_commitment_cost_codes > 0
-                ? "warning"
-                : "neutral"
-            }
           />
           <Metric
             label="Late milestones"

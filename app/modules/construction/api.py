@@ -454,6 +454,14 @@ def create_contract(
         planned_completion_date=payload.planned_completion_date,
         notes=payload.notes,
     )
+    if payload.signed_contract:
+        service.register_signed_contract(
+            session,
+            project=project,
+            actor=actor,
+            contract=contract,
+            signed_reference=payload.signed_reference or "",
+        )
     session.commit()
     return contract_detail(session, project=project, contract=contract, actor=actor)
 
@@ -525,6 +533,27 @@ def submit_contract(
     permissions.require_construction_preparer(actor)
     contract = service.submit_contract(
         session, project=project, actor=actor, contract_id=contract_id
+    )
+    session.commit()
+    return contract_detail(session, project=project, contract=contract, actor=actor)
+
+
+@router.post("/contracts/{contract_id}/register-signed", response_model=schemas.ContractDetailOut)
+def register_signed_contract(
+    project: GovernedConstructionProject,
+    contract_id: uuid.UUID,
+    payload: schemas.ReasonRequest,
+    session: DbSession,
+    actor: ActiveActor,
+) -> schemas.ContractDetailOut:
+    permissions.require_construction_preparer(actor)
+    contract = service.get_contract(session, project=project, contract_id=contract_id)
+    service.register_signed_contract(
+        session,
+        project=project,
+        actor=actor,
+        contract=contract,
+        signed_reference=payload.reason,
     )
     session.commit()
     return contract_detail(session, project=project, contract=contract, actor=actor)
@@ -605,6 +634,42 @@ def cancel_contract(
 # --------------------------------------------------------------------------- #
 # Variations
 # --------------------------------------------------------------------------- #
+@router.delete("/contracts/{contract_id}", status_code=204)
+def delete_unused_contract(
+    project: GovernedConstructionProject,
+    contract_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    reason: str = Query(min_length=1, max_length=1000),
+) -> None:
+    permissions.require_construction_preparer(actor)
+    service.delete_unused_contract(
+        session,
+        project=project,
+        actor=actor,
+        contract_id=contract_id,
+        reason=reason,
+    )
+    session.commit()
+
+
+@router.delete("/variations/{variation_id}", status_code=204)
+def delete_draft_variation(
+    project: GovernedConstructionProject,
+    variation_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    reason: str = Query(min_length=1, max_length=1000),
+) -> None:
+    permissions.require_construction_preparer(actor)
+    service.delete_draft_variation(
+        session,
+        project=project,
+        actor=actor,
+        variation_id=variation_id,
+        reason=reason,
+    )
+    session.commit()
 
 
 @router.get("/variations", response_model=list[schemas.VariationOut])
@@ -647,6 +712,20 @@ def create_variation(
         time_impact_days=payload.time_impact_days,
         funding_source=payload.funding_source,
     )
+    if payload.adjustment_amount is not None and payload.cost_code_id is not None:
+        service.set_variation_line(
+            session,
+            project=project,
+            variation_id=variation.id,
+            sequence=1,
+            cost_code_id=payload.cost_code_id,
+            description=payload.description[:500],
+            value_delta_ex_tax=(
+                -payload.adjustment_amount
+                if payload.adjustment_kind == "reduction"
+                else payload.adjustment_amount
+            ),
+        )
     session.commit()
     return variation_detail(session, project=project, variation=variation)
 
@@ -1094,6 +1173,7 @@ def record_payment(
         bank_reference=payload.bank_reference,
         proof_reference=payload.proof_reference,
         notes=payload.notes,
+        direct_contract_payment=payload.direct_contract_payment,
     )
     session.commit()
     return payment_out(session, project=project, payment=payment)

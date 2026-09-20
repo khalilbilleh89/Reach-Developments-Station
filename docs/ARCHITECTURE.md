@@ -937,6 +937,16 @@ and be audited for nothing.
 
 ### Construction control
 
+**Signed agreements lead the operational workflow.** From September 2026,
+construction opens on contracts, without a Budget section or budget prerequisites
+for activation and variations. Signed agreements are registered active immediately;
+Finance can record evidenced payments already made directly against them. These
+are audited facts, not new payment authorizations. Additions and client-item
+reductions retain variation approval and certified-work floors. See
+[Construction contract workflow](CONSTRUCTION_CONTRACT_FIRST.md) for balances,
+corrections and migration behavior. Legacy budget/forecast governance below is
+retained for historical records and API compatibility, not required to start a contract.
+
 **Six separate truths, and none of them is derived from another.** What was
 authorised (budget), what was signed (commitment), what was formally certified
 as done (certification), what the vendor claims (invoice), what has left the
@@ -1022,7 +1032,9 @@ commitment; a variation does. Disputing an invoice does not reduce what is owed;
 it blocks payment while the argument runs. An obligation that vanished the
 moment somebody objected to it would make the ledger a record of opinions.
 
-**A maker is never the checker, by identifier.** Budget, contract, variation,
+**Governed approvals separate maker and checker, by identifier.** Except for
+registering already-signed contracts and recording already-paid direct payments,
+budget, contract, variation,
 certificate, invoice and payment each have two people, and the second is
 compared by user id rather than by role: a user holding both Finance and
 Approver / CFO is still one pair of eyes. The System Administrator reads

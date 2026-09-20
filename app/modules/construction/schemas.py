@@ -267,6 +267,8 @@ class BudgetDetailOut(BudgetOut):
 
 
 class ContractCreate(StrictRequest):
+    signed_contract: bool = False
+    signed_reference: str | None = Field(default=None, max_length=500)
     contract_number: str = Field(min_length=1, max_length=64)
     contract_type: ContractType
     vendor_name: str = Field(min_length=1, max_length=200)
@@ -292,6 +294,8 @@ class ContractCreate(StrictRequest):
 
     @model_validator(mode="after")
     def planned_dates_in_order(self) -> ContractCreate:
+        if self.signed_contract and not (self.signed_reference or "").strip():
+            raise ValueError("Enter the signed contract document reference.")
         if (
             self.planned_start_date
             and self.planned_completion_date
@@ -377,6 +381,7 @@ class ContractOut(Response):
 
 
 class ContractWorkflowOut(Response):
+    signed_registration_blocker: str | None
     editing_blocker: str | None
     submission_blocker: str | None
     activation_blocker: str | None
@@ -387,6 +392,11 @@ class ContractWorkflowOut(Response):
 
 class ContractDetailOut(ContractOut):
     """The contract file: one record, on both bases, each labelled."""
+
+    revised_contract_value_inc_tax: Money | None
+    remaining_contract_balance: SignedMoney | None
+    approved_additions: Money
+    approved_reductions: Money
 
     currency_id: uuid.UUID
     workflow: ContractWorkflowOut
@@ -428,6 +438,16 @@ class ContractDetailOut(ContractOut):
 
 
 class VariationCreate(StrictRequest):
+    cost_code_id: uuid.UUID | None = None
+    adjustment_amount: PositiveMoney | None = None
+    adjustment_kind: Literal["addition", "reduction"] = "addition"
+
+    @model_validator(mode="after")
+    def adjustment_complete(self) -> VariationCreate:
+        if (self.cost_code_id is None) != (self.adjustment_amount is None):
+            raise ValueError("Choose a contract allocation and adjustment amount together.")
+        return self
+
     variation_number: str = Field(min_length=1, max_length=64)
     description: str = Field(min_length=1, max_length=1000)
     requested_date: date
@@ -598,6 +618,7 @@ class InvoiceOut(Response):
 
 
 class PaymentRecord(StrictRequest):
+    direct_contract_payment: bool = False
     payment_reference: str = Field(min_length=1, max_length=64)
     payment_date: date
     amount: PositiveMoney
@@ -620,6 +641,7 @@ class AllocationOut(Response):
 
 
 class PaymentOut(Response):
+    direct_contract_payment: bool
     id: uuid.UUID
     contract_id: uuid.UUID
     contract_number: str

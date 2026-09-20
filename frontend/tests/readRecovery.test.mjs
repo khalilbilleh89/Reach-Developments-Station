@@ -472,21 +472,23 @@ test("Budget revision waits for its selected source instead of silently copying 
 const contractFormat = {};
 runInNewContext(ts.transpileModule(readFileSync(new URL('../src/lib/format.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: contractFormat });
 
-test("Contract draft preserves exact amounts, percentage conversion and unstated tax", () => {
+test("Signed contract entry preserves exact amounts, percentage conversion and unstated tax", () => {
   let payload;
-  const render = mount("projects/construction/ContractWorkflow", "ContractHeaderEditor", { "@/lib/format": contractFormat }, { currencyId: "jod", currencyCode: "JOD", busy: false, failure: null, onSubmit: body => { payload = body; }, onCancel() {} });
+  const render = mount("projects/construction/ContractWorkflow", "ContractHeaderEditor", { "@/lib/format": contractFormat }, { currencyId: "f63c733c-bfaa-4236-8ab4-ea103f265854", currencyCode: "JOD", busy: false, failure: null, onSubmit: body => { payload = body; }, onCancel() {} });
   const set = (label, value, custom = false) => {
     const field = nodes(render()).find(node => node.type === "Field" && node.props.label === label);
     field.props.children.props.onChange(custom ? value : { target: { value } });
   };
-  set("Contract reference", "CT-EXACT"); set("Vendor name", "Vendor");
+  set("Contract reference", "CT-EXACT"); set("Main contractor / subcontractor name", "Vendor"); set("Signed contract document reference", "Signed agreement");
   set("Contract value excluding tax", "123456789.12", true); set("Retention percentage", "5.5", true);
-  render().props.onSubmit();
+  nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(payload.original_contract_value_ex_tax, "123456789.12");
   assert.equal(payload.retention_rate_fraction, "0.055");
   assert.equal(payload.tax_rate_fraction, null);
-  assert.equal(payload.currency_id, "jod");
-  set("Tax percentage", "0", true); render().props.onSubmit();
+  assert.equal(payload.currency_id, "f63c733c-bfaa-4236-8ab4-ea103f265854");
+  assert.equal(payload.signed_contract, true);
+  assert.equal(payload.signed_reference, "Signed agreement");
+  set("Tax percentage", "0", true); nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(payload.tax_rate_fraction, "0");
 });
 
@@ -554,4 +556,36 @@ test("programme deliverables stay with their stage and open the existing editabl
  const tree=nodes(render());const updates=tree.filter(n=>n.type==="Button"&&n.props.children==="Update deliverable");
  assert.equal(updates.length,1);assert.ok(!tree.some(n=>n.type==="strong"&&n.props.children==="Other stage"));
  updates[0].props.onClick();assert.equal(nodes(render()).find(n=>n.props?.editor).props.editor.row.id,"d");
+});
+test("Construction navigation starts from contracts and has no Budget section", async () => {
+  const render = mount("projects/ConstructionTab", "ConstructionTab", {
+    "@/lib/api": { construction: { summary: async () => ({ controls: {} }) } },
+    "@/lib/roles": { hasAnyRole: () => true },
+    "@/components/shell/registerState": { useRegisterFields: defaults => [defaults, () => {}] },
+  }, { projectId: "project", roles: new Set(["finance"]) });
+  render(); await settle();
+  const tabs = nodes(render()).find(node => node.type === "Tabs").props;
+  assert.equal(tabs.active, "contracts");
+  assert.ok(!tabs.tabs.some(tab => tab.key === "budget"));
+});
+for (const kind of ["payment", "reduction"]) test(`${kind} entry sends exact values and keeps a failed save open`, async () => {
+  let payload; let closed = 0; let fail = true;
+  const save = async (_project, _contract, body) => { payload = body; if (fail) throw new Error("Conflict: refresh and retry"); };
+  const render = mount("projects/construction/ContractTransactions", "ContractTransactionEditor", {
+    "@/lib/api": { construction: { recordPayment: save, createVariation: save } },
+    "../DeleteRecordButton": {},
+  }, { kind, projectId: "project", contract: { id: "contract", contract_number: "CT-1", vendor_name: "Vendor", currency_id: "f63c733c-bfaa-4236-8ab4-ea103f265854", currency_code: "EUR", lines: [{ cost_code_id: "scope" }], cost_code_position: [{ cost_code_id: "scope", cost_code_name: "Main works" }] }, unavailable: false, onClose() { closed++; }, onChanged: async () => {} });
+  const set = (label, value, custom = false) => nodes(render()).find(node => node.type === "Field" && node.props.label === label).props.children.props.onChange(custom ? value : { target: { value } });
+  set("Reference", "REF-1"); set(kind === "payment" ? "Payment date" : "Change date", "2026-09-20");
+  set(kind === "payment" ? "Amount paid including tax" : "Change amount excluding tax", "123456789.12", true);
+  set(kind === "payment" ? "Payment proof reference" : "Agreement / instruction reference", "Receipt 1");
+  set(kind === "payment" ? "Notes" : "Description of added or removed items", "Client tiles");
+  const submit = () => nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+  submit(); await settle();
+  assert.equal(closed, 0);
+  assert.ok(nodes(render()).some(node => node.type === "Notice" && node.props.children.includes("Could not save")));
+  assert.equal(payload[kind === "payment" ? "amount" : "adjustment_amount"], "123456789.12");
+  if (kind === "payment") { assert.equal(payload.direct_contract_payment, true); assert.equal(payload.proof_reference, "Receipt 1"); assert.ok(!("invoice_id" in payload)); }
+  else { assert.equal(payload.adjustment_kind, "reduction"); assert.equal(payload.cost_code_id, "scope"); }
+  fail = false; submit(); await settle(); assert.equal(closed, 1);
 });

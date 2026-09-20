@@ -5,7 +5,6 @@ import { useRegisterFields } from "@/components/shell/registerState";
 import { ContractHeaderEditor } from "./construction/ContractWorkflow";
 import { CONSTRUCTION_READERS, hasAnyRole } from "@/lib/roles";
 import { TechnicalSpecifications } from "./construction/TechnicalSpecifications";
-import { BudgetWorkspace } from "./construction/BudgetWorkspace";
 
 import {
   Badge,
@@ -52,7 +51,6 @@ import {
   milestoneTone,
   paymentLabel,
   paymentTone,
-  varianceTone,
   variationLabel,
   variationTone,
 } from "@/components/projects/construction/labels";
@@ -65,35 +63,19 @@ function contractCurrency(contracts: ConstructionContract[], contractId: string 
 const SECTIONS = [
   { key: "overview", label: "Overview" },
   { key: "technical-specifications", label: "Technical Specifications" },
-  { key: "budget", label: "Budget" },
   { key: "contracts", label: "Contracts" },
-  { key: "variations", label: "Variations" },
+  { key: "variations", label: "Variations & reductions" },
   { key: "certificates", label: "Certificates" },
   { key: "cash", label: "Invoices & Payments" },
   { key: "milestones", label: "Milestones" },
   { key: "forecast", label: "Forecast" },
 ];
 
-/**
- * The construction workspace: budget, commitment, certification, cash, forecast.
- *
- * Financial sections follow the order the control model runs, because that order is the
- * argument. A budget authorises; a contract commits against that authorisation;
- * a variation changes the commitment; a certificate turns work into cost; an
- * invoice turns cost into a liability; a payment settles it; a forecast says
- * where it all lands. Each is a separate truth with a separate governance
- * ladder, and this screen keeps them visibly separate rather than presenting a
- * single "spent" figure that would have to pick one and hide the rest.
- *
- * Nothing on this screen is computed. Every total, every variance, every
- * headroom and every net due arrives from the API on this request. The one
- * thing the browser decides is which rows to draw — and only ever as a subset
- * of the rows the server already narrowed by role and by phase.
- */
+/** Contract-first costing. All financial totals arrive from the server. */
 export function ConstructionTab({ projectId, roles = new Set<string>(), currencyId = "", currencyCode = null }: { projectId: string; roles?: Set<string>; currencyId?: string; currencyCode?: string | null }) {
   const canReadCosts = hasAnyRole(roles, CONSTRUCTION_READERS);
   const sections = canReadCosts ? SECTIONS : SECTIONS.filter(item => item.key === "technical-specifications");
-  const [view, setView] = useRegisterFields({ constructionTab: "overview" });
+  const [view, setView] = useRegisterFields({ constructionTab: "contracts" });
   const section = sections.some(item => item.key === view.constructionTab) ? view.constructionTab : sections[0].key;
   const setSection = (constructionTab: string) => setView({ constructionTab });
   const [summary, setSummary] = useState<ConstructionSummary | null>(null);
@@ -135,15 +117,6 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
             <>
               <Badge
                 tone={
-                  summary.controls.has_active_budget ? "success" : "neutral"
-                }
-              >
-                {summary.controls.has_active_budget
-                  ? `Budget v${summary.budget_version_number}`
-                  : "No budget in force"}
-              </Badge>
-              <Badge
-                tone={
                   summary.controls.has_active_forecast ? "success" : "neutral"
                 }
               >
@@ -175,8 +148,6 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
           <Loading label="Loading the construction position" shape="metrics" />
         )
       ) : null}
-
-      {section === "budget" ? <BudgetWorkspace projectId={projectId} roles={roles} onChanged={load} /> : null}
       {section === "contracts" ? (
         <ContractsSection projectId={projectId} roles={roles} currencyId={currencyId} currencyCode={currencyCode} onChanged={load} />
       ) : null}
@@ -199,21 +170,17 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
 }
 
 // --------------------------------------------------------------------------- //
-// Budget
-// --------------------------------------------------------------------------- //
-
-// --------------------------------------------------------------------------- //
 // Contracts
 // --------------------------------------------------------------------------- //
 
 function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "", currencyCode = null, onChanged = async () => {} }: { projectId: string; roles?: Set<string>; currencyId?: string; currencyCode?: string | null; onChanged?: () => Promise<void> }) {
   const [rows, setRows] = useState<ConstructionContract[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useRegisterFields({ contractSearch: "", contractStatus: "", constructionContract: "", contractTab: "manage" });
+  const [view, setView] = useRegisterFields({ contractSearch: "", contractStatus: "", constructionContract: "", contractTab: "position" });
   const search = view.contractSearch; const status = view.contractStatus; const open = view.constructionContract;
   const setSearch = (contractSearch: string) => setView({ contractSearch });
   const setStatus = (contractStatus: string) => setView({ contractStatus });
-  const setOpen = (constructionContract: string | null) => setView({ constructionContract: constructionContract ?? "", contractTab: "manage" });
+  const setOpen = (constructionContract: string | null) => setView({ constructionContract: constructionContract ?? "", contractTab: "position" });
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [writeError, setWriteError] = useState<Error | null>(null);
@@ -269,7 +236,7 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
 
   return (
     <div className="stack stack-tight">
-      {hasAnyRole(roles, new Set(["finance", "project_manager"])) ? <Button variant="primary" disabled={!currencyId} onClick={() => { setWriteError(null); setCreating(true); }}>Create contract draft</Button> : null}
+      {hasAnyRole(roles, new Set(["finance", "project_manager"])) ? <Button variant="primary" disabled={!currencyId} onClick={() => { setWriteError(null); setCreating(true); }}>Add signed contract</Button> : null}
       {creating ? <ContractHeaderEditor currencyId={currencyId} currencyCode={currencyCode} busy={saving} failure={writeError} onSubmit={body => void create(body)} onCancel={() => setCreating(false)} /> : null}
       <DataToolbar
         framed
@@ -378,7 +345,7 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
       )}
 
       {open ? (
-        <ContractFile key={open}
+        <ContractFile key={open} roles={roles}
           projectId={projectId}
           contractId={open}
           onChanged={async () => { await load(); void onChanged(); }}
@@ -929,10 +896,9 @@ function MilestonesSection({ projectId }: { projectId: string }) {
 // --------------------------------------------------------------------------- //
 
 /**
- * What the project now expects to spend, and how far off budget that is.
+ * What the project now expects to spend.
  *
- * **Positive variance is over budget**, here and everywhere else in the
- * product. The tone comes from one shared function so the sign cannot mean one
+ * Optional forecast detail does not gate contract registration. The tone comes from one shared function so the sign cannot mean one
  * thing on this table and another on the overview above it.
  */
 function ForecastSection({ projectId }: { projectId: string }) {
@@ -976,7 +942,7 @@ function ForecastSection({ projectId }: { projectId: string }) {
     return (
       <EmptyState
         title="No forecast yet"
-        hint="Nothing has been forecast for this development, so there is no estimate at completion and no variance to report."
+        hint="Nothing has been forecast for this development, so there is no estimate at completion to report."
       />
     );
   }
@@ -988,9 +954,7 @@ function ForecastSection({ projectId }: { projectId: string }) {
     <Card
       flush
       title={`Forecast version ${detail.version_number}`}
-      description={`As at ${businessDate(detail.as_of_date)}, against budget version ${
-        detail.budget_version_number ?? "—"
-      }. ${detail.change_reason}`}
+      description={`As at ${businessDate(detail.as_of_date)}. ${detail.change_reason}`}
       actions={
         <Badge tone={forecastTone(detail.status)}>
           {forecastLabel(detail.status)}
@@ -1002,9 +966,6 @@ function ForecastSection({ projectId }: { projectId: string }) {
           <tr>
             <th scope="col">Cost code</th>
             <th scope="col" className="num">
-              Control budget
-            </th>
-            <th scope="col" className="num">
               Committed
             </th>
             <th scope="col" className="num">
@@ -1015,9 +976,6 @@ function ForecastSection({ projectId }: { projectId: string }) {
             </th>
             <th scope="col" className="num">
               Estimate at completion
-            </th>
-            <th scope="col" className="num">
-              Variance
             </th>
           </tr>
         </thead>
@@ -1034,7 +992,6 @@ function ForecastSection({ projectId }: { projectId: string }) {
                   }
                 />
               </td>
-              <td className="num">{money(line.control_budget, code)}</td>
               <td className="num">
                 {money(line.revised_commitment, code)}
               </td>
@@ -1045,24 +1002,12 @@ function ForecastSection({ projectId }: { projectId: string }) {
               <td className="num">
                 {money(line.estimate_at_completion, code)}
               </td>
-              <td
-                className={
-                  varianceTone(line.variance_at_completion) === "danger"
-                    ? "num figure-danger"
-                    : "num"
-                }
-              >
-                {money(line.variance_at_completion, code)}
-              </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
             <th scope="row">Project</th>
-            <td className="num">
-              {money(detail.total_control_budget, code)}
-            </td>
             <td className="num" />
             <td className="num">{money(detail.total_certified, code)}</td>
             <td className="num">
@@ -1071,21 +1016,11 @@ function ForecastSection({ projectId }: { projectId: string }) {
             <td className="num">
               {money(detail.total_estimate_at_completion, code)}
             </td>
-            <td
-              className={
-                varianceTone(detail.total_variance_at_completion) === "danger"
-                  ? "num figure-danger"
-                  : "num"
-              }
-            >
-              {money(detail.total_variance_at_completion, code)}
-            </td>
           </tr>
         </tfoot>
       </TableScroll>
       <p className="footnote">
-        A positive variance is over the control budget. Every figure above is
-        the server&rsquo;s, excluding tax.
+        Forecast figures exclude tax. This optional estimate does not block contracts or payments.
       </p>
     </Card>
   );

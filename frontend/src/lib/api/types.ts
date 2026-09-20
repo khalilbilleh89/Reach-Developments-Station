@@ -2272,8 +2272,13 @@ export interface ContractCostCodePosition {
 }
 
 export interface ContractDetail extends ConstructionContract {
+  revised_contract_value_inc_tax: string | null;
+  remaining_contract_balance: string | null;
+  approved_additions: string;
+  approved_reductions: string;
   currency_id: string;
   workflow: {
+    signed_registration_blocker: string | null;
     editing_blocker: string | null;
     submission_blocker: string | null;
     activation_blocker: string | null;
@@ -2412,6 +2417,7 @@ export interface PaymentAllocation {
 }
 
 export interface ConstructionPayment {
+  direct_contract_payment: boolean;
   id: string;
   contract_id: string;
   contract_number: string;

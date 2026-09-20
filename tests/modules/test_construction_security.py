@@ -477,8 +477,8 @@ class TestTheTriggerOptionsRespectTheSameScope:
 
 
 class TestFinancialHistoryIsNotDeletable:
-    def test_only_specification_guide_exposes_delete(self) -> None:
-        """The sales guide has removal; governed financial history still has none."""
+    def test_only_explicit_removal_contracts_expose_delete(self) -> None:
+        """Financial removal is limited to guarded unused contracts and draft changes."""
         from app.main import create_app
 
         paths = create_app().openapi()["paths"]
@@ -487,6 +487,8 @@ class TestFinancialHistoryIsNotDeletable:
             for path, methods in paths.items()
             if "/construction" in path and "delete" in methods
         ]
-        assert deletes == [
-            "/api/v1/projects/{project_id}/construction/technical-specifications/{specification_id}"
-        ]
+        assert set(deletes) == {
+            "/api/v1/projects/{project_id}/construction/contracts/{contract_id}",
+            "/api/v1/projects/{project_id}/construction/variations/{variation_id}",
+            "/api/v1/projects/{project_id}/construction/technical-specifications/{specification_id}",
+        }

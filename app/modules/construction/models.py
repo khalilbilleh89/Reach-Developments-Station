@@ -1312,6 +1312,10 @@ class Payment(Base):
     #: date. Recorded, never derived.
     value_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
+    direct_contract_payment: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
     amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     currency_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("currencies.id", ondelete="RESTRICT"), nullable=False

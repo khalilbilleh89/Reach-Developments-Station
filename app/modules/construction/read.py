@@ -351,6 +351,10 @@ def contract_detail(
         session, project_id=project.id, contract_id=contract.id
     )
 
+    def signed_registration() -> None:
+        permissions.require_construction_preparer(actor)
+        service.validate_signed_registration(session, project=project, contract=contract)
+
     def editing() -> None:
         permissions.require_construction_preparer(actor)
         service.validate_contract_editing(contract)
@@ -379,10 +383,39 @@ def contract_detail(
             return error.detail
         return None
 
+    _delta, revised, _ = _contract_figures(session, project=project, contract=contract)
+    gross = (
+        money(revised * (Decimal("1") + contract.tax_rate_fraction))
+        if contract.tax_rate_fraction is not None
+        else None
+    )
+    adjustment_values = session.scalars(
+        select(VariationLine.value_delta_ex_tax)
+        .join(Variation, Variation.id == VariationLine.variation_id)
+        .where(Variation.contract_id == contract.id, Variation.status == "approved")
+    ).all()
+    allocated_paid = money(
+        session.scalar(
+            select(func.sum(service.PaymentAllocation.amount))
+            .join(Payment, Payment.id == service.PaymentAllocation.payment_id)
+            .where(Payment.contract_id == contract.id, Payment.status == "confirmed")
+        )
+        or ZERO
+    )
+
     return schemas.ContractDetailOut(
+        revised_contract_value_inc_tax=gross,
+        remaining_contract_balance=(
+            money(gross - paid_total)
+            if gross is not None and contract.status in service.CONTRACT_COMMITTING
+            else None
+        ),
+        approved_additions=money(sum((x for x in adjustment_values if x > ZERO), ZERO)),
+        approved_reductions=money(-sum((x for x in adjustment_values if x < ZERO), ZERO)),
         **contract_out(session, project=project, contract=contract).model_dump(),
         currency_id=contract.currency_id,
         workflow=schemas.ContractWorkflowOut(
+            signed_registration_blocker=blocker(signed_registration),
             editing_blocker=blocker(editing),
             submission_blocker=blocker(submission),
             activation_blocker=blocker(activation),
@@ -415,7 +448,7 @@ def contract_detail(
         approved_invoice_payable=approved_total,
         disputed_invoice_payable=disputed_total,
         confirmed_paid=paid_total,
-        invoice_outstanding=money(approved_total + disputed_total - paid_total),
+        invoice_outstanding=money(approved_total + disputed_total - allocated_paid),
         retention_held=held,
         retention_released=released,
         retention_outstanding=calculator.retention_outstanding(held=held, released=released),
@@ -624,6 +657,7 @@ def payment_out(session: Session, *, project: Project, payment: Payment) -> sche
         payment_date=payment.payment_date,
         value_date=payment.value_date,
         amount=payment.amount,
+        direct_contract_payment=payment.direct_contract_payment,
         status=payment.status,
         currency_code=_currency_code(session, payment.currency_id),
         bank_reference=payment.bank_reference,

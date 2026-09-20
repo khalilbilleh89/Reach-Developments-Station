@@ -173,7 +173,7 @@ def two_contracts_on_one_headroom(
 class TestTheBudgetHeadroomRace:
     """Given two contracts that each fit, when both are activated at once."""
 
-    def test_only_one_commitment_is_taken(
+    def test_both_contracts_activate_without_budget_headroom(
         self,
         db: Session,
         cfo: User,
@@ -206,14 +206,14 @@ class TestTheBudgetHeadroomRace:
             make(first, hold=True), make(second, hold=False), holder_ready, holder_release
         )
         assert isinstance(won[0], uuid.UUID), won[0]
-        assert isinstance(lost[0], ConflictError), lost[0]
+        assert isinstance(lost[0], uuid.UUID), lost[0]
 
         live = db.scalars(
             select(func.count(Contract.id)).where(
                 Contract.project_id == project_uuid, Contract.status == CONTRACT_ACTIVE
             )
         ).one()
-        assert live == 1
+        assert live == 2
 
 
 class TestTheCertificationRace:
