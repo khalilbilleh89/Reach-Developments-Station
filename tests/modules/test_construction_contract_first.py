@@ -22,6 +22,7 @@ from tests.modules.conftest import (
     project_payload,
     set_contract_line,
 )
+from tests.test_migrations import HEAD_REVISION
 
 
 def signed(
@@ -191,7 +192,11 @@ def test_payment_migration_roundtrip(
     assert paid.status_code == 201, paid.text
     with pytest.raises(RuntimeError, match="history must be retained"):
         command.downgrade(config, "0032_building_units")
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0034_unit_current_costs"
+    # The refusal leaves the database exactly where it was, at whatever the head
+    # is — not at the revision that happened to be head when this was written. A
+    # later merge revision moves it, and a test naming one directly turns that
+    # ordinary event into a failure in a file about contract payments.
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
 
 
 def test_existing_draft_signed_activation_preserves_lines(
