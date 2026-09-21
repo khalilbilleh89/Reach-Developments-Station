@@ -9,9 +9,10 @@ schedule are four acts with four different rights and four different sets of
 preconditions, so each has its own route — a status column a client could set
 would be an approval a client could grant itself.
 
-There are no DELETE routes. A draft schedule is replaced atomically while it is
-still a draft; once submitted, a schedule is refused, superseded or reversed,
-and every one of those keeps the record of what was previously believed.
+DELETE is limited to a plan that never left draft, or to a replacement draft
+whose standing predecessor remains. Once submitted, a schedule is refused,
+superseded or reversed, and every one of those keeps the record of what was
+previously believed.
 
 Triggers are resolved only when somebody asks. There is no scheduler, no
 background worker and no GET that quietly writes: money falling due is an event
@@ -26,8 +27,9 @@ same 404 it gives for a row that does not exist — when it does not.
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.core.errors import NotFoundError
 from app.modules.access.dependencies import ActiveActor, DbSession
@@ -289,6 +291,26 @@ def read_plan(
     return _plan_detail(session, project=project, plan_id=plan_id, actor=actor)
 
 
+@router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_plan(
+    plan_id: uuid.UUID,
+    project: PlanProject,
+    session: DbSession,
+    actor: ActiveActor,
+    reason: Annotated[str, Query(min_length=1, max_length=500)],
+) -> Response:
+    service.delete_plan(
+        session,
+        project=project,
+        actor=actor,
+        plan_id=plan_id,
+        reason=reason,
+        correlation_id=actor.correlation_id,
+    )
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # --------------------------------------------------------------------------- #
 # Versions
 # --------------------------------------------------------------------------- #
@@ -351,6 +373,28 @@ def read_version(
         session, project=project, plan_id=plan_id, version_id=version_id, actor=actor
     )
     return _version_detail(session, version)
+
+
+@router.delete("/{plan_id}/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
+def discard_version(
+    plan_id: uuid.UUID,
+    version_id: uuid.UUID,
+    project: PlanProject,
+    session: DbSession,
+    actor: ActiveActor,
+    reason: Annotated[str, Query(min_length=1, max_length=500)],
+) -> Response:
+    service.discard_version(
+        session,
+        project=project,
+        actor=actor,
+        plan_id=plan_id,
+        version_id=version_id,
+        reason=reason,
+        correlation_id=actor.correlation_id,
+    )
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.put(

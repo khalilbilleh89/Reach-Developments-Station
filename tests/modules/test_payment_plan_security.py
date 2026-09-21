@@ -142,6 +142,12 @@ def test_a_plan_on_a_hidden_phase_is_invisible_and_answers_404(
     assert hidden.status_code == 404
     assert hidden.json()["detail"] == "Payment plan not found."
 
+    hidden_delete = client.delete(
+        f"{plans_url(project_id)}/{plan_id}", params={"reason": "Wrong scope"}
+    )
+    assert hidden_delete.status_code == 404
+    assert hidden_delete.json()["detail"] == "Payment plan not found."
+
     # The same plan is plainly visible to somebody granted the whole project.
     assert collections_client.get(f"{plans_url(project_id)}/{plan_id}").status_code == 200
 
@@ -203,3 +209,12 @@ def test_an_unauthenticated_caller_is_refused(project_id: str, plan_id: str) -> 
 
     response = anonymous_client().get(plans_url(project_id))
     assert response.status_code == 401
+
+
+def test_a_reader_cannot_delete_a_payment_plan(
+    finance_client: TestClient, project_id: str, plan_id: str
+) -> None:
+    refused = finance_client.delete(
+        f"{plans_url(project_id)}/{plan_id}", params={"reason": "Not my authority"}
+    )
+    assert refused.status_code == 403

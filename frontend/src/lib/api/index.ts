@@ -1243,6 +1243,10 @@ export const paymentPlans = {
     ),
   create: (projectId: string, body: Record<string, unknown>) =>
     post<PaymentPlanDetail>(`/projects/${projectId}/payment-plans`, body),
+  deletePlan: (projectId: string, planId: string, reason: string) =>
+    remove(
+      `/projects/${projectId}/payment-plans/${planId}?${new URLSearchParams({ reason })}`,
+    ),
   createVersion: (
     projectId: string,
     planId: string,
@@ -1255,6 +1259,15 @@ export const paymentPlans = {
   version: (projectId: string, planId: string, versionId: string) =>
     get<PlanVersionDetail>(
       `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}`,
+    ),
+  discardVersion: (
+    projectId: string,
+    planId: string,
+    versionId: string,
+    reason: string,
+  ) =>
+    remove(
+      `/projects/${projectId}/payment-plans/${planId}/versions/${versionId}?${new URLSearchParams({ reason })}`,
     ),
   writeSchedule: (
     projectId: string,

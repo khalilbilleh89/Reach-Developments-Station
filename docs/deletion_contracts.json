@@ -362,18 +362,18 @@
   {
     "handler": "payment_plans.create_plan",
     "create_route": "POST ",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing. Per-installment VAT adds fields only; draft installment Remove + Save remains available."
+    "status": "implemented",
+    "removal_route": "DELETE /{plan_id}",
+    "ui_file": "frontend/src/components/projects/payments/PaymentPlanWorkspace.tsx",
+    "notes": "Collections may delete a plan only while its sole version is draft, collections have not started and no protected dependency exists. Draft installments are removed explicitly; the SaleContract and audit event remain. Submitted, approved, active, rejected and superseded history is retained."
   },
   {
     "handler": "payment_plans.create_version",
     "create_route": "POST /{plan_id}/versions",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Governed versions and triggered installments retain history; removable-draft Delete is missing. Per-installment VAT adds fields only; draft installment Remove + Save remains available."
+    "status": "implemented",
+    "removal_route": "DELETE /{plan_id}/versions/{version_id}",
+    "ui_file": "frontend/src/components/projects/payments/PaymentPlanWorkspace.tsx",
+    "notes": "Collections may discard only a draft replacement while an active version remains and collections have not started. The active schedule is untouched, the reason is audited and the discarded version number is not reused. All governed lifecycle states are retained."
   },
   {
     "handler": "payment_plans.submit_manual_trigger",

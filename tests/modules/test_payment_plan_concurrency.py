@@ -320,3 +320,53 @@ def test_a_second_plan_for_one_sale_loses_at_the_unique_index(
     with pytest.raises(IntegrityError):
         db.flush()
     db.rollback()
+
+
+def test_delete_and_submit_are_one_serialized_lifecycle_decision(
+    db: Session,
+    project_id: str,
+    reconciled_plan: tuple[str, str],
+    collections_officer: User,
+) -> None:
+    """Submission that wins the project lock turns deletion into retention."""
+    plan_id, version_id = reconciled_plan
+    actor = _actor(collections_officer)
+
+    def remove(session: Session) -> object:
+        service.delete_plan(
+            session,
+            project=_project(session, project_id),
+            actor=actor,
+            plan_id=uuid.UUID(plan_id),
+            reason="Concurrent delete",
+            correlation_id=uuid.uuid4(),
+        )
+        session.commit()
+        return "deleted"
+
+    holder_session = get_session_factory()()
+    try:
+        holder_session.scalars(
+            select(Project).where(Project.id == uuid.UUID(project_id)).with_for_update()
+        ).one()
+        holder_session.scalars(
+            select(PaymentPlan).where(PaymentPlan.id == uuid.UUID(plan_id)).with_for_update()
+        ).one()
+        version = holder_session.scalars(
+            select(PaymentPlanVersion)
+            .where(PaymentPlanVersion.id == uuid.UUID(version_id))
+            .with_for_update()
+        ).one()
+        version.status = "submitted"
+        thread, outcome = _run(remove)
+        assert _wait_until_a_backend_blocks(), "the deletion never blocked"
+        holder_session.commit()
+        thread.join(timeout=20)
+    finally:
+        holder_session.close()
+
+    assert outcome and isinstance(outcome[0], ConflictError)
+    db.expire_all()
+    assert db.get(PaymentPlan, uuid.UUID(plan_id)) is not None
+    surviving = db.get(PaymentPlanVersion, uuid.UUID(version_id))
+    assert surviving is not None and surviving.status == "submitted"

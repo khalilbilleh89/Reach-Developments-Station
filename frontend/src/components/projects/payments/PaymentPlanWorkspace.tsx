@@ -87,6 +87,7 @@ type Ask = {
   label: string;
   hint?: string;
   confirmLabel: string;
+  destructive?: boolean;
   run: (value: string) => void;
 };
 
@@ -438,6 +439,43 @@ export function PaymentPlanWorkspace({
    * A disabled control with no explanation is the thing this replaces.
    */
   const collectionsStarted = detail.plan.collections_started_at !== null;
+  const canDeletePlan = Boolean(
+    canPrepare &&
+      !collectionsStarted &&
+      !active &&
+      current?.version.status === "draft" &&
+      detail.versions.length === 1,
+  );
+  const canDiscardRevision = Boolean(
+    canPrepare &&
+      !collectionsStarted &&
+      active &&
+      current?.version.status === "draft" &&
+      current.version.id !== active.version.id,
+  );
+
+  const deleteUnusedPlan = (reason: string) => {
+    if (busy) return;
+    setBusy(true);
+    setConflict(false);
+    setError(null);
+    void paymentPlans
+      .deletePlan(projectId, planId, reason)
+      .then(async () => {
+        setAsk(null);
+        await onChanged();
+        router.push(`/projects/?project=${projectId}&section=payments`);
+      })
+      .catch((caught) => {
+        setConflict(caught instanceof ApiError && caught.isConflict);
+        setError(
+          caught instanceof ApiError
+            ? caught.message
+            : "Could not delete the payment plan.",
+        );
+      })
+      .finally(() => setBusy(false));
+  };
 
   // The figures every reader opens a plan for. All four are the version's own
   // contract basis and server-derived schedule totals.
@@ -467,7 +505,7 @@ export function PaymentPlanWorkspace({
       eyebrow="Payment plan" icon="payments"
       title={detail.plan.plan_number}
       subtitle={`${detail.unit_reference} · ${detail.sale_number} · ${detail.client_display_name}`}
-      actions={<><RecordLink projectId={projectId} kind="sale" id={detail.sale_id}>Open Sale</RecordLink><RecordLink projectId={projectId} kind="unit" id={detail.unit_id}>Open Unit</RecordLink></>}
+      actions={<><RecordLink projectId={projectId} kind="sale" id={detail.sale_id}>Open Sale</RecordLink><RecordLink projectId={projectId} kind="unit" id={detail.unit_id}>Open Unit</RecordLink>{canDeletePlan ? <Button variant="danger" onClick={() => setAsk({ title: `Delete payment plan ${detail.plan.plan_number}?`, label: "Reason", hint: "This plan is still a draft and has no collection history. Deleting it removes the draft schedule and its installments. The sale itself will not be deleted.", confirmLabel: "Delete payment plan", destructive: true, run: deleteUnusedPlan })}>Delete payment plan</Button> : null}{canDiscardRevision && current ? <Button variant="danger" onClick={() => askThen({ title: `Discard Version ${current.version.version_number}?`, label: "Reason", hint: `Version ${current.version.version_number} is still a draft. The active schedule will remain unchanged.`, confirmLabel: "Discard draft", destructive: true }, (reason) => paymentPlans.discardVersion(projectId, planId, current.version.id, reason), "Draft revision discarded.")}>Discard draft revision</Button> : null}</>}
       headline={version ? { value: money(version.contract_value_covered, code), label: section === "overview" && active ? "Governing contract principal" : "Selected version · contract principal" } : undefined}
       meta={
         <>
@@ -498,6 +536,7 @@ export function PaymentPlanWorkspace({
       {section === "overview" ? <section className="stack">
         <SectionHeader level={2} title={active ? "Governing schedule" : "Schedule in preparation"} actions={<Button onClick={() => setSection("schedule")}>{canPrepare && current?.version.status === "draft" ? "Build schedule" : "Inspect installments"}</Button>} />
         {revisionOpen ? <Notice tone="info">v{current?.version.version_number} is being prepared. v{active?.version.version_number} continues to govern this Sale.</Notice> : null}
+        {!canDeletePlan && !canDiscardRevision && (active || current?.version.status !== "draft" || collectionsStarted) ? <p className="footnote">This plan is part of the contractual or financial history and cannot be deleted.</p> : null}
         {shownDetail ? <><KeyValueGrid columns={3}><KeyValue label="Plan name" value={detail.plan.name} /><KeyValue label="Next scheduled date" value={shownDetail.next_scheduled_date ? businessDate(shownDetail.next_scheduled_date) : "No future scheduled date"} /><KeyValue label="Next forecast date" value={shownDetail.next_forecast_date ? businessDate(shownDetail.next_forecast_date) : "No future forecast date"} /></KeyValueGrid><ReconciliationStrip reconciliation={shownDetail.reconciliation} currencyId={detail.currency_id} /><ScheduleTable installments={shownDetail.installments} currencyId={detail.currency_id} /></> : <EmptyState compact title="No version" hint="Inspect the schedule to prepare the first version." />}
       </section> : null}
       {section === "reconciliation" && shownDetail ? <section className="stack"><SectionHeader level={2} title="Reconciliation" description={`v${version?.version_number} · ${isActive ? "Governing schedule" : "Selected version"}`} /><ReconciliationStrip reconciliation={shownDetail.reconciliation} currencyId={detail.currency_id} /></section> : null}
@@ -1240,6 +1279,7 @@ export function PaymentPlanWorkspace({
           label={ask.label}
           hint={ask.hint}
           confirmLabel={ask.confirmLabel}
+          destructive={ask.destructive}
           busy={busy}
           onSubmit={ask.run}
           onCancel={() => setAsk(null)}
