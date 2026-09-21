@@ -275,6 +275,14 @@ Inventory: **106 mapped record classes; 279 mutation routes**. Paths are relativ
 - **POST** `/{plan_id}/trigger-events/{event_id}/approve` — `approve_manual_trigger` ([route](../app/modules/payment_plans/api.py#L657)).
 - **POST** `/{plan_id}/trigger-events/{event_id}/reverse` — `reverse_manual_trigger` ([route](../app/modules/payment_plans/api.py#L682)).
 
+Removal contract:
+
+- An unused `PaymentPlan` whose sole version is `draft` may be deleted with a required reason. Its draft installments and version are removed; the `SaleContract` remains and the action is audited.
+- A replacement `PaymentPlanVersion` may be discarded only while it is `draft` and an active version remains. The active schedule is not changed, and the discarded version number is not reused.
+- `submitted`, `approved`, `active`, `rejected`, and `superseded` versions are contractual or governance history and are retained.
+- `collections_started_at` permanently blocks physical deletion. Linked trigger, collections, restructure, cashflow, or other governed dependencies are protected by restrictive foreign keys and reported as a business conflict.
+- `PaymentPlanInstallment` rows are physically removed only as children of a disposable draft. Historical installments and trigger events are retained.
+
 ## portfolio
 
 - **POST** `` — `create_action` ([route](../app/modules/portfolio/action_api.py#L137)).

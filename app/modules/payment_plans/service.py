@@ -30,13 +30,15 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.standing import as_of_bound
 from app.modules.access.dependencies import ActorContext
 from app.modules.access.models import Role, User, UserRole
+from app.modules.audit.models import AuditEvent
 from app.modules.audit.service import record_event
 from app.modules.inventory.custom_fields import business_today
 from app.modules.inventory.models import Unit
@@ -104,6 +106,14 @@ _NO_VERSION = "Payment plan version not found."
 _NO_INSTALLMENT = "Instalment not found."
 _NO_EVENT = "Trigger event not found."
 _NO_COPY_SOURCE = "The plan being copied was not found in this project."
+
+_COLLECTIONS_STARTED = (
+    "This payment plan cannot be deleted because collections have started. "
+    "Its contractual and cash history must be retained."
+)
+_DEPENDENCY_BLOCK = (
+    "This payment plan has linked contractual or financial history and cannot be deleted."
+)
 
 
 def _now() -> datetime:
@@ -554,6 +564,174 @@ def create_plan(
     return plan, version
 
 
+def _version_retention_message(version: PaymentPlanVersion) -> str:
+    """Explain why a governed version must remain in the record."""
+    number = version.version_number
+    if version.status == VERSION_SUBMITTED:
+        return (
+            f"Version {number} has already been submitted and must remain in the "
+            "payment-plan history."
+        )
+    if version.status == VERSION_APPROVED:
+        return f"Version {number} has already been approved and cannot be deleted."
+    if version.status == VERSION_ACTIVE:
+        return "The active contractual payment schedule cannot be deleted."
+    return "This version is part of the contractual history and cannot be deleted."
+
+
+def _locked_versions(session: Session, *, plan_id: uuid.UUID) -> list[PaymentPlanVersion]:
+    """Lock every version in stable order after its owning plan is locked."""
+    return list(
+        session.scalars(
+            select(PaymentPlanVersion)
+            .where(PaymentPlanVersion.payment_plan_id == plan_id)
+            .order_by(PaymentPlanVersion.version_number)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
+def _delete_draft_rows(
+    session: Session, *, version: PaymentPlanVersion, delete_plan: PaymentPlan | None = None
+) -> None:
+    """Delete a disposable draft explicitly and translate protected dependencies."""
+    try:
+        with session.begin_nested():
+            session.execute(
+                delete(PaymentPlanInstallment).where(
+                    PaymentPlanInstallment.payment_plan_version_id == version.id
+                )
+            )
+            session.delete(version)
+            if delete_plan is not None:
+                session.delete(delete_plan)
+            session.flush()
+    except IntegrityError as exc:
+        raise ConflictError(_DEPENDENCY_BLOCK) from exc
+
+
+def delete_plan(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    plan_id: uuid.UUID,
+    reason: str,
+    correlation_id: uuid.UUID,
+) -> None:
+    """Delete a plan that never became evidence, leaving its sale untouched."""
+    permissions.require_plan_writer(actor)
+    clean_reason = reason.strip()
+    if not clean_reason:
+        raise ValidationError("A deletion reason is required.")
+    project = lock_project(session, project.id)
+    visible = _visible_plan(session, project=project, plan_id=plan_id, actor=actor)
+    plan = _lock_plan(session, project_id=project.id, plan_id=visible.id)
+    versions = _locked_versions(session, plan_id=plan.id)
+
+    if plan.collections_started_at is not None:
+        raise ConflictError(_COLLECTIONS_STARTED)
+    governed = next((version for version in versions if version.status != VERSION_DRAFT), None)
+    if governed is not None:
+        raise ConflictError(_version_retention_message(governed))
+    if len(versions) != 1:
+        raise ConflictError(_DEPENDENCY_BLOCK)
+
+    version = versions[0]
+    before = {
+        "project_id": plan.project_id,
+        "payment_plan_id": plan.id,
+        "plan_number": plan.plan_number,
+        "sale_contract_id": plan.sale_contract_id,
+        "name": plan.name,
+        "version_id": version.id,
+        "version_number": version.version_number,
+        "version_status": version.status,
+        "installment_count": session.scalar(
+            select(func.count())
+            .select_from(PaymentPlanInstallment)
+            .where(PaymentPlanInstallment.payment_plan_version_id == version.id)
+        )
+        or 0,
+    }
+    _delete_draft_rows(session, version=version, delete_plan=plan)
+    record_event(
+        session,
+        action="payment_plan.deleted",
+        entity_type="payment_plan",
+        entity_id=plan.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor.user_id,
+        reason=clean_reason,
+        before=before,
+    )
+
+
+def discard_version(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    plan_id: uuid.UUID,
+    version_id: uuid.UUID,
+    reason: str,
+    correlation_id: uuid.UUID,
+) -> None:
+    """Discard only a replacement draft; the standing schedule remains untouched."""
+    permissions.require_plan_writer(actor)
+    clean_reason = reason.strip()
+    if not clean_reason:
+        raise ValidationError("A discard reason is required.")
+    project = lock_project(session, project.id)
+    visible_version, visible_plan = _visible_version_for_plan(
+        session,
+        project=project,
+        plan_id=plan_id,
+        version_id=version_id,
+        actor=actor,
+    )
+    plan = _lock_plan(session, project_id=project.id, plan_id=visible_plan.id)
+    version = _lock_version(session, project_id=project.id, version_id=visible_version.id)
+
+    if plan.collections_started_at is not None:
+        raise ConflictError(_COLLECTIONS_STARTED)
+    if version.payment_plan_id != plan.id:
+        raise NotFoundError(_NO_VERSION)
+    if version.status != VERSION_DRAFT:
+        raise ConflictError(_version_retention_message(version))
+    if active_version(session, plan_id=plan.id) is None:
+        raise ConflictError(
+            "The only draft belongs to the unused payment plan. Delete the payment plan instead."
+        )
+
+    before = {
+        "project_id": plan.project_id,
+        "payment_plan_id": plan.id,
+        "plan_number": plan.plan_number,
+        "version_id": version.id,
+        "version_number": version.version_number,
+        "version_status": version.status,
+        "installment_count": session.scalar(
+            select(func.count())
+            .select_from(PaymentPlanInstallment)
+            .where(PaymentPlanInstallment.payment_plan_version_id == version.id)
+        )
+        or 0,
+    }
+    _delete_draft_rows(session, version=version)
+    record_event(
+        session,
+        action="payment_plan_version.discarded",
+        entity_type="payment_plan_version",
+        entity_id=version.id,
+        correlation_id=correlation_id,
+        actor_user_id=actor.user_id,
+        reason=clean_reason,
+        before=before,
+    )
+
+
 def _resolve_copy_source(
     session: Session,
     *,
@@ -768,12 +946,24 @@ def create_version(
             PaymentPlanVersion.payment_plan_id == plan.id
         )
     )
+    discarded_numbers = [
+        int(event.before_data["version_number"])
+        for event in session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.action == "payment_plan_version.discarded",
+                AuditEvent.entity_type == "payment_plan_version",
+                AuditEvent.before_data["payment_plan_id"].astext == str(plan.id),
+            )
+        )
+        if event.before_data and "version_number" in event.before_data
+    ]
+    highest = max([highest or 0, *discarded_numbers])
     version = _new_version(
         session,
         plan=plan,
         sale=sale,
         actor=actor,
-        version_number=(highest or 0) + 1,
+        version_number=highest + 1,
         reservation_treatment=(
             reservation_treatment
             if reservation_treatment is not None

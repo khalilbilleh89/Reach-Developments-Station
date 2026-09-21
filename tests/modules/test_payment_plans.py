@@ -7,8 +7,20 @@ cancelled one has nothing left to schedule.
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+import uuid
+from datetime import UTC, datetime
 
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.modules.audit.models import AuditEvent
+from app.modules.payment_plans.models import (
+    PaymentPlan,
+    PaymentPlanInstallment,
+    PaymentPlanVersion,
+)
+from app.modules.sales.models import SaleContract
 from tests.modules.conftest import plan_detail, plans_url, sales_url
 
 
@@ -123,3 +135,168 @@ def test_a_plan_carries_no_collected_or_outstanding_figure(
         "payment_status",
     ):
         assert forbidden not in serialised
+
+
+def test_an_unused_draft_plan_is_deleted_without_deleting_its_sale_and_can_be_recreated(
+    db: Session,
+    collections_client: TestClient,
+    project_id: str,
+    active_sale: str,
+    reconciled_plan: tuple[str, str],
+) -> None:
+    plan_id, version_id = reconciled_plan
+    removed = collections_client.delete(
+        f"{plans_url(project_id)}/{plan_id}",
+        params={"reason": "Duplicate plan entered by mistake"},
+    )
+    assert removed.status_code == 204, removed.text
+
+    assert db.get(PaymentPlan, uuid.UUID(plan_id)) is None
+    assert db.get(PaymentPlanVersion, uuid.UUID(version_id)) is None
+    assert (
+        db.scalar(
+            select(func.count())
+            .select_from(PaymentPlanInstallment)
+            .where(PaymentPlanInstallment.payment_plan_version_id == uuid.UUID(version_id))
+        )
+        == 0
+    )
+    assert db.get(SaleContract, uuid.UUID(active_sale)) is not None
+    event = db.scalars(
+        select(AuditEvent).where(
+            AuditEvent.action == "payment_plan.deleted",
+            AuditEvent.entity_id == uuid.UUID(plan_id),
+        )
+    ).one()
+    assert event.reason == "Duplicate plan entered by mistake"
+    assert event.before_data["sale_contract_id"] == active_sale
+    assert event.before_data["installment_count"] == 3
+
+    recreated = collections_client.post(
+        plans_url(project_id),
+        json={"sale_contract_id": active_sale, "name": "Correct terms"},
+    )
+    assert recreated.status_code == 201, recreated.text
+    assert recreated.json()["current"]["version"]["status"] == "draft"
+
+
+def test_a_replacement_draft_is_discarded_without_touching_the_active_schedule(
+    db: Session,
+    collections_client: TestClient,
+    project_id: str,
+    active_plan: tuple[str, str],
+) -> None:
+    plan_id, active_version_id = active_plan
+    created = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/versions",
+        json={"change_reason": "Mistaken revision"},
+    )
+    assert created.status_code == 201, created.text
+    draft_id = created.json()["version"]["id"]
+
+    discarded = collections_client.delete(
+        f"{plans_url(project_id)}/{plan_id}/versions/{draft_id}",
+        params={"reason": "Draft opened accidentally"},
+    )
+    assert discarded.status_code == 204, discarded.text
+    assert db.get(PaymentPlanVersion, uuid.UUID(draft_id)) is None
+    active = db.get(PaymentPlanVersion, uuid.UUID(active_version_id))
+    assert active is not None and active.status == "active"
+    assert db.get(PaymentPlan, uuid.UUID(plan_id)) is not None
+    event = db.scalars(
+        select(AuditEvent).where(
+            AuditEvent.action == "payment_plan_version.discarded",
+            AuditEvent.entity_id == uuid.UUID(draft_id),
+        )
+    ).one()
+    assert event.reason == "Draft opened accidentally"
+
+    next_revision = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/versions",
+        json={"change_reason": "Legitimate revision"},
+    )
+    assert next_revision.status_code == 201, next_revision.text
+    assert next_revision.json()["version"]["version_number"] == 3
+
+
+def test_an_active_plan_cannot_be_deleted(
+    collections_client: TestClient, project_id: str, active_plan: tuple[str, str]
+) -> None:
+    plan_id, _version_id = active_plan
+    refused = collections_client.delete(
+        f"{plans_url(project_id)}/{plan_id}", params={"reason": "Remove it"}
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "The active contractual payment schedule cannot be deleted."
+
+
+def test_collections_started_blocks_deleting_even_a_draft(
+    db: Session, collections_client: TestClient, project_id: str, plan_id: str
+) -> None:
+    plan = db.get(PaymentPlan, uuid.UUID(plan_id))
+    assert plan is not None
+    plan.collections_started_at = datetime.now(UTC)
+    db.commit()
+
+    refused = collections_client.delete(
+        f"{plans_url(project_id)}/{plan_id}", params={"reason": "Remove it"}
+    )
+    assert refused.status_code == 409
+    assert "collections have started" in refused.json()["detail"]
+    db.expire_all()
+    assert db.get(PaymentPlan, uuid.UUID(plan_id)) is not None
+
+
+def test_submitted_and_approved_versions_cannot_be_deleted(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    reconciled_plan: tuple[str, str],
+) -> None:
+    plan_id, version_id = reconciled_plan
+    base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+    assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+    submitted = collections_client.delete(base, params={"reason": "Remove it"})
+    assert submitted.status_code == 409
+    assert "already been submitted" in submitted.json()["detail"]
+    assert cfo_client.post(f"{base}/approve", json={"reason": "Reviewed"}).status_code == 200
+    approved = collections_client.delete(base, params={"reason": "Remove it"})
+    assert approved.status_code == 409
+    assert "already been approved" in approved.json()["detail"]
+
+
+def test_rejected_version_is_retained(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    reconciled_plan: tuple[str, str],
+) -> None:
+    plan_id, version_id = reconciled_plan
+    base = f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+    assert collections_client.post(f"{base}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{base}/reject", json={"reason": "Terms refused"}).status_code == 200
+    refused = collections_client.delete(base, params={"reason": "Remove it"})
+    assert refused.status_code == 409
+    assert "contractual history" in refused.json()["detail"]
+
+
+def test_superseded_version_is_retained(
+    collections_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    active_plan: tuple[str, str],
+) -> None:
+    plan_id, first_version_id = active_plan
+    created = collections_client.post(
+        f"{plans_url(project_id)}/{plan_id}/versions",
+        json={"change_reason": "Replacement"},
+    )
+    second_version_id = created.json()["version"]["id"]
+    second = f"{plans_url(project_id)}/{plan_id}/versions/{second_version_id}"
+    assert collections_client.post(f"{second}/submit", json={}).status_code == 200
+    assert cfo_client.post(f"{second}/approve", json={"reason": "Agreed"}).status_code == 200
+    assert cfo_client.post(f"{second}/activate", json={}).status_code == 200
+    first = f"{plans_url(project_id)}/{plan_id}/versions/{first_version_id}"
+    refused = collections_client.delete(first, params={"reason": "Remove it"})
+    assert refused.status_code == 409
+    assert "contractual history" in refused.json()["detail"]

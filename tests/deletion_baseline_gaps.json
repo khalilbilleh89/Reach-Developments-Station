@@ -28,8 +28,6 @@
   "inventory.create_field_definition",
   "inventory.create_unit_document",
   "inventory.create_unit_feature",
-  "payment_plans.create_plan",
-  "payment_plans.create_version",
   "pricing.create_area_rule",
   "pricing.create_benchmark",
   "pricing.create_configuration",
