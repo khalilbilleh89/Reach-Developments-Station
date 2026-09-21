@@ -648,9 +648,24 @@ function PermitFile({
 
       {section === "permit" ? (
         <>
-          {permitReviewNotes(permit).map(note => <Notice key={note} tone="warning">Review this record: {note} Dates do not change workflow status automatically.</Notice>)}
+          {/* The note says what is wrong with the record and stops there. It
+              used to append a sentence denying that dates drive the workflow
+              status, which is the opposite of what this application does:
+              actual milestone dates derive the status server-side. A warning
+              that contradicts the behaviour teaches the operator to maintain
+              by hand a status the server is already working out. */}
+          {permitReviewNotes(permit).map(note => <Notice key={note} tone="warning">Review this record: {note}</Notice>)}
           {editing ? (
             <Card title="Edit permit">
+              {/* Said here, where the operator is deciding what to type, and
+                  not only under the dates further down the page. The form has
+                  no status control on purpose: entering the actual date is the
+                  whole action. */}
+              <p className="subtle">
+                Record progress by entering the actual milestone dates. The status follows them when you
+                save — an issue date means Completed, and no separate status change is needed. Planned,
+                forecast and expiry dates do not change the status.
+              </p>
               <EditForm
                 fields={permitFields(permit, types, permits)}
                 columns={2}
@@ -661,8 +676,18 @@ function PermitFile({
                   ]),
                 )}
                 onSave={async (changes) => {
+                  const before = permit.status;
                   const updated = await projects.updatePermit(projectId, permit.id, changes);
-                  onNotice(`${updated.permit_code} updated.`);
+                  // The server derives the status from the actual milestone
+                  // dates in the same transaction. The browser does not work
+                  // out what it became — it compares the status it sent with
+                  // the status that came back and reports the difference, so
+                  // the operator sees that entering a date was the whole job.
+                  onNotice(
+                    updated.status === before
+                      ? `${updated.permit_code} updated.`
+                      : `${updated.permit_code} updated · status is now ${STATUS_LABELS[updated.status] ?? updated.status}.`,
+                  );
                   await onChanged(updated);
                   await loadHistory();
                 }}
@@ -746,7 +771,7 @@ function PermitFile({
             <Disclosure title="Other status changes (optional)">
               <SectionHeader
                 title="Change status"
-                description="Recorded with the date it took effect and kept in the history. You may add a reason, but it is optional."
+                description="Most permit progress is recorded by entering the actual milestone dates above; the status follows them. Use a manual change only for an exception no milestone date can express — putting the permit on hold, withdrawing it, or recording a rejection. Recorded with the date it took effect and kept in the history. You may add a reason, but it is optional."
               />
               <DraftBoundary dirty={JSON.stringify(move) !== JSON.stringify(moveBaseline)} busy={busy} onDiscard={() => setMove(moveBaseline)}>
                 <form onSubmit={transition}>

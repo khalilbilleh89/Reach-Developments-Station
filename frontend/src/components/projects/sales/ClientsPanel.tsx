@@ -78,18 +78,20 @@ export function ClientsPanel({
     { name: "is_primary", label: "Primary purchaser", kind: "checkbox" },
     { name: "is_active", label: "Active party", kind: "checkbox" },
   ];
+  // The buyer's own facts first, then the selling team under a heading that
+  // says whose they are. Left unlabelled and interleaved with the buyer's
+  // contact details, "Country" reads as the purchaser's nationality.
   const clientFields: EditField[] = [
     { name: "display_name", label: "Buyer name" },
-    { name: "agent_country", label: "Country" },
-    { name: "agent_branch", label: "Branch" },
-    { name: "agent_branch_leader", label: "Branch Leader" },
-    { name: "agent_name", label: "Agent" },
-
     { name: "email", label: "Email" }, { name: "phone", label: "Phone" },
     { name: "address", label: "Address" },
     { name: "preferred_language_code", label: "Language code" },
     { name: "kyc_status", label: "KYC status", kind: "select", options: ["not_started", "in_progress", "cleared", "rejected"].map(value => ({ value, label: value.replaceAll("_", " ") })) },
     { name: "is_active", label: "Active buyer", kind: "checkbox" },
+    { name: "agent_country", label: "Country", group: "Sales team", hint: "The selling team's, not the buyer's. Changing it affects this buyer's next reservation only." },
+    { name: "agent_branch", label: "Branch", group: "Sales team" },
+    { name: "agent_branch_leader", label: "Branch Leader", group: "Sales team" },
+    { name: "agent_name", label: "Agent", group: "Sales team" },
   ];
   const [party, setParty] = useState({
     name_as_identification: "",
@@ -190,7 +192,7 @@ export function ClientsPanel({
         }} /></RecordPage> : null}
 
       {canWrite && registering ? (
-        <RecordPage title="Register buyer and agent" onClose={() => setRegistering(false)}>
+        <RecordPage title="Register buyer" onClose={() => setRegistering(false)}>
           <BuyerForm projectId={projectId} onCancel={() => setRegistering(false)} onSaved={(buyer) => {
             setRegistering(false);
             setSelected(buyer.id);
@@ -236,7 +238,12 @@ export function ClientsPanel({
                 <th scope="row" className="mono">
                   {client.client_number}
                 </th>
-                <td className="buyer-identity">{client.display_name}<span className="cell-secondary">{[client.agent_country, client.agent_branch, client.agent_branch_leader, client.agent_name].filter(Boolean).join(" · ") || "Sales team not recorded"}</span></td>
+                {/* The buyer's name, and nothing about the salesperson. The
+                    four agent_* fields used to sit under it as a second line,
+                    which read as though the purchaser had a country and a
+                    branch. They are the selling team's, and they have their own
+                    register in Agents. */}
+                <td className="buyer-identity">{client.display_name}</td>
                 <td>
                   <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge>
                 </td>

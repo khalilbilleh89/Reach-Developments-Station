@@ -248,7 +248,15 @@ export function ProjectWorkspace({
             canConfigure={canWriteProject}
           />
         ) : null}
-        {section === "agent-buyer" ? <AgentBuyerTab projectId={projectId} projectStatus={project.status} roles={roles} /> : null}
+        {/* `agent-buyer` is the historical key and still resolves here, to
+            Buyers — the workflow that registered a purchaser and connected a
+            unit. Its own menu entry is gone; Buyers and Agents replace it. */}
+        {section === "buyers" || section === "agent-buyer" ? (
+          <AgentBuyerTab mode="buyers" projectId={projectId} projectStatus={project.status} roles={roles} />
+        ) : null}
+        {section === "agents" ? (
+          <AgentBuyerTab mode="agents" projectId={projectId} projectStatus={project.status} roles={roles} />
+        ) : null}
         {section === "sales" ? (
           <SalesTab
             projectId={projectId}
