@@ -312,20 +312,27 @@ def test_a_copied_version_must_name_its_source(
     db.rollback()
 
 
-def test_there_is_no_delete_route_for_a_plan(
+def test_plan_delete_requires_a_reason(
     collections_client: TestClient, project_id: str, plan_id: str
 ) -> None:
-    """Financial history is never removed; the API offers no way to try."""
+    """The governed draft deletion route refuses an unexplained request."""
     response = collections_client.delete(f"{plans_url(project_id)}/{plan_id}")
-    assert response.status_code in {404, 405}
+    assert response.status_code == 422
+    assert collections_client.get(f"{plans_url(project_id)}/{plan_id}").status_code == 200
 
 
-def test_there_is_no_delete_route_for_a_version(
+def test_version_discard_requires_a_reason(
     collections_client: TestClient, project_id: str, active_plan: tuple[str, str]
 ) -> None:
     plan_id, version_id = active_plan
     response = collections_client.delete(f"{plans_url(project_id)}/{plan_id}/versions/{version_id}")
-    assert response.status_code in {404, 405}
+    assert response.status_code == 422
+    assert (
+        collections_client.get(
+            f"{plans_url(project_id)}/{plan_id}/versions/{version_id}"
+        ).status_code
+        == 200
+    )
 
 
 def test_a_request_with_an_unknown_field_is_refused(
