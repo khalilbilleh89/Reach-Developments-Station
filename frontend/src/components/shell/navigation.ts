@@ -45,7 +45,13 @@ export type ProjectSection =
   // Retained as a technical route key for domain components and historical
   // links; it is deliberately absent from ordinary PROJECT_NAVIGATION.
   | "pricing"
+  // Retained for the same reason as `pricing`: links, bookmarks and saved
+  // queries still carry `section=agent-buyer`. It resolves to Buyers, which is
+  // where registering a purchaser and connecting a unit now lives, and it is
+  // deliberately absent from ordinary PROJECT_NAVIGATION.
   | "agent-buyer"
+  | "buyers"
+  | "agents"
   | "sales"
   | "payments"
   | "collections"
@@ -144,10 +150,20 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     label: "Commercial",
     items: [
       {
-        key: "agent-buyer",
-        label: "Agent/Buyer",
+        key: "buyers",
+        label: "Buyers",
         icon: "sales",
-        description: "Register buyers and their sales team, then connect a unit.",
+        description: "Register purchasers, keep their details and parties, then connect a unit.",
+        visible: (roles) => hasAnyRole(roles, SALES_READERS),
+      },
+      {
+        key: "agents",
+        label: "Agents",
+        icon: "sales",
+        // Deliberately "sales team", never "the buyer's country": these four
+        // fields describe the salesperson who brought the transaction, and a
+        // register that reads otherwise turns attribution into demographics.
+        description: "The sales team attribution copied onto each new reservation and sale.",
         visible: (roles) => hasAnyRole(roles, SALES_READERS),
       },
       {

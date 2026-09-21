@@ -33,14 +33,19 @@ function nodes(tree) {
 }
 function field(tree, label) { return nodes(tree).find(node => node.type === "Field" && node.props.label === label).props.children; }
 
-test("Agent/Buyer retains the chosen buyer when connecting a unit and opens Sales", () => {
-  const routes = [];
-  const render = mount("components/projects/AgentBuyerTab.tsx", "AgentBuyerTab", {
+function buyerAgentTab(props, routes = []) {
+  return mount("components/projects/AgentBuyerTab.tsx", "AgentBuyerTab", {
     "next/navigation": {useRouter: () => ({push: route => routes.push(route)})},
     "./sales/ClientsPanel": {ClientsPanel: "ClientsPanel"},
+    "./sales/AgentsPanel": {AgentsPanel: "AgentsPanel"},
     "./sales/NewReservation": {NewReservation: "NewReservation"},
     "./sales/salesRoutes": {createdSalesHref: (query, project, kind, id) => `${query}&${kind}=${id}`},
-  }, {projectId: "project", projectStatus: "active", roles: new Set(["master_admin"])});
+  }, props);
+}
+
+test("Buyers retains the chosen buyer when connecting a unit and opens Sales", () => {
+  const routes = [];
+  const render = buyerAgentTab({projectId: "project", projectStatus: "active", roles: new Set(["master_admin"])}, routes);
   const panel = nodes(render()).find(node => node.type === "ClientsPanel");
   assert.equal(panel.props.canWrite, true);
   panel.props.onConnect({id: "buyer-first", display_name: "Buyer", agent_name: "Agent"});
@@ -50,6 +55,46 @@ test("Agent/Buyer retains the chosen buyer when connecting a unit and opens Sale
   flow.props.onSaleCreated("new-sale");
   assert.match(routes[0], /section=sales/);
   assert.match(routes[0], /sale=new-sale/);
+});
+
+test("Buyers and Agents are two screens, and connecting a unit belongs to Buyers", () => {
+  const buyers = nodes(buyerAgentTab({mode: "buyers", projectId: "project", projectStatus: "active", roles: new Set(["sales_operations"])})());
+  const agents = nodes(buyerAgentTab({mode: "agents", projectId: "project", projectStatus: "active", roles: new Set(["sales_operations"])})());
+
+  // Each screen answers its own question and offers only its own register.
+  assert.equal(buyers.find(node => node.type === "PageHeader").props.title, "Buyers");
+  assert.equal(agents.find(node => node.type === "PageHeader").props.title, "Agents");
+  assert.ok(buyers.find(node => node.type === "ClientsPanel"));
+  assert.equal(buyers.find(node => node.type === "AgentsPanel"), undefined);
+  assert.ok(agents.find(node => node.type === "AgentsPanel"));
+  assert.equal(agents.find(node => node.type === "ClientsPanel"), undefined);
+
+  // Reservation creation is a buyer workflow. The agent is attribution, and
+  // Agents must never become a second place to commit a unit.
+  const render = buyerAgentTab({mode: "agents", projectId: "project", projectStatus: "active", roles: new Set(["master_admin"])});
+  assert.equal(nodes(render()).find(node => node.type === "NewReservation"), undefined);
+});
+
+test("Buyers no longer prints the selling team under the purchaser's name", () => {
+  const source = readFileSync(new URL("../src/components/projects/sales/ClientsPanel.tsx", import.meta.url), "utf8");
+  const identity = source.split('className="buyer-identity"')[1].split("</td>")[0];
+  // The four agent_* fields describe the salesperson. Under a buyer's name
+  // they read as the purchaser's nationality and address.
+  for (const field of ["agent_country", "agent_branch", "agent_branch_leader", "agent_name"]) {
+    assert.ok(!identity.includes(field), `${field} is still rendered as buyer identity`);
+  }
+});
+
+test("Agents keeps attribution separate from the buyer and invents no agent record", () => {
+  const source = readFileSync(new URL("../src/components/projects/sales/AgentsPanel.tsx", import.meta.url), "utf8");
+  // Editing goes through the existing client API; there is no agent endpoint.
+  assert.ok(source.includes("sales.updateClient"));
+  assert.ok(!/sales\.(createAgent|agents|updateAgent)/.test(source));
+  // Attribution is the selling team, and the screen says so rather than
+  // leaving "Country" to be read as the buyer's nationality.
+  assert.ok(source.includes("not the buyer"));
+  // An unset field stays unset. Nothing is defaulted or inferred.
+  assert.ok(source.includes("Not recorded"));
 });
 
 test("Sale agent correction preserves all four fields on failure and refreshes after success", async () => {
