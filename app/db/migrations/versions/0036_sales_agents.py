@@ -45,7 +45,7 @@ def upgrade() -> None:
             "updated_by_user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="RESTRICT")
         ),
         sa.UniqueConstraint("id", "project_id", name="sales_agent_project"),
-        sa.CheckConstraint("length(trim(display_name)) > 0", name="ck_sales_agents_name_not_blank"),
+        sa.CheckConstraint("length(trim(display_name)) > 0", name="name_not_blank"),
     )
     op.create_index("ix_sales_agents_project_active", "sales_agents", ["project_id", "is_active"])
     for table in ("clients", "reservations", "sale_contracts"):
