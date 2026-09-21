@@ -21,7 +21,12 @@ from sqlalchemy.orm import Session
 from app.modules.audit.models import AuditEvent
 from app.modules.inventory.models import Unit, UnitStatusEvent
 from app.modules.sales.models import Reservation, ReservationStatusEvent, SaleContract
-from tests.modules.conftest import record_legal, sales_url, settle_and_clear_collections
+from tests.modules.conftest import (
+    cancellation_terms_payload,
+    record_legal,
+    sales_url,
+    settle_and_clear_collections,
+)
 
 
 def _tomorrow() -> str:
@@ -232,13 +237,23 @@ def test_a_cancellation_cannot_return_the_unit_on_a_future_date(
     released_unit: str,
     db: Session,
 ) -> None:
-    case = sales_ops_client.post(
+    opened = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/cancellation",
-        json={"initiated_by_party": "buyer", "reason": "Buyer could not complete"},
-    ).json()
+        json={
+            "initiated_by_party": "buyer",
+            "reason": "Buyer could not complete",
+            **cancellation_terms_payload(sales_ops_client, project_id, active_sale),
+        },
+    )
+    assert opened.status_code == 201, opened.text
+    case = opened.json()
     base = f"{sales_url(project_id)}/cancellations/{case['id']}"
-    sales_ops_client.post(f"{base}/advance", json={"to_status": "termination_pending_approval"})
-    sales_ops_client.post(f"{base}/advance", json={"to_status": "ready_for_unit_return"})
+    pending = sales_ops_client.post(
+        f"{base}/advance", json={"to_status": "termination_pending_approval"}
+    )
+    assert pending.status_code == 200, pending.text
+    ready = sales_ops_client.post(f"{base}/advance", json={"to_status": "ready_for_unit_return"})
+    assert ready.status_code == 200, ready.text
     before = _counts(db)
 
     response = sales_ops_client.post(f"{base}/complete", json={"unit_return_date": _tomorrow()})

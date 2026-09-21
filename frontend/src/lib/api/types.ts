@@ -956,6 +956,7 @@ export interface SalesPolicy {
 }
 
 export interface SalesClient {
+  agent_id: string | null;
   agent_country?: string | null;
   agent_branch?: string | null;
   agent_branch_leader?: string | null;
@@ -977,6 +978,18 @@ export interface SalesClient {
   privacy_consent_at?: string | null;
   privacy_consent_reference?: string | null;
   notes?: string | null;
+}
+
+export interface SalesAgent {
+  id: string;
+  project_id: string;
+  display_name: string;
+  country: string | null;
+  branch: string | null;
+  branch_leader: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ClientParty {
@@ -1026,6 +1039,7 @@ export interface ReservationStatusEvent {
 }
 
 export interface Reservation extends SalesPriceFacts {
+  agent_id: string | null;
   agent_country?: string | null;
   agent_branch?: string | null;
   agent_branch_leader?: string | null;
@@ -1121,6 +1135,7 @@ export interface SaleTaxLine {
 }
 
 export interface SaleContract extends SalesPriceFacts {
+  agent_id: string | null;
   agent_country?: string | null;
   agent_branch?: string | null;
   agent_branch_leader?: string | null;

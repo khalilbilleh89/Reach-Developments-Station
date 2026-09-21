@@ -12,7 +12,13 @@ from app.core.database import get_engine
 from app.modules.sales.models import SaleContract
 from tests.conftest import alembic_config
 from tests.factories import client_for, make_user
-from tests.modules.conftest import PROJECTS, inventory_url, project_payload, sales_url
+from tests.modules.conftest import (
+    PROJECTS,
+    cancellation_terms_payload,
+    inventory_url,
+    project_payload,
+    sales_url,
+)
 
 AGENT = {
     "agent_country": "Jordan",
@@ -32,9 +38,23 @@ def test_buyer_team_follows_unit_and_remains_frozen(
     boss: TestClient, project_id: str, released_unit: str
 ) -> None:
     base = sales_url(project_id)
+    agent = boss.post(
+        f"{base}/agents",
+        json={
+            "display_name": "Test Agent",
+            "country": "Jordan",
+            "branch": "Amman",
+            "branch_leader": "Test Leader",
+        },
+    )
+    assert agent.status_code == 201, agent.text
     buyer = boss.post(
         f"{base}/clients",
-        json={"display_name": "Buyer First", "sole_purchaser_name": "Buyer First", **AGENT},
+        json={
+            "display_name": "Buyer First",
+            "sole_purchaser_name": "Buyer First",
+            "agent_id": agent.json()["id"],
+        },
     )
     assert buyer.status_code == 201, buyer.text
     client_id = buyer.json()["id"]
@@ -44,16 +64,106 @@ def test_buyer_team_follows_unit_and_remains_frozen(
     )
     assert result.status_code == 201, result.text
     sale = result.json()["sale"]
+    assert sale["agent_id"] == agent.json()["id"]
     assert {key: sale[key] for key in AGENT} == AGENT
+    reservation = boss.get(f"{base}/reservations/{sale['reservation_id']}").json()["reservation"]
+    assert reservation["agent_id"] == sale["agent_id"]
+    assert {key: reservation[key] for key in AGENT} == AGENT
     updated = boss.patch(
-        f"{base}/clients/{client_id}",
-        json={"agent_name": "Replacement Agent", "agent_branch": None},
+        f"{base}/agents/{agent.json()['id']}",
+        json={"display_name": "Replacement Agent", "branch": None},
     )
     assert updated.status_code == 200, updated.text
-    assert updated.json()["agent_branch"] is None
+    assert updated.json()["branch"] is None
     frozen = boss.get(f"{base}/contracts/{sale['id']}").json()["sale"]
     assert frozen["agent_name"] == AGENT["agent_name"]
     assert frozen["agent_branch"] == AGENT["agent_branch"]
+    frozen_reservation = boss.get(f"{base}/reservations/{sale['reservation_id']}").json()[
+        "reservation"
+    ]
+    assert {key: frozen_reservation[key] for key in AGENT} == AGENT
+
+
+def test_agent_roster_is_independent_and_historical_assignment_blocks_delete(
+    boss: TestClient,
+    project_id: str,
+    operational_project: str,
+) -> None:
+    assert operational_project == project_id
+    base = sales_url(project_id)
+    first = boss.post(f"{base}/agents", json={"display_name": "Same Name"})
+    second = boss.post(f"{base}/agents", json={"display_name": "Same Name"})
+    assert first.status_code == second.status_code == 201
+    first_id, second_id = first.json()["id"], second.json()["id"]
+    assert first_id != second_id
+    assert {row["id"] for row in boss.get(f"{base}/agents").json()} >= {first_id, second_id}
+    assert (
+        boss.delete(f"{base}/agents/{second_id}", params={"reason": "Unused duplicate"}).status_code
+        == 204
+    )
+    buyer = boss.post(f"{base}/clients", json={"display_name": "Assigned", "agent_id": first_id})
+    assert buyer.status_code == 201, buyer.text
+    client_id = buyer.json()["id"]
+    assert boss.patch(f"{base}/clients/{client_id}", json={"agent_id": None}).status_code == 200
+    assert (
+        boss.delete(f"{base}/agents/{first_id}", params={"reason": "Unlinked"}).status_code == 409
+    )
+    assert boss.patch(f"{base}/agents/{first_id}", json={"is_active": False}).status_code == 200
+    assert (
+        boss.post(f"{base}/clients", json={"display_name": "New", "agent_id": first_id}).status_code
+        == 409
+    )
+    assert boss.get(f"{base}/agents/{first_id}").json()["is_active"] is False
+
+
+def test_agent_project_scope_and_input_validation(
+    boss: TestClient,
+    admin_client: TestClient,
+    project_id: str,
+    operational_project: str,
+    country_pack_id: str,
+    currency_id: str,
+) -> None:
+    assert operational_project == project_id
+    base = sales_url(project_id)
+    agent = boss.post(f"{base}/agents", json={"display_name": "Scoped"})
+    assert agent.status_code == 201, agent.text
+    agent_id = agent.json()["id"]
+    other = boss.post(
+        PROJECTS,
+        json=project_payload(country_pack_id, currency_id, code="AGENT-OTHER", name="Agent Other"),
+    )
+    assert other.status_code == 201, other.text
+    activated = admin_client.patch(
+        f"{PROJECTS}/{other.json()['id']}", json={"status": "predevelopment"}
+    )
+    assert activated.status_code == 200, activated.text
+    other_base = sales_url(other.json()["id"])
+    assert boss.get(f"{other_base}/agents/{agent_id}").status_code == 404
+    assert (
+        boss.patch(f"{other_base}/agents/{agent_id}", json={"display_name": "Wrong"}).status_code
+        == 404
+    )
+    assert (
+        boss.delete(f"{other_base}/agents/{agent_id}", params={"reason": "Wrong"}).status_code
+        == 404
+    )
+    other_agent = boss.post(f"{other_base}/agents", json={"display_name": "Other project"})
+    assert other_agent.status_code == 201, other_agent.text
+    buyer = boss.post(f"{base}/clients", json={"display_name": "Scoped buyer"})
+    assert buyer.status_code == 201, buyer.text
+    assert (
+        boss.patch(
+            f"{base}/clients/{buyer.json()['id']}",
+            json={"agent_id": other_agent.json()["id"]},
+        ).status_code
+        == 404
+    )
+    assert boss.post(
+        f"{other_base}/clients", json={"display_name": "Wrong", "agent_id": agent_id}
+    ).status_code in (404, 409)
+    assert boss.patch(f"{base}/agents/{agent_id}", json={"is_active": None}).status_code == 422
+    assert boss.delete(f"{base}/agents/{agent_id}", params={"reason": " "}).status_code == 422
 
 
 def test_master_removes_unsigned_sale_and_can_resell(
@@ -188,20 +298,53 @@ def test_agent_migration_round_trip(postgres: None) -> None:
         command.upgrade(config, "head")
 
 
+def test_agent_registry_migration_round_trip(postgres: None) -> None:
+    config = alembic_config()
+    try:
+        command.downgrade(config, "0035_merge_company_current_costs")
+        inspector = inspect(get_engine())
+        assert "sales_agents" not in inspector.get_table_names()
+        for table in ("clients", "reservations", "sale_contracts"):
+            assert "agent_id" not in {column["name"] for column in inspector.get_columns(table)}
+        command.upgrade(config, "head")
+        inspector = inspect(get_engine())
+        assert "sales_agents" in inspector.get_table_names()
+        for table in ("clients", "reservations", "sale_contracts"):
+            columns = {column["name"]: column for column in inspector.get_columns(table)}
+            assert columns["agent_id"]["nullable"]
+    finally:
+        command.upgrade(config, "head")
+
+
 def test_agent_correction_changes_only_selected_sale(
     boss: TestClient, project_id: str, submitted_sale: str, admin_client: TestClient
 ) -> None:
     base = f"{sales_url(project_id)}/contracts/{submitted_sale}"
+    agent = boss.post(
+        f"{sales_url(project_id)}/agents",
+        json={
+            "display_name": "Test Agent",
+            "country": "Jordan",
+            "branch": "Amman",
+            "branch_leader": "Test Leader",
+        },
+    )
+    assert agent.status_code == 201, agent.text
     before = boss.get(base).json()["sale"]
-    result = boss.put(f"{base}/agent", json={**AGENT, "reason": "Fill historical attribution"})
+    result = boss.put(
+        f"{base}/agent",
+        json={"agent_id": agent.json()["id"], "reason": "Fill historical attribution"},
+    )
     assert result.status_code == 200, result.text
     after = boss.get(base).json()["sale"]
     assert {key: after[key] for key in AGENT} == AGENT
     for key in ("status", "client_id", "unit_id", "total_contract_price", "reservation_id"):
         assert after[key] == before[key]
-    denied = admin_client.put(f"{base}/agent", json={**AGENT, "reason": "Not my authority"})
+    denied = admin_client.put(
+        f"{base}/agent", json={"agent_id": agent.json()["id"], "reason": "Not my authority"}
+    )
     assert denied.status_code == 403, denied.text
-    invalid = boss.put(f"{base}/agent", json={**AGENT, "reason": " "})
+    invalid = boss.put(f"{base}/agent", json={"agent_id": agent.json()["id"], "reason": " "})
     assert invalid.status_code == 422, invalid.text
 
 
@@ -222,7 +365,10 @@ def test_wrong_project_cannot_remove_or_correct_sale(
     assert other.status_code == 201, other.text
     url = f"{sales_url(other.json()['id'])}/contracts/{submitted_sale}"
     assert boss.delete(url, params={"reason": "Wrong scope"}).status_code == 404
-    assert boss.put(f"{url}/agent", json={**AGENT, "reason": "Wrong scope"}).status_code == 404
+    assert (
+        boss.put(f"{url}/agent", json={"agent_id": None, "reason": "Wrong scope"}).status_code
+        == 404
+    )
     assert (
         boss.get(f"{sales_url(project_id)}/contracts/{submitted_sale}").json()["sale"]["status"]
         == "signature_pending"
@@ -237,7 +383,11 @@ def test_master_can_complete_signed_sale_cancellation(
     base = sales_url(project_id)
     result = boss.post(
         f"{base}/contracts/{active_sale}/cancellation",
-        json={"initiated_by_party": "seller", "reason": "Cancel signed test transaction"},
+        json={
+            "initiated_by_party": "seller",
+            "reason": "Cancel signed test transaction",
+            **cancellation_terms_payload(boss, project_id, active_sale),
+        },
     )
     assert result.status_code == 201, result.text
     case_id = result.json()["id"]

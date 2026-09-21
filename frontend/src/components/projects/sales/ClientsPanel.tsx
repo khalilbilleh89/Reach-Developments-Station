@@ -10,6 +10,7 @@ import {
   Card,
   RecordPage,
   DataToolbar,
+  DraftBoundary,
   EmptyState,
   Field,
   FieldRow,
@@ -28,6 +29,28 @@ import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { kycLabel, kycTone } from "@/components/projects/sales/labels";
+import { AgentSelect } from "./AgentSelect";
+
+function BuyerAgentAssignment({projectId, buyer, onSaved}: {
+  projectId: string; buyer: SalesClient; onSaved: () => Promise<void>;
+}) {
+  const [value, setValue] = useState(buyer.agent_id ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return <DraftBoundary dirty={value !== (buyer.agent_id ?? "")} busy={busy}>
+    <form onSubmit={async event => {
+      event.preventDefault(); setBusy(true); setError(null);
+      try { await sales.updateClient(projectId, buyer.id, {agent_id: value || null}); await onSaved(); }
+      catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not update the Agent."); }
+      finally { setBusy(false); }
+    }}>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <AgentSelect projectId={projectId} value={value} onChange={setValue} currentId={buyer.agent_id} disabled={busy} />
+      {buyer.agent_id === null && buyer.agent_name ? <p className="field-hint">Legacy attribution: {buyer.agent_name}. It is not linked to an Agent record.</p> : null}
+      <FormActions><Button variant="primary" type="submit" disabled={busy || value === (buyer.agent_id ?? "")}>Save sales agent</Button></FormActions>
+    </form>
+  </DraftBoundary>;
+}
 
 /**
  * The project's buyers, and the named parties on each.
@@ -78,9 +101,6 @@ export function ClientsPanel({
     { name: "is_primary", label: "Primary purchaser", kind: "checkbox" },
     { name: "is_active", label: "Active party", kind: "checkbox" },
   ];
-  // The buyer's own facts first, then the selling team under a heading that
-  // says whose they are. Left unlabelled and interleaved with the buyer's
-  // contact details, "Country" reads as the purchaser's nationality.
   const clientFields: EditField[] = [
     { name: "display_name", label: "Buyer name" },
     { name: "email", label: "Email" }, { name: "phone", label: "Phone" },
@@ -88,10 +108,6 @@ export function ClientsPanel({
     { name: "preferred_language_code", label: "Language code" },
     { name: "kyc_status", label: "KYC status", kind: "select", options: ["not_started", "in_progress", "cleared", "rejected"].map(value => ({ value, label: value.replaceAll("_", " ") })) },
     { name: "is_active", label: "Active buyer", kind: "checkbox" },
-    { name: "agent_country", label: "Country", group: "Sales team", hint: "The selling team's, not the buyer's. Changing it affects this buyer's next reservation only." },
-    { name: "agent_branch", label: "Branch", group: "Sales team" },
-    { name: "agent_branch_leader", label: "Branch Leader", group: "Sales team" },
-    { name: "agent_name", label: "Agent", group: "Sales team" },
   ];
   const [party, setParty] = useState({
     name_as_identification: "",
@@ -189,7 +205,7 @@ export function ClientsPanel({
         initial={Object.fromEntries(clientFields.map(field => [field.name, asValue(editing[field.name as keyof SalesClient] as never)]))}
         onCancel={() => setEditing(null)} onSave={async changes => {
           await sales.updateClient(projectId, editing.id, changes); setEditing(null); await load(); await onChanged();
-        }} /></RecordPage> : null}
+        }} /><BuyerAgentAssignment key={editing.id} projectId={projectId} buyer={editing} onSaved={async () => { setEditing(null); await load(); await onChanged(); }} /></RecordPage> : null}
 
       {canWrite && registering ? (
         <RecordPage title="Register buyer" onClose={() => setRegistering(false)}>
@@ -238,11 +254,6 @@ export function ClientsPanel({
                 <th scope="row" className="mono">
                   {client.client_number}
                 </th>
-                {/* The buyer's name, and nothing about the salesperson. The
-                    four agent_* fields used to sit under it as a second line,
-                    which read as though the purchaser had a country and a
-                    branch. They are the selling team's, and they have their own
-                    register in Agents. */}
                 <td className="buyer-identity">{client.display_name}</td>
                 <td>
                   <Badge tone={kycTone(client.kyc_status)}>{kycLabel(client.kyc_status)}</Badge>

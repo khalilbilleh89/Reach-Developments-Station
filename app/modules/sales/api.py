@@ -95,6 +95,9 @@ from app.modules.sales.schemas import (
     SalePartyDetailRead,
     SalePartyRead,
     SaleRead,
+    SalesAgentCreateRequest,
+    SalesAgentRead,
+    SalesAgentUpdateRequest,
     SalesHistoryRead,
     SalesHistoryRow,
     SalesPolicyRead,
@@ -272,7 +275,7 @@ def update_sale_agent(
         sale_id=sale_id,
         actor=actor,
         reason=payload.reason,
-        fields=payload.model_dump(exclude={"reason"}),
+        agent_id=payload.agent_id,
     )
     return SaleRead.model_validate(sale)
 
@@ -310,6 +313,77 @@ def write_policy(
 # --------------------------------------------------------------------------- #
 # Clients
 # --------------------------------------------------------------------------- #
+
+
+@router.get("/{project_id}/sales/agents", response_model=list[SalesAgentRead])
+def list_agents(
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+    active_only: bool = False,
+    search: Annotated[str, Query(max_length=200)] = "",
+) -> list[SalesAgentRead]:
+    return [
+        SalesAgentRead.model_validate(row)
+        for row in agents.list_agents(
+            session, project=project, actor=actor, active_only=active_only, search=search
+        )
+    ]
+
+
+@router.post("/{project_id}/sales/agents", response_model=SalesAgentRead, status_code=201)
+def create_agent(
+    payload: SalesAgentCreateRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> SalesAgentRead:
+    return SalesAgentRead.model_validate(
+        agents.create_agent(session, project=project, actor=actor, fields=payload.model_dump())
+    )
+
+
+@router.get("/{project_id}/sales/agents/{agent_id}", response_model=SalesAgentRead)
+def read_agent(
+    agent_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> SalesAgentRead:
+    return SalesAgentRead.model_validate(
+        agents.get_agent(session, project=project, actor=actor, agent_id=agent_id)
+    )
+
+
+@router.patch("/{project_id}/sales/agents/{agent_id}", response_model=SalesAgentRead)
+def update_agent(
+    agent_id: uuid.UUID,
+    payload: SalesAgentUpdateRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> SalesAgentRead:
+    return SalesAgentRead.model_validate(
+        agents.update_agent(
+            session,
+            project=project,
+            actor=actor,
+            agent_id=agent_id,
+            fields=payload.model_dump(exclude_unset=True),
+        )
+    )
+
+
+@router.delete("/{project_id}/sales/agents/{agent_id}", status_code=204)
+def delete_agent(
+    agent_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+    reason: Annotated[str, Query(min_length=1, max_length=500)],
+) -> Response:
+    agents.delete_agent(session, project=project, actor=actor, agent_id=agent_id, reason=reason)
+    return Response(status_code=204)
 
 
 def _client_read(actor: ActorContext, client: Client) -> ClientRead | ClientSummaryRead:

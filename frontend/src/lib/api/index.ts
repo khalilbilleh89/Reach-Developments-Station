@@ -109,6 +109,7 @@ import type {
   SaleContract,
   SaleDetail,
   SalesClient,
+  SalesAgent,
   ClientParty,
   HandoverDetail,
   HandoverClearance,
@@ -873,6 +874,16 @@ export const pricing = {
  * sends inputs and displays what comes back.
  */
 export const sales = {
+  agents: (projectId: string, query: Record<string, string> = {}) =>
+    get<SalesAgent[]>(`/projects/${projectId}/sales/agents?${new URLSearchParams(query)}`),
+  agent: (projectId: string, id: string) =>
+    get<SalesAgent>(`/projects/${projectId}/sales/agents/${id}`),
+  createAgent: (projectId: string, body: Record<string, unknown>) =>
+    post<SalesAgent>(`/projects/${projectId}/sales/agents`, body),
+  updateAgent: (projectId: string, id: string, body: Record<string, unknown>) =>
+    patch<SalesAgent>(`/projects/${projectId}/sales/agents/${id}`, body),
+  deleteAgent: (projectId: string, id: string, reason: string) =>
+    remove(`/projects/${projectId}/sales/agents/${id}?${new URLSearchParams({reason})}`),
   unitOptions: (projectId: string, query: Record<string, string> = {}) =>
     get<{items: SalesUnitOption[]; next_offset: number | null}>(`/projects/${projectId}/sales/unit-options?${new URLSearchParams(query)}`),
   transactions: (projectId: string, query: Record<string, string> = {}) =>

@@ -42,6 +42,7 @@ from tests.modules.conftest import (
     SETTINGS,
     add_pool,
     approve_areas,
+    cancellation_terms_payload,
     cover_required_pools,
     create_version,
     economics_url,
@@ -262,6 +263,7 @@ class TestACancelledButSignedSale:
             json={
                 "initiated_by_party": "buyer",
                 "reason": "Buyer withdrew after signature",
+                **cancellation_terms_payload(sales_ops_client, project_id, active_sale),
             },
         )
         assert cancelled.status_code == 201, cancelled.text

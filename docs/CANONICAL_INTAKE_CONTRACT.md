@@ -112,6 +112,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `technical_specifications` | Project delivery specifications maintained through Construction; not imported by a legacy bundle. |
 | `inventory_common_areas` | Measured shared areas managed through Inventory Common Areas; not imported by a legacy bundle. |
 | `inventory_options` | Project-local inventory choices, administered through project Configuration before intake; a bundle may reference approved codes but must not define them. |
+| `sales_agents` | Project-local commercial roster, administered before buyer assignment; a legacy bundle must not infer Agent identity from matching text names. |
 | `tax_rules` | Configuration in force at a date. |
 | `audit_events` | Reach writes it. The cutover writes its own batch rows here and reads nothing from the source. |
 | `projects` | **Corrected.** Creating one is a set of governance decisions — jurisdiction, base and reporting currency, fiscal year, manager — not data anybody extracts. The manifest *names* a project; it does not bring one into being. |

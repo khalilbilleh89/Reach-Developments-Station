@@ -1296,6 +1296,7 @@ def settle_and_clear_collections(
 #: into the schema.
 _HISTORICAL_TABLES = frozenset(
     {
+        "sale_contracts",
         "payment_plan_versions",
         "collection_receipts",
         "collection_receipt_allocations",

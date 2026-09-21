@@ -12,6 +12,7 @@ function mount(path, component, dependencies, props) {
   const react = {
     useRef(initial) { const i = cursor++; slots[i] ??= { current: initial }; return slots[i]; },
     useState(initial) { const i = cursor++; slots[i] ??= { value: initial }; return [slots[i].value, value => { slots[i].value = typeof value === "function" ? value(slots[i].value) : value; }]; },
+    useCallback(fn) { return fn; },
     useEffect(fn, deps) { const i = cursor++; if (!slots[i] || deps.some((value, n) => value !== slots[i].deps[n])) effects.push(() => { slots[i]?.cleanup?.(); slots[i] = { deps, cleanup: fn() }; }); },
   };
   const code = ts.transpileModule(readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8"), {
@@ -85,44 +86,62 @@ test("Buyers no longer prints the selling team under the purchaser's name", () =
   }
 });
 
-test("Agents keeps attribution separate from the buyer and invents no agent record", () => {
+test("Agents reads and creates independent roster records", () => {
   const source = readFileSync(new URL("../src/components/projects/sales/AgentsPanel.tsx", import.meta.url), "utf8");
-  // Editing goes through the existing client API; there is no agent endpoint.
-  assert.ok(source.includes("sales.updateClient"));
-  assert.ok(!/sales\.(createAgent|agents|updateAgent)/.test(source));
-  // Attribution is the selling team, and the screen says so rather than
-  // leaving "Country" to be read as the buyer's nationality.
-  assert.ok(source.includes("not the buyer"));
-  // An unset field stays unset. Nothing is defaulted or inferred.
-  assert.ok(source.includes("Not recorded"));
+  for (const call of ["sales.agents", "sales.createAgent", "sales.updateAgent", "sales.deleteAgent"]) assert.ok(source.includes(call), call);
+  assert.ok(!source.includes("sales.clients"));
+  assert.ok(source.includes("Add agent"));
+  assert.ok(source.includes("Agent can exist before any buyer or sale"));
 });
 
-test("Sale agent correction preserves all four fields on failure and refreshes after success", async () => {
+test("Buyer Agent dropdown uses UUIDs, keeps No agent, and excludes unrelated inactive Agents", async () => {
+  const selected = [];
+  const rows = [
+    {id: "agent-a", display_name: "Ahmad Saleh", branch: "Amman", is_active: true},
+    {id: "agent-b", display_name: "Ahmad Saleh", branch: "Aqaba", is_active: true},
+    {id: "agent-old", display_name: "Retired", branch: "Dubai", is_active: false},
+  ];
+  const render = mount("components/projects/sales/AgentSelect.tsx", "AgentSelect", {
+    "@/lib/api": {ApiError: Error, sales: {agents: async () => rows}},
+  }, {projectId: "project", value: "", currentId: null, onChange: id => selected.push(id)});
+  render(); await settle();
+  const select = nodes(render()).find(node => node.type === "select");
+  const options = nodes(select).filter(node => node.type === "option");
+  assert.deepEqual(options.map(option => option.props.value), ["", "agent-a", "agent-b"]);
+  assert.equal(options[0].props.children, "No agent");
+  assert.match(options[1].props.children, /Amman/);
+  assert.match(options[2].props.children, /Aqaba/);
+  select.props.onChange({target: {value: "agent-b"}});
+  assert.deepEqual(selected, ["agent-b"]);
+});
+
+test("Sale Agent correction selects a stable ID, retains draft on failure and refreshes", async () => {
   const calls = []; let fail = true; let changed = 0;
   const render = mount("components/projects/sales/SaleAgent.tsx", "SaleAgent", {
     "@/lib/api": {ApiError: Error, sales: {updateSaleAgent: async (...args) => {calls.push(args); if (fail) throw new Error("Try again");}}},
-    "./AgentFields": {AgentFields: "AgentFields", agentLabels: {agent_country: "Country", agent_branch: "Branch", agent_branch_leader: "Branch Leader", agent_name: "Agent"}, agentPayload: value => value},
+    "./AgentSelect": {AgentSelect: "AgentSelect"},
   }, {projectId: "project", record: {id: "sale", status: "signature_pending"}, isSale: true, canWrite: true, onChanged: async () => {changed++;}});
   render().props.actions.props.onClick();
-  nodes(render()).find(node => node.type === "AgentFields").props.onChange({agent_country: "Jordan", agent_branch: "Amman", agent_branch_leader: "Leader", agent_name: "Agent"});
+  nodes(render()).find(node => node.type === "AgentSelect").props.onChange("agent-uuid");
   field(render(), "Reason for change").props.onChange({target: {value: "Historical attribution"}});
   await nodes(render()).find(node => node.type === "form").props.onSubmit({preventDefault() {}});
   assert.equal(changed, 0);
-  assert.equal(nodes(render()).find(node => node.type === "AgentFields").props.value.agent_name, "Agent");
+  assert.equal(nodes(render()).find(node => node.type === "AgentSelect").props.value, "agent-uuid");
   assert.ok(nodes(render()).some(node => node.type === "Notice" && node.props.children === "Try again"));
   fail = false;
   await nodes(render()).find(node => node.type === "form").props.onSubmit({preventDefault() {}});
   assert.equal(changed, 1);
   assert.equal(calls[1][0], "project");
   assert.equal(calls[1][1], "sale");
-  assert.equal(calls[1][2].agent_branch_leader, "Leader");
+  assert.equal(calls[1][2].agent_id, "agent-uuid");
+  assert.equal(calls[1][2].reason, "Historical attribution");
 });
 
 test("new buyer and sold commitment use one request; failure preserves inputs", async () => {
   class ApiError extends Error {}
   const calls = []; let saved = false; let refuse = true;
   const render = mount("components/projects/sales/RegisterBuyerSaleForm.tsx", "RegisterBuyerSaleForm", {
-    "./AgentFields": { AgentFields: "AgentFields", emptyAgent: {agent_country: "", agent_branch: "", agent_branch_leader: "", agent_name: ""}, agentPayload: value => value },
+    "./AgentSelect": { AgentSelect: "AgentSelect" },
     "./SalesPriceInput": { SalesPriceInput: "SalesPriceInput" },
     "@/components/ui/ValidationSummary": { ValidationSummary: "ValidationSummary" },
     "@/lib/api": { ApiError, sales: {
@@ -133,17 +152,18 @@ test("new buyer and sold commitment use one request; failure preserves inputs", 
   }, { projectId: "project", unitId: "unit", unitOption: {unit_id: "unit", unit_price_version_id: "version", reference_price_ex_tax: "250000.00", currency_id: "EUR"}, onSaved: () => { saved = true; }, onCancel() {} });
   render(); await settle();
   field(render(), "Full buyer name").props.onChange({ target: { value: "Test Buyer" } });
-  nodes(render()).find(node => node.type === "AgentFields").props.onChange({agent_country: "Jordan", agent_branch: "Amman", agent_branch_leader: "Leader", agent_name: "Agent"});
+  nodes(render()).find(node => node.type === "AgentSelect").props.onChange("agent-uuid");
   field(render(), "Owner confirmation / reason").props.onChange({ target: { value: "Confirmed sale" } });
   nodes(render()).find(node => node.type === "SalesPriceInput").props.onPreview({sales_price_ex_tax: "250000.00"});
   await nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].body.buyer.sole_purchaser_name, "Test Buyer");
   assert.equal(calls[0].body.unit_id, "unit");
-  assert.equal(calls[0].body.buyer.agent_name, "Agent");
+  assert.equal(calls[0].body.buyer.agent_id, "agent-uuid");
+  assert.equal(calls[0].body.buyer.agent_name, undefined);
   assert.equal(saved, false);
   assert.equal(field(render(), "Full buyer name").props.value, "Test Buyer");
-  assert.equal(nodes(render()).find(node => node.type === "AgentFields").props.value.agent_branch, "Amman");
+  assert.equal(nodes(render()).find(node => node.type === "AgentSelect").props.value, "agent-uuid");
   assert.ok(nodes(render()).some(node => node.type === "ValidationSummary" && node.props.error?.message === "Already committed"));
   refuse = false;
   await nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });

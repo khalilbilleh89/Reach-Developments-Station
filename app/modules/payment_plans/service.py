@@ -604,6 +604,10 @@ def _delete_draft_rows(
                 )
             )
             session.delete(version)
+            # There is no ORM relationship to order these deletes. Flush the
+            # version before deleting its parent so the project-scoped FK sees
+            # no remaining child row.
+            session.flush()
             if delete_plan is not None:
                 session.delete(delete_plan)
             session.flush()

@@ -1106,10 +1106,13 @@ class TestACancelledContractLeavesActiveCollections:
         assert before.active_sold_units == 1 and before.cancelled_sales == 0
         assert after.active_sold_units == 0 and after.cancelled_sales == 1
         assert next(m.amount for m in after.money if m.metric_code == "contracted_value") == 0
-        assert next(m.amount for m in after.money if m.metric_code == "confirmed_receipts") == (
-            next(m.amount for m in before.money if m.metric_code == "confirmed_receipts")
-            == Decimal("20000")
+        before_receipts = next(
+            m.amount for m in before.money if m.metric_code == "confirmed_receipts"
         )
+        after_receipts = next(
+            m.amount for m in after.money if m.metric_code == "confirmed_receipts"
+        )
+        assert before_receipts == after_receipts == Decimal("20000")
         assert next(m.amount for m in after.money if m.metric_code == "overdue_outstanding") == 0
 
     def test_the_receivable_was_real_before_the_unwinding(
