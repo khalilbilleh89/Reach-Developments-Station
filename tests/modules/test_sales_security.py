@@ -157,6 +157,23 @@ def test_a_contract_from_another_project_answers_as_missing(
     assert response.status_code == 404
 
 
+def test_cancellation_cash_preview_cannot_cross_projects(
+    sales_ops_client: TestClient,
+    admin_client: TestClient,
+    other_project_id: str,
+    sales_ops: User,
+    active_sale: str,
+) -> None:
+    grant_access(admin_client, other_project_id, sales_ops)
+
+    response = sales_ops_client.post(
+        f"{sales_url(other_project_id)}/contracts/{active_sale}/cancellation-preview",
+        json={"deduction_rate_fraction": "0.10"},
+    )
+
+    assert response.status_code == 404
+
+
 def test_a_client_from_another_project_cannot_be_reserved_against(
     sales_ops_client: TestClient,
     admin_client: TestClient,
@@ -360,6 +377,12 @@ def test_an_auditor_reads_everything_and_writes_nothing(
 
     assert read.status_code == 200, read.text
     assert write.status_code == 403
+
+    preview = auditor.post(
+        f"{sales_url(project_id)}/contracts/{active_sale}/cancellation-preview",
+        json={"deduction_rate_fraction": "0.10"},
+    )
+    assert preview.status_code == 403
 
 
 def test_a_hidden_unit_cannot_be_reserved_through_its_identifier(

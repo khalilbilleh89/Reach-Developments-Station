@@ -33,7 +33,13 @@ from fastapi import APIRouter, Query, Response, status
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.projects.models import Project
 from app.modules.sales import agents, deletion, registration, removal, service, workspace
-from app.modules.sales.models import Client, HandoverRecord, Reservation, SaleContract
+from app.modules.sales.models import (
+    Client,
+    HandoverRecord,
+    Reservation,
+    SaleCancellation,
+    SaleContract,
+)
 from app.modules.sales.permissions import (
     SalesProject,
     may_read_client_pii,
@@ -49,6 +55,9 @@ from app.modules.sales.schemas import (
     CancellationCompleteRequest,
     CancellationCreateRequest,
     CancellationRead,
+    CancellationTermsApprovalRequest,
+    CancellationTermsPreviewRead,
+    CancellationTermsPreviewRequest,
     ClearanceRead,
     ClientCreateRequest,
     ClientRead,
@@ -915,6 +924,27 @@ def _sale_read(session: DbSession, sale: SaleContract) -> SaleRead:
     return SaleRead.model_validate({**data, **service.sale_gross_price(session, sale=sale)})
 
 
+def _cancellation_read(
+    session: DbSession, *, sale: SaleContract, cancellation: SaleCancellation
+) -> CancellationRead:
+    data = CancellationRead.model_validate(cancellation).model_dump()
+    terms = service.cancellation_terms_for_read(session, cancellation=cancellation, sale=sale)
+    if terms is None:
+        return CancellationRead.model_validate(data)
+    return CancellationRead.model_validate(
+        {
+            **data,
+            "currency_id": terms.currency_id,
+            "eligible_collected_amount": terms.eligible_collected_amount,
+            "deduction_rate_fraction": terms.deduction_rate_fraction,
+            "deduction_amount": terms.deduction_amount,
+            "forfeiture_amount": terms.deduction_amount,
+            "refund_due_amount": terms.refund_due_amount,
+            "financial_approval_required": terms.approval_required,
+        }
+    )
+
+
 def _sale_detail(
     session: DbSession, actor: ActorContext, project: Project, sale: SaleContract
 ) -> SaleDetailRead:
@@ -935,7 +965,9 @@ def _sale_detail(
         ],
         legal=_legal_timeline(session, sale),
         cancellation=(
-            CancellationRead.model_validate(cancellation) if cancellation is not None else None
+            _cancellation_read(session, sale=sale, cancellation=cancellation)
+            if cancellation is not None
+            else None
         ),
         handover=_handover_detail(session, project, sale),
         quote_snapshot=sale.reservation_quote_snapshot_json or {},
@@ -1192,7 +1224,40 @@ def read_cancellation(
 ) -> CancellationRead | None:
     sale = service.get_sale(session, project=project, sale_id=sale_id, actor=actor)
     cancellation = service.get_cancellation(session, project=project, sale=sale)
-    return CancellationRead.model_validate(cancellation) if cancellation is not None else None
+    return (
+        _cancellation_read(session, sale=sale, cancellation=cancellation)
+        if cancellation is not None
+        else None
+    )
+
+
+@router.post(
+    "/{project_id}/sales/contracts/{sale_id}/cancellation-preview",
+    response_model=CancellationTermsPreviewRead,
+    summary="Calculate cancellation deduction and refund from confirmed cash",
+)
+def preview_cancellation_terms(
+    sale_id: uuid.UUID,
+    payload: CancellationTermsPreviewRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> CancellationTermsPreviewRead:
+    terms = service.preview_cancellation_terms(
+        session,
+        project=project,
+        sale_id=sale_id,
+        actor=actor,
+        deduction_rate_fraction=payload.deduction_rate_fraction,
+    )
+    return CancellationTermsPreviewRead(
+        sale_id=sale_id,
+        currency_id=terms.currency_id,
+        eligible_collected_amount=terms.eligible_collected_amount,
+        deduction_rate_fraction=terms.deduction_rate_fraction,
+        deduction_amount=terms.deduction_amount,
+        refund_due_amount=terms.refund_due_amount,
+    )
 
 
 @router.post(
@@ -1215,7 +1280,8 @@ def start_cancellation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return CancellationRead.model_validate(cancellation)
+    sale = service.get_sale(session, project=project, sale_id=sale_id, actor=actor)
+    return _cancellation_read(session, sale=sale, cancellation=cancellation)
 
 
 @router.post(
@@ -1225,7 +1291,7 @@ def start_cancellation(
 )
 def approve_cancellation_terms(
     cancellation_id: uuid.UUID,
-    payload: ReasonRequest,
+    payload: CancellationTermsApprovalRequest,
     session: DbSession,
     actor: ActiveActor,
     project: SalesProject,
@@ -1235,9 +1301,12 @@ def approve_cancellation_terms(
         project=project,
         cancellation_id=cancellation_id,
         actor=actor,
-        reason=payload.reason,
+        **payload.model_dump(),
     )
-    return CancellationRead.model_validate(cancellation)
+    sale = service.get_sale(
+        session, project=project, sale_id=cancellation.sale_contract_id, actor=actor
+    )
+    return _cancellation_read(session, sale=sale, cancellation=cancellation)
 
 
 @router.post(
@@ -1259,7 +1328,10 @@ def advance_cancellation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return CancellationRead.model_validate(cancellation)
+    sale = service.get_sale(
+        session, project=project, sale_id=cancellation.sale_contract_id, actor=actor
+    )
+    return _cancellation_read(session, sale=sale, cancellation=cancellation)
 
 
 @router.post(
@@ -1281,7 +1353,10 @@ def complete_cancellation(
         actor=actor,
         **payload.model_dump(exclude_unset=True),
     )
-    return CancellationRead.model_validate(cancellation)
+    sale = service.get_sale(
+        session, project=project, sale_id=cancellation.sale_contract_id, actor=actor
+    )
+    return _cancellation_read(session, sale=sale, cancellation=cancellation)
 
 
 # --------------------------------------------------------------------------- #

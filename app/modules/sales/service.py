@@ -63,6 +63,7 @@ from app.modules.access.dependencies import ActorContext
 from app.modules.access.models import User
 from app.modules.audit.models import AuditEvent
 from app.modules.audit.service import record_event
+from app.modules.collections import read as collections_read
 from app.modules.inventory import custom_fields as inventory_fields
 from app.modules.inventory import service as inventory_service
 from app.modules.inventory.models import (
@@ -267,6 +268,10 @@ _CANCELLATION_FIELDS = (
     "legal_withdrawal_status",
     "unit_return_date",
 )
+
+_CANCELLATION_CASH_BASIS = "eligible_collected_amount"
+_CANCELLATION_DEDUCTION_RATE = "deduction_rate_fraction"
+_CANCELLATION_DEDUCTION_AMOUNT = "deduction_amount"
 _HANDOVER_FIELDS = (
     "status",
     "readiness_date",
@@ -3732,6 +3737,163 @@ def reverse_legal_event(
 # Cancellation
 # --------------------------------------------------------------------------- #
 
+
+@dataclass(frozen=True, slots=True)
+class CancellationTerms:
+    """Server-derived financial terms for cancelling one contract."""
+
+    currency_id: uuid.UUID
+    eligible_collected_amount: Decimal
+    deduction_rate_fraction: Decimal
+    deduction_amount: Decimal
+    refund_due_amount: Decimal
+
+    @property
+    def approval_required(self) -> bool:
+        return self.deduction_amount > ZERO or self.refund_due_amount > ZERO
+
+    def audit_values(self) -> dict[str, Any]:
+        return {
+            "currency_id": self.currency_id,
+            _CANCELLATION_CASH_BASIS: self.eligible_collected_amount,
+            _CANCELLATION_DEDUCTION_RATE: self.deduction_rate_fraction,
+            _CANCELLATION_DEDUCTION_AMOUNT: self.deduction_amount,
+            "refund_due_amount": self.refund_due_amount,
+        }
+
+
+def calculate_cancellation_terms(
+    *,
+    currency_id: uuid.UUID,
+    eligible_collected_amount: Decimal,
+    deduction_rate_fraction: Decimal,
+) -> CancellationTerms:
+    """Apply one exact fractional deduction to Collections-owned cash."""
+    if not deduction_rate_fraction.is_finite() or not ZERO <= deduction_rate_fraction <= ONE:
+        raise ValidationError("The cancellation deduction must be between 0% and 100%.")
+    basis = money(eligible_collected_amount)
+    deduction = money(basis * deduction_rate_fraction)
+    refund = money(basis - deduction)
+    if deduction + refund != basis:  # pragma: no cover - guards the stated invariant
+        raise ConflictError("Cancellation terms did not reconcile to confirmed cash.")
+    return CancellationTerms(
+        currency_id=currency_id,
+        eligible_collected_amount=basis,
+        deduction_rate_fraction=deduction_rate_fraction,
+        deduction_amount=deduction,
+        refund_due_amount=refund,
+    )
+
+
+def _current_cancellation_terms(
+    session: Session,
+    *,
+    sale: SaleContract,
+    deduction_rate_fraction: Decimal,
+) -> CancellationTerms:
+    cash = collections_read.eligible_cancellation_cash(
+        session,
+        project_id=sale.project_id,
+        sale_contract_id=sale.id,
+        currency_id=sale.currency_id,
+    )
+    return calculate_cancellation_terms(
+        currency_id=cash.currency_id,
+        eligible_collected_amount=cash.eligible_collected_amount,
+        deduction_rate_fraction=deduction_rate_fraction,
+    )
+
+
+def preview_cancellation_terms(
+    session: Session,
+    *,
+    project: Project,
+    sale_id: uuid.UUID,
+    actor: ActorContext,
+    deduction_rate_fraction: Decimal,
+) -> CancellationTerms:
+    """Preview current cash without freezing it; the final write rechecks it."""
+    permissions.require_cancellation_writer(actor)
+    sale = get_sale(session, project=project, sale_id=sale_id, actor=actor)
+    return _current_cancellation_terms(
+        session, sale=sale, deduction_rate_fraction=deduction_rate_fraction
+    )
+
+
+def _terms_audit_event(
+    session: Session, *, cancellation_id: uuid.UUID, approved: bool
+) -> AuditEvent | None:
+    action = (
+        "sale_cancellation.financial_terms_approved" if approved else "sale_cancellation.started"
+    )
+    return session.scalars(
+        select(AuditEvent)
+        .where(
+            AuditEvent.entity_type == ENTITY_CANCELLATION,
+            AuditEvent.entity_id == cancellation_id,
+            AuditEvent.action == action,
+        )
+        .order_by(AuditEvent.occurred_at.desc(), AuditEvent.id.desc())
+    ).first()
+
+
+def _audited_deduction_rate(session: Session, *, cancellation: SaleCancellation) -> Decimal | None:
+    event = _terms_audit_event(
+        session,
+        cancellation_id=cancellation.id,
+        approved=cancellation.financial_approved_at is not None,
+    )
+    value = (event.after_data or {}).get(_CANCELLATION_DEDUCTION_RATE) if event else None
+    return Decimal(str(value)) if value is not None else None
+
+
+def cancellation_terms_for_read(
+    session: Session,
+    *,
+    cancellation: SaleCancellation,
+    sale: SaleContract,
+) -> CancellationTerms | None:
+    """Return live proposed terms, or the immutable terms the checker approved."""
+    rate = _audited_deduction_rate(session, cancellation=cancellation)
+    if rate is None:
+        return None  # Historical manual terms pre-date the percentage contract.
+    if cancellation.financial_approved_at is None:
+        return _current_cancellation_terms(session, sale=sale, deduction_rate_fraction=rate)
+
+    event = _terms_audit_event(session, cancellation_id=cancellation.id, approved=True)
+    after = (event.after_data or {}) if event is not None else {}
+    basis = after.get(_CANCELLATION_CASH_BASIS)
+    deduction = after.get(_CANCELLATION_DEDUCTION_AMOUNT)
+    refund = after.get("refund_due_amount")
+    if basis is None or deduction is None or refund is None:
+        return None
+    return CancellationTerms(
+        currency_id=sale.currency_id,
+        eligible_collected_amount=Decimal(str(basis)),
+        deduction_rate_fraction=rate,
+        deduction_amount=Decimal(str(deduction)),
+        refund_due_amount=Decimal(str(refund)),
+    )
+
+
+def require_cancellation_cash_change_allowed(
+    session: Session, *, sale_contract_id: uuid.UUID
+) -> None:
+    """Keep confirmed cash fixed once a cancellation checker has signed it."""
+    approved = session.scalar(
+        select(SaleCancellation.id).where(
+            SaleCancellation.sale_contract_id == sale_contract_id,
+            SaleCancellation.status != CANCELLATION_WITHDRAWN,
+            SaleCancellation.financial_approved_at.is_not(None),
+        )
+    )
+    if approved is not None:
+        raise ConflictError(
+            "Cancellation financial terms have already been approved. Buyer cash cannot "
+            "change unless the open cancellation is withdrawn."
+        )
+
+
 #: How a cancellation case may move. Operational rather than jurisprudential:
 #: notice, the cure period, the money decision, the registry unwind, the unit
 #: coming back. ``withdrawn`` is the case itself being dropped — the parties
@@ -3841,8 +4003,8 @@ def start_cancellation(
     notice_date: date | None = None,
     cure_deadline: date | None = None,
     reason_code: str | None = None,
-    forfeiture_amount: Decimal | None = None,
-    refund_due_amount: Decimal | None = None,
+    deduction_rate_fraction: Decimal,
+    expected_eligible_collected_amount: Decimal,
 ) -> SaleCancellation:
     """Open the controlled process that ends a contract.
 
@@ -3852,9 +4014,9 @@ def start_cancellation(
     a money decision and, where the registry is involved, a withdrawal — and the
     unit stays committed until both are done.
 
-    ``refund_due_amount`` is what the contract says is owed. There is no
-    ``refund_paid``: a refund that was actually paid is a payment transaction,
-    and PR-MVP-07 owns those.
+    The percentage is the commercial/legal decision. Collections supplies the
+    cash basis and this service derives the two stored amounts. There is no
+    ``refund_paid``: actual repayment remains a Collections transaction.
     """
     permissions.require_cancellation_writer(actor)
     sale = get_sale(session, project=project, sale_id=sale_id, actor=actor)
@@ -3873,8 +4035,14 @@ def start_cancellation(
 
     today = inventory_fields.business_today()
     initiation_date = initiation_date or today
-    forfeiture = _amount(forfeiture_amount) if forfeiture_amount is not None else None
-    refund = _amount(refund_due_amount) if refund_due_amount is not None else None
+    terms = _current_cancellation_terms(
+        session, sale=sale, deduction_rate_fraction=deduction_rate_fraction
+    )
+    if terms.eligible_collected_amount != money(expected_eligible_collected_amount):
+        raise ConflictError(
+            "Confirmed cash changed while you were preparing the cancellation. "
+            "Review the updated refund terms."
+        )
     registry = _recorded_event_types(session, sale_id=sale.id) & REGISTRY_ENGAGED_EVENTS
 
     cancellation = SaleCancellation(
@@ -3887,14 +4055,12 @@ def start_cancellation(
         reason_code=reason_code,
         reason=_require_reason(reason, detail="Say why the contract is being cancelled."),
         status=CANCELLATION_NOTICE,
-        forfeiture_amount=forfeiture,
-        refund_due_amount=refund,
+        forfeiture_amount=terms.deduction_amount,
+        refund_due_amount=terms.refund_due_amount,
         # Money changing hands on the way out is a decision somebody has to
         # sign. Where nothing is forfeited and nothing is owed, there is
         # nothing to approve and no signature is invented.
-        financial_approval_required=bool(
-            (forfeiture and forfeiture > ZERO) or (refund and refund > ZERO)
-        ),
+        financial_approval_required=terms.approval_required,
         legal_withdrawal_required=bool(registry),
         legal_withdrawal_status=WITHDRAWAL_PENDING if registry else WITHDRAWAL_NOT_REQUIRED,
         remarketing_required=True,
@@ -3913,7 +4079,7 @@ def start_cancellation(
         correlation_id=actor.correlation_id,
         actor_user_id=actor.user_id,
         reason=cancellation.reason,
-        after=_snapshot(cancellation, _CANCELLATION_FIELDS),
+        after={**_snapshot(cancellation, _CANCELLATION_FIELDS), **terms.audit_values()},
     )
     record_event(
         session,
@@ -3937,6 +4103,7 @@ def approve_cancellation_terms(
     cancellation_id: uuid.UUID,
     actor: ActorContext,
     reason: str,
+    expected_eligible_collected_amount: Decimal | None,
 ) -> SaleCancellation:
     """Sanction the forfeiture and refund the cancellation proposes.
 
@@ -3945,17 +4112,37 @@ def approve_cancellation_terms(
     it.
     """
     permissions.require_financial_approver(actor)
+    project = lock_project(session, project.id)
     cancellation = _lock_cancellation(
         session, project_id=project.id, cancellation_id=cancellation_id
     )
-    get_sale(session, project=project, sale_id=cancellation.sale_contract_id, actor=actor)
-    if not cancellation.financial_approval_required:
-        raise ConflictError("This cancellation has no financial terms to approve.")
+    sale = get_sale(session, project=project, sale_id=cancellation.sale_contract_id, actor=actor)
     if cancellation.financial_approved_at is not None:
         raise ConflictError("These financial terms have already been approved.")
     permissions.require_different_checker(actor, maker_user_id=cancellation.created_by_user_id)
 
+    rate = _audited_deduction_rate(session, cancellation=cancellation)
+    if rate is None:
+        if not cancellation.financial_approval_required:
+            raise ConflictError("This cancellation has no financial terms to approve.")
+        terms = None
+    else:
+        terms = _current_cancellation_terms(session, sale=sale, deduction_rate_fraction=rate)
+        if expected_eligible_collected_amount is None or (
+            terms.eligible_collected_amount != money(expected_eligible_collected_amount)
+        ):
+            raise ConflictError(
+                "Confirmed cash changed while you were reviewing the cancellation. "
+                "Review the updated refund terms."
+            )
+        if not terms.approval_required:
+            raise ConflictError("This cancellation has no financial terms to approve.")
+
     before = _snapshot(cancellation, _CANCELLATION_FIELDS)
+    if terms is not None:
+        cancellation.forfeiture_amount = terms.deduction_amount
+        cancellation.refund_due_amount = terms.refund_due_amount
+        cancellation.financial_approval_required = True
     cancellation.financial_approved_by_user_id = actor.user_id
     cancellation.financial_approved_at = _now()
     _flush(session)
@@ -3968,7 +4155,10 @@ def approve_cancellation_terms(
         actor_user_id=actor.user_id,
         reason=_require_reason(reason, detail="Say why these terms were approved."),
         before=before,
-        after=_snapshot(cancellation, _CANCELLATION_FIELDS),
+        after={
+            **_snapshot(cancellation, _CANCELLATION_FIELDS),
+            **(terms.audit_values() if terms is not None else {}),
+        },
     )
     session.commit()
     session.refresh(cancellation)
@@ -4017,8 +4207,17 @@ def advance_cancellation(
                 "The registry withdrawal has not been recorded. The unit cannot be "
                 "returned while the register still says otherwise."
             )
-        if cancellation.financial_approval_required and cancellation.financial_approved_at is None:
-            raise ConflictError("The cancellation's financial terms have not been approved.")
+        if cancellation.financial_approved_at is None:
+            rate = _audited_deduction_rate(session, cancellation=cancellation)
+            current_terms = (
+                _current_cancellation_terms(session, sale=sale, deduction_rate_fraction=rate)
+                if rate is not None
+                else None
+            )
+            if cancellation.financial_approval_required or (
+                current_terms is not None and current_terms.approval_required
+            ):
+                raise ConflictError("The cancellation's financial terms have not been approved.")
 
     before = _snapshot(cancellation, _CANCELLATION_FIELDS)
     sale_before = _snapshot(sale, _SALE_FIELDS)
@@ -4086,8 +4285,17 @@ def complete_cancellation(
 
     if cancellation.status != CANCELLATION_READY_FOR_RETURN:
         raise ConflictError("This cancellation is not ready for the unit to be returned.")
-    if cancellation.financial_approval_required and cancellation.financial_approved_at is None:
-        raise ConflictError("The cancellation's financial terms have not been approved.")
+    if cancellation.financial_approved_at is None:
+        rate = _audited_deduction_rate(session, cancellation=cancellation)
+        current_terms = (
+            _current_cancellation_terms(session, sale=sale, deduction_rate_fraction=rate)
+            if rate is not None
+            else None
+        )
+        if cancellation.financial_approval_required or (
+            current_terms is not None and current_terms.approval_required
+        ):
+            raise ConflictError("The cancellation's financial terms have not been approved.")
     if (
         cancellation.legal_withdrawal_required
         and cancellation.legal_withdrawal_status != WITHDRAWAL_COMPLETED

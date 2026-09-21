@@ -1236,6 +1236,7 @@ def confirm_receipt(
     permissions.require_finance(actor)
     project = lock_project(session, project.id)
     receipt, sale = visible_receipt(session, project=project, receipt_id=receipt_id, actor=actor)
+    sales_service.require_cancellation_cash_change_allowed(session, sale_contract_id=sale.id)
     plan = _plan_of(session, sale_id=sale.id)
     if plan is not None:
         payment_plans_service.lock_plan(session, project_id=project.id, plan_id=plan.id)
@@ -1365,6 +1366,7 @@ def reverse_receipt(
     reason = _require_text(reason, detail="Say why this receipt is being reversed.")
     project = lock_project(session, project.id)
     receipt, sale = visible_receipt(session, project=project, receipt_id=receipt_id, actor=actor)
+    sales_service.require_cancellation_cash_change_allowed(session, sale_contract_id=sale.id)
     receipt = _lock_receipt(session, project_id=project.id, receipt_id=receipt.id)
     if receipt.status != RECEIPT_CONFIRMED:
         raise ConflictError("Only a confirmed receipt can be reversed.")

@@ -48,7 +48,10 @@ from app.modules.collections.models import (
 )
 from app.modules.payment_plans.models import PaymentPlanInstallment
 from app.modules.projects.models import Project
+from app.modules.projects.service import lock_project
+from app.modules.sales import service as sales_service
 from tests.modules.conftest import (
+    cancellation_terms_payload,
     collections_url,
     confirm_receipt,
     governing_installments,
@@ -493,6 +496,80 @@ class TestRestructureRace:
         assert len(versions) == 1, "cash is only ever active against one schedule"
 
 
+class TestCancellationApprovalReceiptRace:
+    """Approval and receipt confirmation serialize on the project cash position."""
+
+    def test_approval_then_confirmation_cannot_leave_stale_approved_terms(
+        self,
+        collections_client: TestClient,
+        sales_ops_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+        cfo: User,
+        finance: User,
+    ) -> None:
+        standing = record_receipt(collections_client, project_id, collecting_sale, "10000.00")
+        pending = record_receipt(collections_client, project_id, collecting_sale, "5000.00")
+        assert confirm_receipt(finance_client, project_id, standing.json()["id"]).status_code == 200
+        opened = sales_ops_client.post(
+            f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
+            json={
+                "initiated_by_party": "buyer",
+                "reason": "Buyer withdrew",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
+            },
+        )
+        assert opened.status_code == 201, opened.text
+
+        project_uuid = uuid.UUID(project_id)
+        approver = _actor(cfo)
+        confirmer = _actor(finance)
+        holder_ready = threading.Event()
+        holder_release = threading.Event()
+
+        def approve(session: Session) -> object:
+            local_project = _project(session, project_uuid)
+            lock_project(session, project_uuid)
+            holder_ready.set()
+            holder_release.wait(timeout=15)
+            return sales_service.approve_cancellation_terms(
+                session,
+                project=local_project,
+                cancellation_id=uuid.UUID(opened.json()["id"]),
+                actor=approver,
+                reason="Terms match confirmed cash",
+                expected_eligible_collected_amount=Decimal("10000.00"),
+            ).financial_approved_at
+
+        def confirm_pending(session: Session) -> object:
+            local_project = _project(session, project_uuid)
+            receipt = service.confirm_receipt(
+                session,
+                project=local_project,
+                actor=confirmer,
+                receipt_id=uuid.UUID(pending.json()["id"]),
+                correlation_id=uuid.uuid4(),
+            )
+            session.commit()
+            return receipt.status
+
+        approval_thread, approval_outcome = _run(approve)
+        if not holder_ready.wait(timeout=20):
+            approval_thread.join(timeout=5)
+            raise AssertionError(f"approval never took the project lock: {approval_outcome}")
+        confirmation_thread, confirmation_outcome = _run(confirm_pending)
+        assert _wait_until_a_backend_blocks(), "receipt confirmation was never serialized"
+
+        holder_release.set()
+        approval_thread.join(timeout=20)
+        confirmation_thread.join(timeout=20)
+
+        assert approval_outcome and not isinstance(approval_outcome[0], BaseException)
+        assert isinstance(confirmation_outcome[0], ConflictError)
+        assert "financial terms have already been approved" in str(confirmation_outcome[0])
+
+
 class TestRefundRace:
     """Given one cancellation, when two refunds are confirmed at once."""
 
@@ -502,18 +579,23 @@ class TestRefundRace:
         collections_client: TestClient,
         sales_ops_client: TestClient,
         cfo_client: TestClient,
+        finance_client: TestClient,
         project_id: str,
         collecting_sale: str,
         finance: User,
         second_finance: User,
     ) -> None:
+        receipt = record_receipt(collections_client, project_id, collecting_sale, "10000.00")
+        assert receipt.status_code == 201, receipt.text
+        confirmed = confirm_receipt(finance_client, project_id, receipt.json()["id"])
+        assert confirmed.status_code == 200, confirmed.text
         cancellation = sales_ops_client.post(
             f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
             json={
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-05-01",
                 "reason": "Buyer withdrew",
-                "refund_due_amount": "10000.00",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
             },
         )
         assert cancellation.status_code == 201, cancellation.text
@@ -524,7 +606,12 @@ class TestRefundRace:
         # being tested could not happen in production at all.
         approved = cfo_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-            json={"reason": "Terms reviewed against the contract"},
+            json={
+                "reason": "Terms reviewed against the contract",
+                "expected_eligible_collected_amount": cancellation.json()[
+                    "eligible_collected_amount"
+                ],
+            },
         )
         assert approved.status_code == 200, approved.text
 

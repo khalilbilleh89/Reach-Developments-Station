@@ -105,6 +105,7 @@ import type {
   ReservationDetail,
   Role,
   SaleCancellation,
+  CancellationTermsPreview,
   SaleContract,
   SaleDetail,
   SalesClient,
@@ -1133,6 +1134,15 @@ export const sales = {
     get<SaleCancellation | null>(
       `/projects/${projectId}/sales/contracts/${saleId}/cancellation`,
     ),
+  cancellationPreview: (
+    projectId: string,
+    saleId: string,
+    deductionRateFraction: string,
+  ) =>
+    post<CancellationTermsPreview>(
+      `/projects/${projectId}/sales/contracts/${saleId}/cancellation-preview`,
+      { deduction_rate_fraction: deductionRateFraction },
+    ),
   startCancellation: (
     projectId: string,
     saleId: string,
@@ -1146,10 +1156,16 @@ export const sales = {
     projectId: string,
     cancellationId: string,
     reason: string,
+    expectedEligibleCollectedAmount?: string,
   ) =>
     post<SaleCancellation>(
       `/projects/${projectId}/sales/cancellations/${cancellationId}/approve-financial-terms`,
-      { reason },
+      {
+        reason,
+        ...(expectedEligibleCollectedAmount
+          ? { expected_eligible_collected_amount: expectedEligibleCollectedAmount }
+          : {}),
+      },
     ),
   advanceCancellation: (
     projectId: string,

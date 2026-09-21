@@ -793,9 +793,9 @@ class LegalTimelineRead(BaseModel):
 class CancellationCreateRequest(StrictRequest):
     """Open the controlled process that ends a contract.
 
-    ``refund_due_amount`` is what is owed. There is deliberately no
-    ``refund_paid_amount``: a refund that was actually paid is a payment
-    transaction, and PR-MVP-07 owns those.
+    The operator decides a deduction rate. Collections supplies the cash basis
+    and the server derives both amounts. ``expected_eligible_collected_amount``
+    proves the operator reviewed the same cash position the write will use.
     """
 
     initiated_by_party: CancellationInitiator
@@ -804,8 +804,33 @@ class CancellationCreateRequest(StrictRequest):
     notice_date: date | None = None
     cure_deadline: date | None = None
     reason_code: Code | None = None
-    forfeiture_amount: Money | None = None
-    refund_due_amount: Money | None = None
+    deduction_rate_fraction: Fraction
+    expected_eligible_collected_amount: Money
+
+
+class CancellationTermsPreviewRequest(StrictRequest):
+    """The commercial deduction decision; every amount is server-derived."""
+
+    deduction_rate_fraction: Fraction
+
+
+class CancellationTermsApprovalRequest(ReasonRequest):
+    """Approve only the cash basis the checker has actually reviewed."""
+
+    # Optional only for historical manual cancellations created before the
+    # percentage contract existed. New percentage terms always carry it.
+    expected_eligible_collected_amount: Money | None = None
+
+
+class CancellationTermsPreviewRead(BaseModel):
+    """Authoritative cancellation arithmetic over current Collections cash."""
+
+    sale_id: uuid.UUID
+    currency_id: uuid.UUID
+    eligible_collected_amount: DecimalStr
+    deduction_rate_fraction: DecimalStr
+    deduction_amount: DecimalStr
+    refund_due_amount: DecimalStr
 
 
 class CancellationAdvanceRequest(StrictRequest):
@@ -838,6 +863,10 @@ class CancellationRead(BaseModel):
     reason: str
     status: str
     termination_date: date | None
+    currency_id: uuid.UUID | None = None
+    eligible_collected_amount: DecimalStr | None = None
+    deduction_rate_fraction: DecimalStr | None = None
+    deduction_amount: DecimalStr | None = None
     forfeiture_amount: DecimalStr | None
     refund_due_amount: DecimalStr | None
     financial_approval_required: bool
