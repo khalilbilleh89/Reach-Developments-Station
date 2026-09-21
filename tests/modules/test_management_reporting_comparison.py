@@ -93,6 +93,33 @@ def test_original_currency_and_penetration_goldens(
     ).delta == Decimal("7.00")
 
 
+def test_legacy_refund_cash_alias_and_new_liability_are_distinct(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    a, b = pair(admin_client, project_id)
+    a.payload.projects[0].cancelled_sales = None
+    a.payload.projects[0].money = [metric("refunds", "JOD", Decimal("5000"))]
+    b.payload.projects[0].cancelled_sales = 1
+    b.payload.projects[0].money = [
+        metric("refund_due", "JOD", Decimal("18000")),
+        metric("refund_confirmed", "JOD", Decimal("10000")),
+        metric("refund_outstanding", "JOD", Decimal("8000")),
+    ]
+    refresh(a)
+    refresh(b)
+    a.payload.overview.cancelled_sales = None
+    rows = {
+        m.metric: m
+        for m in compare(db, a, b).movements
+        if m.project_id == a.payload.projects[0].project_id
+    }
+    assert rows["refund_confirmed"].delta == Decimal("5000")
+    assert rows["refund_confirmed"].section == "collections"
+    for code in ("refund_due", "refund_outstanding", "cancelled_sales"):
+        assert rows[code].prior_availability == "absent"
+        assert rows[code].delta is None
+
+
 def test_unavailable_missing_currency_and_composition_never_become_zero(
     admin_client: TestClient, project_id: str, db: Session
 ) -> None:

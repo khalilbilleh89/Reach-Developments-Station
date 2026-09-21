@@ -1,5 +1,7 @@
 """PostgreSQL capture, historical authorization and source independence."""
 
+import hashlib
+import json
 import uuid
 from typing import Any
 
@@ -38,6 +40,11 @@ def test_capture_roundtrip_board_and_no_backdating(
     assert result["project_count"] == 1
     assert len(result["payload"]["outlooks"]) == 3
     assert result["payload"]["projects"][0]["project_id"] == project_id
+    assert result["payload"]["overview"]["cancelled_sales"] == 0
+    assert result["payload"]["projects"][0]["cancelled_sales"] == 0
+    assert {"refund_due", "refund_outstanding"} <= {
+        row["metric_code"] for row in result["payload"]["overview"]["money"]
+    }
     # Missing governed sources are business unavailability, not a capture error.
     captured_project = result["payload"]["projects"][0]
     cash_coverage = next(
@@ -72,6 +79,48 @@ def test_capture_roundtrip_board_and_no_backdating(
     )
     assert admin_client.get(f"{ROOT}/snapshots?limit=1").json()["total"] == 1
     assert admin_client.get(f"{ROOT}/snapshots?limit=101").status_code == 422
+
+
+def test_legacy_version_one_payload_hash_and_board_remain_readable(
+    admin_client: TestClient, project_id: str
+) -> None:
+    from app.modules.management_reporting.board import board_pack
+
+    captured = capture(admin_client, project_id)
+    legacy = SnapshotOut.model_validate(captured)
+    legacy.payload.overview.cancelled_sales = None
+    legacy.payload.projects[0].cancelled_sales = None
+    for position in [legacy.payload.overview, *legacy.payload.projects]:
+        position.money = [
+            row.model_copy(update={"metric_code": "refunds"})
+            if row.metric_code == "refund_confirmed"
+            else row
+            for row in position.money
+            if row.metric_code not in {"refund_due", "refund_outstanding"}
+        ]
+    historical = legacy.model_dump(mode="json", exclude={"content_hash"})
+    historical["payload"]["overview"].pop("cancelled_sales")
+    for project in historical["payload"]["projects"]:
+        project.pop("cancelled_sales")
+    for position in [historical["payload"]["overview"], *historical["payload"]["projects"]]:
+        position["money"].append(
+            {
+                **next(
+                    row for row in position["money"] if row["metric_code"] == "confirmed_receipts"
+                ),
+                "metric_code": "refunds",
+                "amount": "120.00",
+            }
+        )
+    assert "cancelled_sales" not in historical["payload"]["overview"]
+    reloaded = SnapshotOut.model_validate(historical)
+    assert reloaded.payload.overview.cancelled_sales is None
+    expected = hashlib.sha256(
+        json.dumps(historical, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+    assert content_hash(reloaded) == expected
+    assert any(m.metric_code == "refunds" for m in reloaded.payload.overview.money)
+    assert "Refunds" in board_pack(reloaded, None).section_order
 
 
 def test_read_revocation_and_viewer_write_refusal(

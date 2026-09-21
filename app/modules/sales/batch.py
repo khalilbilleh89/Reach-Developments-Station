@@ -46,7 +46,9 @@ def positions(
         select(SaleContract).where(SaleContract.project_id.in_(project_ids))
     ):
         position = result.setdefault(sale.project_id, SalesPosition())
-        if sale.status in SALE_COMMITTED:
+        if sale.status in SALE_COMMITTED or (
+            sale.activated_at is not None and sale.activated_at < bound and standing(sale, as_of)
+        ):
             position.committed_ids.add(sale.unit_id)
         if sale.activated_at is None or sale.activated_at >= bound:
             continue
@@ -57,7 +59,7 @@ def positions(
             position.contracted[sale.currency_id] = (
                 position.contracted.get(sale.currency_id, Decimal(0)) + sale.total_contract_price
             )
-            # Exactly the current Project Analysis active-sold definition.
-            if sale.status == "active":
-                position.active_sold_ids.add(sale.unit_id)
+            # Activation and the as-of standing test reconstruct the historical
+            # position; today's status may already be cancelled or pending.
+            position.active_sold_ids.add(sale.unit_id)
     return result

@@ -15,11 +15,24 @@ from app.modules.portfolio.schemas import Overview, ProjectSummary
 def section(metric: str) -> str:
     if metric.startswith("construction_"):
         return "construction"
-    if metric in {"confirmed_receipts", "refunds", "unapplied_cash", "overdue_outstanding"}:
+    if metric in {
+        "confirmed_receipts",
+        "refunds",
+        "refund_due",
+        "refund_confirmed",
+        "refund_outstanding",
+        "unapplied_cash",
+        "overdue_outstanding",
+    }:
         return "collections"
     if "cash" in metric or "deficit" in metric:
         return "cashflow"
     return "commercial" if metric == "contracted_value" else "capital"
+
+
+def comparable_code(code: str) -> str:
+    """Legacy refunds is the same cash-out fact as refund_confirmed, not due."""
+    return "refund_confirmed" if code == "refunds" else code
 
 
 def compare(session: Session, prior: out.SnapshotOut, current: out.SnapshotOut) -> out.Comparison:
@@ -84,8 +97,8 @@ def compare(session: Session, prior: out.SnapshotOut, current: out.SnapshotOut) 
         right: Overview | ProjectSummary,
         project: ProjectSummary | None = None,
     ) -> None:
-        am = {(m.metric_code, m.currency): m for m in left.money}
-        bm = {(m.metric_code, m.currency): m for m in right.money}
+        am = {(comparable_code(m.metric_code), m.currency): m for m in left.money}
+        bm = {(comparable_code(m.metric_code), m.currency): m for m in right.money}
         for key in sorted(am.keys() | bm.keys()):
             a, b = am.get(key), bm.get(key)
             blocked = None
@@ -95,7 +108,10 @@ def compare(session: Session, prior: out.SnapshotOut, current: out.SnapshotOut) 
                     if a is None
                     else "Currency position no longer present."
                 )
-            elif a.source_basis != b.source_basis:
+            elif a.source_basis != b.source_basis and {a.metric_code, b.metric_code} != {
+                "refunds",
+                "refund_confirmed",
+            }:
                 blocked = "Source basis changed."
             elif project is None:
 
@@ -106,7 +122,8 @@ def compare(session: Session, prior: out.SnapshotOut, current: out.SnapshotOut) 
                         p.project_id
                         for p in rows
                         if any(
-                            (m.metric_code, m.currency) == key and m.availability == "available"
+                            (comparable_code(m.metric_code), m.currency) == key
+                            and m.availability == "available"
                             for m in p.money
                         )
                     }
@@ -142,6 +159,20 @@ def compare(session: Session, prior: out.SnapshotOut, current: out.SnapshotOut) 
                 domain="commercial",
                 project=project,
                 basis="Captured Inventory / SaleContract owner counts.",
+                blocked="Portfolio composition changed."
+                if project is None and composition
+                else None,
+            )
+        if a.cancelled_sales is not None or b.cancelled_sales is not None:
+            movement(
+                "cancelled_sales",
+                a.cancelled_sales,
+                b.cancelled_sales,
+                domain="commercial",
+                project=project,
+                avail_a="absent" if a.cancelled_sales is None else "available",
+                avail_b="absent" if b.cancelled_sales is None else "available",
+                basis="Completed activated Sales cancellations as of the captured date.",
                 blocked="Portfolio composition changed."
                 if project is None and composition
                 else None,

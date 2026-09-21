@@ -15,6 +15,8 @@ owed. Finance confirming a refund says only that the money actually went out.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -26,6 +28,7 @@ from tests.modules.conftest import (
     record_receipt,
     sales_url,
 )
+from tests.modules.test_portfolio import metric
 
 
 @pytest.fixture
@@ -89,6 +92,49 @@ def _record_refund(
     }
     body.update(overrides)
     return client.post(f"{collections_url(project_id)}/sales/{sale_id}/refunds", json=body)
+
+
+def test_portfolio_consumes_collection_liability_and_cash_without_netting(
+    collections_client: TestClient,
+    finance_client: TestClient,
+    project_id: str,
+    cancelled_sale: tuple[str, str],
+) -> None:
+    sale_id, cancellation_id = cancelled_sale
+
+    def check(due: str, paid: str, outstanding: str) -> None:
+        account = collection_account(collections_client, project_id, sale_id)
+        project = finance_client.get(f"/api/v1/portfolio/projects/{project_id}").json()
+        overview = finance_client.get("/api/v1/portfolio/overview").json()
+        for report in (project, overview):
+            for code, expected, account_key in (
+                ("refund_due", due, "refund_due_total"),
+                ("refund_confirmed", paid, "refund_confirmed_total"),
+                ("refund_outstanding", outstanding, "refund_outstanding"),
+            ):
+                observed = Decimal(metric(report, code)["amount"])
+                assert observed == Decimal(expected) == Decimal(account[account_key])
+            assert Decimal(metric(report, "confirmed_receipts")["amount"]) == 12000
+            assert Decimal(metric(report, "refund_due")["amount"]) == (
+                Decimal(metric(report, "refund_confirmed")["amount"])
+                + Decimal(metric(report, "refund_outstanding")["amount"])
+            )
+            assert report["cancelled_sales"] == 0  # Approved notice is not completion.
+
+    check("12000", "0", "12000")
+    refund = _record_refund(collections_client, project_id, sale_id, cancellation_id, "5000").json()
+    check("12000", "0", "12000")  # Recording alone is not cash-out.
+    confirmed = finance_client.post(
+        f"{collections_url(project_id)}/refunds/{refund['id']}/confirm", json={}
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    check("12000", "5000", "7000")
+    reversed_ = finance_client.post(
+        f"{collections_url(project_id)}/refunds/{refund['id']}/reverse",
+        json={"reason": "Returned by the bank"},
+    )
+    assert reversed_.status_code == 200, reversed_.text
+    check("12000", "0", "12000")
 
 
 class TestRecordingARefund:
@@ -578,6 +624,19 @@ class TestCashThatAlreadyLeft:
         assert account["refund_confirmed_total"] == "5000.00"
         assert account["refund_outstanding"] == "0.00"
         assert not account["refund_outstanding"].startswith("-")
+
+    def test_portfolio_retains_cash_out_but_not_withdrawn_liability(
+        self,
+        finance_client: TestClient,
+        project_id: str,
+        paid_then_withdrawn: tuple[str, str],
+    ) -> None:
+        del paid_then_withdrawn
+        project = finance_client.get(f"/api/v1/portfolio/projects/{project_id}").json()
+        assert Decimal(metric(project, "refund_due")["amount"]) == 0
+        assert Decimal(metric(project, "refund_confirmed")["amount"]) == 5000
+        assert Decimal(metric(project, "refund_outstanding")["amount"]) == 0
+        assert Decimal(metric(project, "confirmed_receipts")["amount"]) == 12000
 
     def test_the_payment_is_neither_deleted_nor_reversed(
         self,

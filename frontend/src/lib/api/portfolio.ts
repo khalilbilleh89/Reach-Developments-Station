@@ -17,7 +17,7 @@ export type Evaluation = { risk_code: string; availability: Coverage; reason: st
 export type ProjectSummary = {
   project_id: string; code: string; name: string; status: string; currency: string; as_of: string;
   total_units: number; eligible_units: number; available_units: number; committed_units: number;
-  active_sold_units: number; remaining_units: number; sales_penetration: Ratio;
+  active_sold_units: number; cancelled_sales: number | null; remaining_units: number; sales_penetration: Ratio;
   sales_run_rate: Fundamental["forecast"]; money: MoneyMetric[];
   cashflow_reason_code: string | null; cashflow_observed_currencies: string[]; permit_count: number;
   design: { availability: Coverage; reason: string | null; consultant_name: string | null;
@@ -31,7 +31,7 @@ export type RiskPage = { as_of: string; items: Risk[]; total: number; offset: nu
 export type Overview = {
   as_of: string; project_count: number; projects_requiring_attention: number;
   projects_with_incomplete_coverage: number; eligible_units: number; committed_units: number;
-  active_sold_units: number; sales_penetration: Ratio; money: MoneyMetric[]; risk_count: number;
+  active_sold_units: number; cancelled_sales: number | null; sales_penetration: Ratio; money: MoneyMetric[]; risk_count: number;
   priority_risks: Risk[]; unavailable_risk_evaluations: Record<string, number>; source_basis: string;
 };
 export const portfolio = {

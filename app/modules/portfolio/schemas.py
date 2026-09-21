@@ -76,6 +76,7 @@ class ProjectSummary(BaseModel):
     available_units: int
     committed_units: int
     active_sold_units: int
+    cancelled_sales: int | None = None
     remaining_units: int
     sales_penetration: Ratio
     sales_run_rate: Forecast
@@ -117,6 +118,7 @@ class Overview(BaseModel):
     eligible_units: int
     committed_units: int
     active_sold_units: int
+    cancelled_sales: int | None = None
     sales_penetration: Ratio
     money: list[MoneyMetric]
     risk_count: int

@@ -49,7 +49,7 @@ def test_receipts_refund_and_unconfirmed_golden(
     )
     body = finance_client.get(f"/api/v1/portfolio/projects/{project_id}").json()
     assert Decimal(metric(body, "confirmed_receipts")["amount"]) == 30000
-    assert Decimal(metric(body, "refunds")["amount"]) == 5000
+    assert Decimal(metric(body, "refund_confirmed")["amount"]) == 5000
     assert Decimal(metric(body, "unrestricted_cash")["amount"]) == 25000
 
 
