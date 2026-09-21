@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from tests.modules.conftest import (
     at,
     backdate,
+    cancellation_terms_payload,
     collection_account,
     collections_url,
     confirm_receipt,
@@ -47,6 +48,19 @@ from tests.modules.conftest import (
 )
 
 TODAY = date.today()
+
+
+def _confirm_cash(
+    collections_client: TestClient,
+    finance_client: TestClient,
+    project_id: str,
+    sale_id: str,
+    amount: str,
+) -> None:
+    receipt = record_receipt(collections_client, project_id, sale_id, amount)
+    assert receipt.status_code == 201, receipt.text
+    confirmed = confirm_receipt(finance_client, project_id, receipt.json()["id"])
+    assert confirmed.status_code == 200, confirmed.text
 
 
 def _stamp(db: Session, table: str, row_id: str, column: str, value: object) -> None:
@@ -102,27 +116,32 @@ class TestCancellationAfterTheReportingDate:
         sales_ops_client: TestClient,
         cfo_client: TestClient,
         legal_client: TestClient,
+        collections_client: TestClient,
+        finance_client: TestClient,
         db: Session,
         project_id: str,
         collecting_sale: str,
         january_schedule: str,
     ) -> str:
         del january_schedule
+        _confirm_cash(collections_client, finance_client, project_id, collecting_sale, "12000.00")
         opened = sales_ops_client.post(
             f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
             json={
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-05-01",
                 "reason": "Buyer withdrew after failing to secure finance",
-                "refund_due_amount": "12000.00",
-                "forfeiture_amount": "0.00",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
             },
         )
         assert opened.status_code == 201, opened.text
         cancellation_id = opened.json()["id"]
         approved = cfo_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-            json={"reason": "Terms reviewed"},
+            json={
+                "reason": "Terms reviewed",
+                "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+            },
         )
         assert approved.status_code == 200, approved.text
         del legal_client
@@ -219,27 +238,32 @@ class TestRefundApprovedLater:
         self,
         sales_ops_client: TestClient,
         cfo_client: TestClient,
+        collections_client: TestClient,
+        finance_client: TestClient,
         db: Session,
         project_id: str,
         collecting_sale: str,
         january_schedule: str,
     ) -> str:
         del january_schedule
+        _confirm_cash(collections_client, finance_client, project_id, collecting_sale, "12000.00")
         opened = sales_ops_client.post(
             f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
             json={
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-05-01",
                 "reason": "Buyer withdrew",
-                "refund_due_amount": "12000.00",
-                "forfeiture_amount": "0.00",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
             },
         )
         assert opened.status_code == 201, opened.text
         cancellation_id = opened.json()["id"]
         approved = cfo_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-            json={"reason": "Terms reviewed"},
+            json={
+                "reason": "Terms reviewed",
+                "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+            },
         )
         assert approved.status_code == 200, approved.text
         _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-06-10"))
@@ -281,26 +305,27 @@ class TestRefundApprovedLater:
         self,
         sales_ops_client: TestClient,
         collections_client: TestClient,
+        finance_client: TestClient,
         project_id: str,
         collecting_sale: str,
         january_schedule: str,
     ) -> None:
         """The same rule at every cutoff, today included.
 
-        ``refund_due_amount`` is captured when the case is opened, which is a
-        proposal. Until a financial approver signs it, nothing is owed — and a
-        rule that applied only to historical reads would make today the one date
-        the figure meant something different.
+        ``refund_due_amount`` is still only a proposal while current cash may
+        change. Until a financial approver signs and freezes it, nothing is owed
+        — and a rule that applied only to historical reads would make today the
+        one date the figure meant something different.
         """
         del january_schedule
+        _confirm_cash(collections_client, finance_client, project_id, collecting_sale, "9000.00")
         opened = sales_ops_client.post(
             f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
             json={
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-05-01",
                 "reason": "Buyer withdrew",
-                "refund_due_amount": "9000.00",
-                "forfeiture_amount": "0.00",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
             },
         )
         assert opened.status_code == 201, opened.text
@@ -327,21 +352,24 @@ class TestRefundCashOut:
     ) -> dict[str, str]:
         """12,000 sanctioned in May, 5,000 of it actually paid in July."""
         del january_schedule
+        _confirm_cash(collections_client, finance_client, project_id, collecting_sale, "12000.00")
         opened = sales_ops_client.post(
             f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
             json={
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-05-01",
                 "reason": "Buyer withdrew",
-                "refund_due_amount": "12000.00",
-                "forfeiture_amount": "0.00",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
             },
         )
         assert opened.status_code == 201, opened.text
         cancellation_id = opened.json()["id"]
         approved = cfo_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-            json={"reason": "Terms reviewed"},
+            json={
+                "reason": "Terms reviewed",
+                "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+            },
         )
         assert approved.status_code == 200, approved.text
         _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-05-10"))
@@ -457,6 +485,8 @@ class TestACaseDroppedLater:
         self,
         sales_ops_client: TestClient,
         cfo_client: TestClient,
+        collections_client: TestClient,
+        finance_client: TestClient,
         db: Session,
         project_id: str,
         collecting_sale: str,
@@ -464,21 +494,24 @@ class TestACaseDroppedLater:
     ) -> str:
         """12,000 signed on 10 March, the case dropped on 20 June."""
         del january_schedule
+        _confirm_cash(collections_client, finance_client, project_id, collecting_sale, "12000.00")
         opened = sales_ops_client.post(
             f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
             json={
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-03-01",
                 "reason": "Buyer withdrew",
-                "refund_due_amount": "12000.00",
-                "forfeiture_amount": "0.00",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
             },
         )
         assert opened.status_code == 201, opened.text
         cancellation_id = opened.json()["id"]
         approved = cfo_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-            json={"reason": "Terms reviewed"},
+            json={
+                "reason": "Terms reviewed",
+                "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+            },
         )
         assert approved.status_code == 200, approved.text
         _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-03-10"))
@@ -577,21 +610,24 @@ class TestCashPaidBeforeTheCaseWasDropped:
         january_schedule: str,
     ) -> str:
         del january_schedule
+        _confirm_cash(collections_client, finance_client, project_id, collecting_sale, "12000.00")
         opened = sales_ops_client.post(
             f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
             json={
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-03-01",
                 "reason": "Buyer withdrew",
-                "refund_due_amount": "12000.00",
-                "forfeiture_amount": "0.00",
+                **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
             },
         )
         assert opened.status_code == 201, opened.text
         cancellation_id = opened.json()["id"]
         approved = cfo_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-            json={"reason": "Terms reviewed"},
+            json={
+                "reason": "Terms reviewed",
+                "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+            },
         )
         assert approved.status_code == 200, approved.text
         _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-03-10"))
@@ -1001,15 +1037,22 @@ class TestACancelledContractLeavesActiveCollections:
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-05-01",
                 "reason": "Buyer withdrew after failing to secure finance",
-                "refund_due_amount": "18000.00",
-                "forfeiture_amount": "2000.00",
+                **cancellation_terms_payload(
+                    sales_ops_client,
+                    project_id,
+                    collecting_sale,
+                    deduction_rate_fraction="0.10",
+                ),
             },
         )
         assert opened.status_code == 201, opened.text
         cancellation_id = opened.json()["id"]
         approved = cfo_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-            json={"reason": "Terms reviewed"},
+            json={
+                "reason": "Terms reviewed",
+                "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+            },
         )
         assert approved.status_code == 200, approved.text
 

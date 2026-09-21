@@ -19,8 +19,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.modules.conftest import (
+    cancellation_terms_payload,
     collection_account,
     collections_url,
+    confirm_receipt,
     record_receipt,
     sales_url,
 )
@@ -30,6 +32,8 @@ from tests.modules.conftest import (
 def cancelled_sale(
     sales_ops_client: TestClient,
     cfo_client: TestClient,
+    collections_client: TestClient,
+    finance_client: TestClient,
     project_id: str,
     collecting_sale: str,
 ) -> tuple[str, str]:
@@ -38,14 +42,17 @@ def cancelled_sale(
     Built through the real cancellation routes so the amount due carries its own
     approval, exactly as it would in production.
     """
+    receipt = record_receipt(collections_client, project_id, collecting_sale, "12000.00")
+    assert receipt.status_code == 201, receipt.text
+    confirmed = confirm_receipt(finance_client, project_id, receipt.json()["id"])
+    assert confirmed.status_code == 200, confirmed.text
     opened = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
         json={
             "initiated_by_party": "buyer",
             "initiation_date": "2026-05-01",
             "reason": "Buyer withdrew after failing to secure finance",
-            "refund_due_amount": "12000.00",
-            "forfeiture_amount": "0.00",
+            **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
         },
     )
     assert opened.status_code == 201, opened.text
@@ -57,7 +64,10 @@ def cancelled_sale(
     # fixture was asserting against a figure production would not have shown.
     approved = cfo_client.post(
         f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-        json={"reason": "Terms reviewed against the contract"},
+        json={
+            "reason": "Terms reviewed against the contract",
+            "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+        },
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["financial_approved_at"] is not None
@@ -366,7 +376,7 @@ class TestARefundIsNotAReceipt:
         assert refund["id"] not in [r["id"] for r in receipts]
 
         account = collection_account(collections_client, project_id, sale_id)
-        assert account["confirmed_receipts_total"] == "0.00"
+        assert account["confirmed_receipts_total"] == "12000.00"
 
     def test_a_receipt_amount_can_never_be_negative(
         self, collections_client: TestClient, project_id: str, collecting_sale: str
@@ -391,17 +401,24 @@ def _withdraw(
 
 @pytest.fixture
 def unapproved_cancellation(
-    sales_ops_client: TestClient, project_id: str, collecting_sale: str
+    sales_ops_client: TestClient,
+    collections_client: TestClient,
+    finance_client: TestClient,
+    project_id: str,
+    collecting_sale: str,
 ) -> tuple[str, str]:
     """A cancellation proposing 12,000 back that nobody has signed."""
+    receipt = record_receipt(collections_client, project_id, collecting_sale, "12000.00")
+    assert receipt.status_code == 201, receipt.text
+    confirmed = confirm_receipt(finance_client, project_id, receipt.json()["id"])
+    assert confirmed.status_code == 200, confirmed.text
     opened = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{collecting_sale}/cancellation",
         json={
             "initiated_by_party": "buyer",
             "initiation_date": "2026-05-01",
             "reason": "Buyer withdrew after failing to secure finance",
-            "refund_due_amount": "12000.00",
-            "forfeiture_amount": "0.00",
+            **cancellation_terms_payload(sales_ops_client, project_id, collecting_sale),
         },
     )
     assert opened.status_code == 201, opened.text

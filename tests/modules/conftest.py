@@ -536,6 +536,25 @@ def sales_url(project_id: str) -> str:
     return f"{PROJECTS}/{project_id}/sales"
 
 
+def cancellation_terms_payload(
+    client: TestClient,
+    project_id: str,
+    sale_id: str,
+    deduction_rate_fraction: str = "0",
+) -> dict[str, str]:
+    """Preview the cash basis and return the matching cancellation write fields."""
+    response = client.post(
+        f"{sales_url(project_id)}/contracts/{sale_id}/cancellation-preview",
+        json={"deduction_rate_fraction": deduction_rate_fraction},
+    )
+    assert response.status_code == 200, response.text
+    preview = response.json()
+    return {
+        "deduction_rate_fraction": preview["deduction_rate_fraction"],
+        "expected_eligible_collected_amount": preview["eligible_collected_amount"],
+    }
+
+
 @pytest.fixture
 def sales_reference_data(admin_client: TestClient, country_pack_id: str) -> None:
     for category, code, label in SALES_REFERENCE_VALUES:
@@ -2461,7 +2480,6 @@ def refund_buyer(
     project_id: str,
     sale_id: str,
     *,
-    refund_due: str = "12000.00",
     amount: str,
     refund_date: str | None = None,
 ) -> str:
@@ -2472,15 +2490,17 @@ def refund_buyer(
             "initiated_by_party": "buyer",
             "initiation_date": "2026-01-05",
             "reason": "Buyer withdrew",
-            "refund_due_amount": refund_due,
-            "forfeiture_amount": "0.00",
+            **cancellation_terms_payload(sales_ops, project_id, sale_id),
         },
     )
     assert opened.status_code == 201, opened.text
     cancellation_id = opened.json()["id"]
     approved = cfo.post(
         f"{sales_url(project_id)}/cancellations/{cancellation_id}/approve-financial-terms",
-        json={"reason": "Terms reviewed"},
+        json={
+            "reason": "Terms reviewed",
+            "expected_eligible_collected_amount": opened.json()["eligible_collected_amount"],
+        },
     )
     assert approved.status_code == 200, approved.text
     recorded = collections.post(

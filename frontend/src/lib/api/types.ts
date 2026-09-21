@@ -1200,6 +1200,10 @@ export interface SaleCancellation {
   reason: string;
   status: string;
   termination_date: string | null;
+  currency_id: string | null;
+  eligible_collected_amount: string | null;
+  deduction_rate_fraction: string | null;
+  deduction_amount: string | null;
   forfeiture_amount: string | null;
   refund_due_amount: string | null;
   financial_approval_required: boolean;
@@ -1211,6 +1215,15 @@ export interface SaleCancellation {
   remarketing_required: boolean;
   created_by_user_id: string;
   created_at: string;
+}
+
+export interface CancellationTermsPreview {
+  sale_id: string;
+  currency_id: string;
+  eligible_collected_amount: string;
+  deduction_rate_fraction: string;
+  deduction_amount: string;
+  refund_due_amount: string;
 }
 
 export interface HandoverClearance {

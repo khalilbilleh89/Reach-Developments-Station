@@ -27,6 +27,7 @@ import { Disclosure,
   Field,
   FieldRow,
   FormActions,
+  FormSection,
   KeyValue,
   KeyValueGrid,
   Loading,
@@ -49,6 +50,7 @@ import { Disclosure,
 } from "@/components/ui";
 import type { WorkspaceFact } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
+import { useAnswer } from "@/lib/answer";
 import { businessDate, fractionFromPercent, money, percent, todayISO } from "@/lib/format";
 import { COLLECTION_READERS, hasAnyRole } from "@/lib/roles";
 import { useRouter } from "next/navigation";
@@ -515,8 +517,7 @@ export function SaleWorkspace({
     reason: "",
     notice_date: "",
     cure_deadline: "",
-    forfeiture_amount: "",
-    refund_due_amount: "",
+    deduction_percent: "",
   });
 
   const currencyCodeOf = useCurrencyCode();
@@ -532,6 +533,17 @@ export function SaleWorkspace({
   if (roles.has("project_manager") || roles.has("design_engineering")) {
     clearanceRoles.add("delivery");
   }
+
+  const cancellationPreview = useAnswer(
+    cancelling && canCancel && !!sale?.sale.id && cancelForm.deduction_percent.trim() !== "",
+    () =>
+      sales.cancellationPreview(
+        projectId,
+        sale!.sale.id,
+        fractionFromPercent(cancelForm.deduction_percent),
+      ),
+    [projectId, sale?.sale.id, cancelForm.deduction_percent],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -1321,10 +1333,11 @@ export function SaleWorkspace({
             </ButtonRow>
 
             {cancelling ? (
-              <DraftBoundary dirty={cancelForm.initiated_by_party !== "buyer" || Object.entries(cancelForm).some(([key, value]) => key !== "initiated_by_party" && value !== "")} busy={busy} onDiscard={() => { setCancelling(false); setCancelForm({ initiated_by_party: "buyer", reason: "", notice_date: "", cure_deadline: "", forfeiture_amount: "", refund_due_amount: "" }); }}><SubPanel title="Open a cancellation">
+              <DraftBoundary dirty={cancelForm.initiated_by_party !== "buyer" || Object.entries(cancelForm).some(([key, value]) => key !== "initiated_by_party" && value !== "")} busy={busy} onDiscard={() => { setCancelling(false); setCancelForm({ initiated_by_party: "buyer", reason: "", notice_date: "", cure_deadline: "", deduction_percent: "" }); }}><SubPanel title="Open a cancellation">
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
+                    if (cancellationPreview.status !== "ready") return;
                     void run(
                       () =>
                         sales.startCancellation(projectId, sale.sale.id, {
@@ -1332,8 +1345,8 @@ export function SaleWorkspace({
                           reason: cancelForm.reason,
                           ...(cancelForm.notice_date ? { notice_date: cancelForm.notice_date } : {}),
                           ...(cancelForm.cure_deadline ? { cure_deadline: cancelForm.cure_deadline } : {}),
-                          ...(cancelForm.forfeiture_amount ? { forfeiture_amount: cancelForm.forfeiture_amount } : {}),
-                          ...(cancelForm.refund_due_amount ? { refund_due_amount: cancelForm.refund_due_amount } : {}),
+                          deduction_rate_fraction: cancellationPreview.data.deduction_rate_fraction,
+                          expected_eligible_collected_amount: cancellationPreview.data.eligible_collected_amount,
                         }),
                       "Cancellation opened. The unit stays committed until it completes.",
                       () => { setCancelling(false); setSection("closure"); },
@@ -1362,7 +1375,7 @@ export function SaleWorkspace({
                       />
                     </Field>
                   </FieldRow>
-                  <FieldRow columns={4}>
+                  <FieldRow columns={2}>
                     <Field label="Notice date" optional>
                       <input
                         className="input"
@@ -1379,27 +1392,57 @@ export function SaleWorkspace({
                         onChange={(event) => setCancelForm({ ...cancelForm, cure_deadline: event.target.value })}
                       />
                     </Field>
-                    <Field label="Forfeiture" optional>
-                      <MoneyInput
-                        code={saleCode}
-                        value={cancelForm.forfeiture_amount}
-                        onChange={(value) => setCancelForm({ ...cancelForm, forfeiture_amount: value })}
-                      />
-                    </Field>
-                    <Field
-                      label="Refund due"
-                      optional
-                      hint="What is owed. Whether it was paid is a payment record kept in Collections."
-                    >
-                      <MoneyInput
-                        code={saleCode}
-                        value={cancelForm.refund_due_amount}
-                        onChange={(value) => setCancelForm({ ...cancelForm, refund_due_amount: value })}
-                      />
-                    </Field>
                   </FieldRow>
+                  <FormSection
+                    title="Cancellation financial terms"
+                    description="Choose the percentage retained from confirmed buyer cash. The server calculates every amount."
+                  >
+                    <Field
+                      label="Deduction from refund"
+                      hint="0% is a full refund. 100% retains all confirmed cash."
+                    >
+                      <RateInput
+                        required
+                        min="0"
+                        max="100"
+                        value={cancelForm.deduction_percent}
+                        onChange={(value) => setCancelForm({ ...cancelForm, deduction_percent: value })}
+                      />
+                    </Field>
+                    {cancellationPreview.status === "loading" ? (
+                      <Loading label="Calculating cancellation terms…" />
+                    ) : cancellationPreview.status === "failed" ? (
+                      <Notice tone="error">
+                        {cancellationPreview.message} <Button onClick={cancellationPreview.retry}>Retry</Button>
+                      </Notice>
+                    ) : cancellationPreview.status === "denied" ? (
+                      <Notice tone="warning">Cancellation cash is not available to your role.</Notice>
+                    ) : cancellationPreview.status === "ready" ? (
+                      <MetricGroup compact>
+                        <Metric
+                          label="Confirmed cash received"
+                          value={money(cancellationPreview.data.eligible_collected_amount, currencyCodeOf(cancellationPreview.data.currency_id))}
+                          note="Only confirmed buyer payments still held are included"
+                          size="sm"
+                        />
+                        <Metric
+                          label="Deduction amount"
+                          value={money(cancellationPreview.data.deduction_amount, currencyCodeOf(cancellationPreview.data.currency_id))}
+                          size="sm"
+                        />
+                        <Metric
+                          label="Refund due"
+                          value={money(cancellationPreview.data.refund_due_amount, currencyCodeOf(cancellationPreview.data.currency_id))}
+                          note="Actual repayment is recorded in Collections"
+                          size="sm"
+                        />
+                      </MetricGroup>
+                    ) : (
+                      <p className="footnote">Enter a deduction percentage to calculate the terms from confirmed cash.</p>
+                    )}
+                  </FormSection>
                   <FormActions>
-                    <Button variant="primary" type="submit" disabled={busy}>
+                    <Button variant="primary" type="submit" disabled={busy || cancellationPreview.status !== "ready"}>
                       Open cancellation
                     </Button>
                     <Button data-leaves-editor onClick={() => setCancelling(false)}>Cancel</Button>
@@ -1540,11 +1583,22 @@ export function SaleWorkspace({
               }
             />
             <MetricGroup compact>
-              <Metric label="Forfeiture" value={money(sale.cancellation.forfeiture_amount, saleCode)} size="sm" />
+              <Metric
+                label="Confirmed cash received"
+                value={money(sale.cancellation.eligible_collected_amount, currencyCodeOf(sale.cancellation.currency_id))}
+                note="Only confirmed buyer payments still held are included"
+                size="sm"
+              />
+              <Metric
+                label="Deduction from refund"
+                value={percent(sale.cancellation.deduction_rate_fraction)}
+                size="sm"
+              />
+              <Metric label="Deduction amount" value={money(sale.cancellation.deduction_amount, currencyCodeOf(sale.cancellation.currency_id))} size="sm" />
               <Metric
                 label="Refund due"
-                value={money(sale.cancellation.refund_due_amount, saleCode)}
-                note="What the contract says is owed"
+                value={money(sale.cancellation.refund_due_amount, currencyCodeOf(sale.cancellation.currency_id))}
+                note="Actual repayment is recorded in Collections"
                 size="sm"
               />
               <Metric
@@ -1588,7 +1642,12 @@ export function SaleWorkspace({
                         label: "Why are these terms approved?",
                         confirmLabel: "Approve",
                       },
-                      (reason) => sales.approveCancellationTerms(projectId, sale.cancellation!.id, reason),
+                      (reason) => sales.approveCancellationTerms(
+                        projectId,
+                        sale.cancellation!.id,
+                        reason,
+                        sale.cancellation!.eligible_collected_amount ?? undefined,
+                      ),
                       "Financial terms approved.",
                     )
                   }

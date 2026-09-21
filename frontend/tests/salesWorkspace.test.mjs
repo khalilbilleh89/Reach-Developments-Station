@@ -87,6 +87,24 @@ test("ordinary Sales workflow has a Sales API boundary and Inventory has no comm
   assert.doesNotMatch(sales,/sales\.register\(/);
 });
 
+test("cancellation uses a server preview for cash, deduction and refund without browser arithmetic",()=>{
+  const source=readFileSync(new URL("../src/components/projects/sales/SaleWorkspace.tsx",import.meta.url),"utf8");
+  assert.match(source,/sales\.cancellationPreview\(/);
+  assert.match(source,/fractionFromPercent\(cancelForm\.deduction_percent\)/);
+  assert.doesNotMatch(source,/cancelForm\.(?:forfeiture_amount|refund_due_amount)/);
+  for(const copy of [
+    "Confirmed cash received",
+    "Deduction from refund",
+    "Deduction amount",
+    "Refund due",
+    "0% is a full refund. 100% retains all confirmed cash.",
+    "Actual repayment is recorded in Collections",
+  ]) assert.ok(source.includes(copy),copy);
+  for(const state of ['"loading"','"failed"','"denied"','"ready"']) assert.ok(source.includes(`cancellationPreview.status === ${state}`));
+  const previewSection=source.slice(source.indexOf("const cancellationPreview"),source.indexOf("const load"));
+  assert.doesNotMatch(previewSection,/Number\(|parseFloat\(|eligible_collected_amount\s*[*+-]/);
+});
+
 const formatExports = {};
 runInNewContext(`(function(exports){${ts.transpileModule(readFileSync(new URL("../src/lib/format.ts", import.meta.url), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText}\n})`)(formatExports);
 const inventoryUnit = {...unit, unit_type:"2BR", building_name:"Building A", floor_name:"Floor 3", phase_name:"Phase 1", gross_area:"118.00", area_unit:"m²"};
