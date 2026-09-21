@@ -56,6 +56,7 @@ def prepare(client: TestClient, project_id: str, sale_id: str) -> dict:
     result = client.post(
         f"{root(project_id)}/{identifier}/allocations",
         json={
+            "beneficiary_type": "other",
             "beneficiary_name": "Branch",
             "rate_fraction": "0.1",
         },
@@ -173,6 +174,7 @@ def test_draft_terms_and_beneficiaries_can_be_corrected(
     changed = finance_client.put(
         f"{url}/allocations/{allocation['id']}",
         json={
+            "beneficiary_type": "other",
             "beneficiary_name": "Corrected branch",
             "rate_fraction": "0.2",
             "notes": "Corrected beneficiary",
@@ -198,10 +200,58 @@ def test_retained_commission_refuses_downgrade(
     db.rollback()
     try:
         with pytest.raises(
-            SQLAlchemyError, match="cannot downgrade while consultant or commission"
+            (RuntimeError, SQLAlchemyError),
+            match=(
+                r"Structured commission beneficiaries|cannot downgrade while "
+                r"consultant or commission"
+            ),
         ):
             command.downgrade(alembic_config(), "0016_prelaunch_utilities")
         assert snapshot(db) == before
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
+    finally:
+        db.rollback()
+        command.upgrade(alembic_config(), "head")
+
+
+def test_legacy_allocation_migration_preserves_evidence(
+    finance_client: TestClient,
+    project_id: str,
+    active_sale: str,
+    db: Session,
+) -> None:
+    grant = prepare(finance_client, project_id, active_sale)
+    original = grant["allocations"][0]
+    db.execute(
+        text(
+            "UPDATE commission_allocations SET beneficiary_type='legacy' WHERE id=CAST(:id AS uuid)"
+        ),
+        {"id": original["id"]},
+    )
+    db.commit()
+    try:
+        command.downgrade(alembic_config(), "0037_merge_sales")
+        prior = db.execute(
+            text(
+                "SELECT beneficiary_name, rate_fraction, calculated_amount, sequence "
+                "FROM commission_allocations WHERE id=CAST(:id AS uuid)"
+            ),
+            {"id": original["id"]},
+        ).one()
+        assert prior[0] == "Branch"
+        db.rollback()
+        command.upgrade(alembic_config(), "head")
+        migrated = db.execute(
+            text(
+                "SELECT beneficiary_type, sales_agent_id, beneficiary_name, "
+                "rate_fraction, calculated_amount, sequence "
+                "FROM commission_allocations WHERE id=CAST(:id AS uuid)"
+            ),
+            {"id": original["id"]},
+        ).one()
+        assert migrated[0] == "legacy"
+        assert migrated[1] is None
+        assert migrated[2:] == prior
         assert db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
     finally:
         db.rollback()
@@ -252,7 +302,9 @@ def test_two_live_creations_and_two_releases(
             session.get(Project, project_uuid),
             maker,
             identifier,
-            schemas.AllocationWrite(beneficiary_name="Branch", rate_fraction="0.1"),
+            schemas.AllocationWrite(
+                beneficiary_type="other", beneficiary_name="Branch", rate_fraction="0.1"
+            ),
         )
     barrier = Barrier(2)
 

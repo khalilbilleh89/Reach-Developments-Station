@@ -231,7 +231,11 @@ def test_signed_sale_commission_grant_counted_once(
     grant = created.json()
     allocation = finance_client.post(
         f"{base}/{grant['id']}/allocations",
-        json={"beneficiary_name": "Agent", "rate_fraction": "0.100000"},
+        json={
+            "beneficiary_type": "other",
+            "beneficiary_name": "Agent",
+            "rate_fraction": "0.100000",
+        },
     )
     assert allocation.status_code == 200, allocation.text
     manual = finance_client.post(

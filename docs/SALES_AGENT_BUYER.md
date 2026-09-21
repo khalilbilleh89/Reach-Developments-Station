@@ -7,6 +7,12 @@ permitted and UUIDs distinguish them. The roster supports editing and active
 status. It does not grant an application login, change the buyer's advisor, or
 compute commissions.
 
+Commission allocations may separately identify the actual receiving Agent by this
+Agent Registry UUID. This beneficiary can differ from the Sale Agent. Its display
+name and branch are frozen on allocation; a Branch beneficiary instead uses the
+Sale's frozen branch attribution. Commission references prevent Agent hard deletion,
+but deactivation preserves all existing allocations.
+
 Buyer registration and editing offer an optional Agent dropdown. The selected
 UUID must belong to the same project and be active; **No agent** is valid. The
 current Agent's details are copied when a reservation is created, and that
@@ -29,7 +35,8 @@ An unused Agent can be deleted with a reason; the deletion is audited. Once
 assigned to any buyer or sale, the Agent cannot be hard-deleted even after the
 live link is cleared: deactivate it instead. Database project-scoped foreign
 keys protect current references and assignment audit events preserve historical
-use. The migration downgrade refuses to discard populated roster data.
+use. Commission allocation references likewise block deletion while present.
+The migration downgrade refuses to discard populated roster data.
 
 The previous buyer-first sales and owner-removal flow remains unchanged:
 connecting a buyer to a unit creates a reservation/sale, and signed or
