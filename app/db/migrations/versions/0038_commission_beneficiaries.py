@@ -25,22 +25,22 @@ def upgrade() -> None:
     op.alter_column("commission_allocations", "beneficiary_type", nullable=False)
     op.alter_column("commission_allocations", "beneficiary_name", nullable=True)
     op.drop_constraint(
-        "ck_commission_allocations_beneficiary_present",
+        op.f("ck_commission_allocations_beneficiary_present"),
         "commission_allocations",
         type_="check",
     )
     op.create_check_constraint(
-        "ck_commission_allocations_beneficiary_present",
+        op.f("ck_commission_allocations_beneficiary_present"),
         "commission_allocations",
         "beneficiary_name IS NULL OR length(trim(beneficiary_name)) > 0",
     )
     op.create_check_constraint(
-        "ck_commission_allocations_beneficiary_type_ok",
+        op.f("ck_commission_allocations_beneficiary_type_ok"),
         "commission_allocations",
         "beneficiary_type IN ('agent', 'branch', 'other', 'legacy')",
     )
     op.create_check_constraint(
-        "ck_commission_allocations_beneficiary_shape",
+        op.f("ck_commission_allocations_beneficiary_shape"),
         "commission_allocations",
         "(beneficiary_type = 'agent' AND sales_agent_id IS NOT NULL "
         "AND beneficiary_name IS NOT NULL) OR "
@@ -50,7 +50,7 @@ def upgrade() -> None:
         "AND beneficiary_branch_snapshot IS NULL)",
     )
     op.create_foreign_key(
-        "fk_commission_allocations_commission_agent_sales_agents",
+        op.f("fk_commission_allocations_commission_agent_sales_agents"),
         "commission_allocations",
         "sales_agents",
         ["sales_agent_id", "project_id"],
@@ -68,26 +68,28 @@ def downgrade() -> None:
     ):
         raise RuntimeError("Structured commission beneficiaries must be retained before rollback.")
     op.drop_constraint(
-        "fk_commission_allocations_commission_agent_sales_agents",
+        op.f("fk_commission_allocations_commission_agent_sales_agents"),
         "commission_allocations",
         type_="foreignkey",
     )
     op.drop_constraint(
-        "ck_commission_allocations_beneficiary_shape", "commission_allocations", type_="check"
-    )
-    op.drop_constraint(
-        "ck_commission_allocations_beneficiary_type_ok",
+        op.f("ck_commission_allocations_beneficiary_shape"),
         "commission_allocations",
         type_="check",
     )
     op.drop_constraint(
-        "ck_commission_allocations_beneficiary_present",
+        op.f("ck_commission_allocations_beneficiary_type_ok"),
+        "commission_allocations",
+        type_="check",
+    )
+    op.drop_constraint(
+        op.f("ck_commission_allocations_beneficiary_present"),
         "commission_allocations",
         type_="check",
     )
     op.alter_column("commission_allocations", "beneficiary_name", nullable=False)
     op.create_check_constraint(
-        "ck_commission_allocations_beneficiary_present",
+        op.f("ck_commission_allocations_beneficiary_present"),
         "commission_allocations",
         "length(trim(beneficiary_name)) > 0",
     )
