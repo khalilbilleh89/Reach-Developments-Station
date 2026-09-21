@@ -52,6 +52,7 @@ from app.modules.project_analysis.api import router as project_analysis_router
 from app.modules.projects.api import router as projects_router
 from app.modules.projects.company_api import router as company_router
 from app.modules.sales.api import router as sales_router
+from app.modules.sales.operations_api import router as operations_router
 from app.modules.settings.api import router as settings_router
 from app.modules.unit_economics.api import router as unit_economics_router
 
@@ -241,6 +242,7 @@ def create_app() -> FastAPI:
         inventory_router,
         pricing_router,
         sales_router,
+        operations_router,
         payment_plans_router,
         collections_router,
         commissions_router,

@@ -121,6 +121,10 @@ def postgres() -> None:
 #: Emptied before every test. `roles` is excluded: it is seeded by migration and
 #: is reference data, not test state.
 _DATA_TABLES = (
+    "operation_progress",
+    "operation_buyers",
+    "operation_stages",
+    "operation_pipelines",
     "ue_current_cost_settings",
     "company_bank_accounts",
     "project_companies",

@@ -56,6 +56,7 @@ export type ProjectSection =
   | "payments"
   | "collections"
   | "commissions"
+  | "operations"
   | "construction"
   | "economics"
   | "cashflow"
@@ -196,6 +197,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         icon: "money",
         description: "Per-sale commission grants and their beneficiary distribution.",
         visible: (roles) => hasAnyRole(roles, COMMISSION_READERS),
+      },
+      {
+        key: "operations", label: "Operations", icon: "sales",
+        description: "Buyer paperwork and Golden Visa progress, with a configurable project pipeline.",
+        visible: (roles) => hasAnyRole(roles, SALES_READERS),
       },
     ],
   },

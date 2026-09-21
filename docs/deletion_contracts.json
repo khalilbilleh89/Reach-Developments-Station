@@ -686,5 +686,21 @@
     "removal_route": "POST /{company_id}/bank-accounts/{account_id}/delete",
     "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
     "notes": "Whole-project authorized writers remove records after reasoned confirmation. Company removal blocks active bank accounts; rows and audit history are retained."
+  },
+  {
+    "notes": "Delete unused stages; retire stages with buyer entries. Audit and optimistic concurrency retained. Pipeline is a project-owned container, not a separately created record.",
+    "ui_file": "frontend/src/components/projects/operations/PipelineConfiguration.tsx",
+    "create_route": "PUT /pipeline",
+    "removal_route": "DELETE /projects/{project_id}/operations/stages/{stage_id}",
+    "status": "implemented",
+    "handler": "sales.save_pipeline"
+  },
+  {
+    "notes": "Delete manual progress and purpose with before-values retained in audit. Buyer, purchases and linked signatures remain. Revision frontier retained against stale replay.",
+    "ui_file": "frontend/src/components/projects/operations/BuyerOperations.tsx",
+    "create_route": "PUT /buyers/{client_id}",
+    "removal_route": "DELETE /projects/{project_id}/operations/buyers/{client_id}",
+    "status": "implemented",
+    "handler": "sales.save_buyer"
   }
 ]
