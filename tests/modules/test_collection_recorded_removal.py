@@ -139,11 +139,13 @@ def test_confirmed_cash_cannot_be_voided_or_reversed_by_collections(
     finance_client: TestClient,
     project_id: str,
     collecting_sale: str,
-    cancelled_sale: tuple[str, str],
+    request: pytest.FixtureRequest,
 ) -> None:
     # New receipts cannot be confirmed after cancellation; use a live sale to
     # exercise the confirmed-receipt role boundary. Refunds belong to the case.
-    target = (collecting_sale, "") if kind == "receipt" else cancelled_sale
+    target = (
+        (collecting_sale, "") if kind == "receipt" else request.getfixturevalue("cancelled_sale")
+    )
     row = record(collections_client, project_id, target, kind)
     base = f"{collections_url(project_id)}/{kind}s/{row['id']}"
     body = {"reason": "Wrong entry"}

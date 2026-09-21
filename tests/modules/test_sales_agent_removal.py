@@ -12,7 +12,13 @@ from app.core.database import get_engine
 from app.modules.sales.models import SaleContract
 from tests.conftest import alembic_config
 from tests.factories import client_for, make_user
-from tests.modules.conftest import PROJECTS, inventory_url, project_payload, sales_url
+from tests.modules.conftest import (
+    PROJECTS,
+    cancellation_terms_payload,
+    inventory_url,
+    project_payload,
+    sales_url,
+)
 
 AGENT = {
     "agent_country": "Jordan",
@@ -81,7 +87,9 @@ def test_buyer_team_follows_unit_and_remains_frozen(
 def test_agent_roster_is_independent_and_historical_assignment_blocks_delete(
     boss: TestClient,
     project_id: str,
+    operational_project: str,
 ) -> None:
+    assert operational_project == project_id
     base = sales_url(project_id)
     first = boss.post(f"{base}/agents", json={"display_name": "Same Name"})
     second = boss.post(f"{base}/agents", json={"display_name": "Same Name"})
@@ -110,19 +118,26 @@ def test_agent_roster_is_independent_and_historical_assignment_blocks_delete(
 
 def test_agent_project_scope_and_input_validation(
     boss: TestClient,
+    admin_client: TestClient,
     project_id: str,
+    operational_project: str,
     country_pack_id: str,
     currency_id: str,
 ) -> None:
+    assert operational_project == project_id
     base = sales_url(project_id)
     agent = boss.post(f"{base}/agents", json={"display_name": "Scoped"})
     assert agent.status_code == 201, agent.text
     agent_id = agent.json()["id"]
     other = boss.post(
         PROJECTS,
-        json=project_payload("Agent Other", country_pack_id, currency_id),
+        json=project_payload(country_pack_id, currency_id, code="AGENT-OTHER", name="Agent Other"),
     )
     assert other.status_code == 201, other.text
+    activated = admin_client.patch(
+        f"{PROJECTS}/{other.json()['id']}", json={"status": "predevelopment"}
+    )
+    assert activated.status_code == 200, activated.text
     other_base = sales_url(other.json()["id"])
     assert boss.get(f"{other_base}/agents/{agent_id}").status_code == 404
     assert (
@@ -368,7 +383,11 @@ def test_master_can_complete_signed_sale_cancellation(
     base = sales_url(project_id)
     result = boss.post(
         f"{base}/contracts/{active_sale}/cancellation",
-        json={"initiated_by_party": "seller", "reason": "Cancel signed test transaction"},
+        json={
+            "initiated_by_party": "seller",
+            "reason": "Cancel signed test transaction",
+            **cancellation_terms_payload(boss, project_id, active_sale),
+        },
     )
     assert result.status_code == 201, result.text
     case_id = result.json()["id"]
