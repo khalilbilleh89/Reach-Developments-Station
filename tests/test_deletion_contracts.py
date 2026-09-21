@@ -16,6 +16,7 @@ def test_every_record_creator_has_a_reviewed_deletion_contract() -> None:
     for path in [
         *(ROOT / "app/modules").glob("*/api.py"),
         ROOT / "app/modules/projects/company_api.py",
+        ROOT / "app/modules/sales/operations_api.py",
     ]:
         for function in ast.parse(path.read_text(encoding="utf-8")).body:
             if not isinstance(function, ast.FunctionDef):
@@ -35,7 +36,14 @@ def test_every_record_creator_has_a_reviewed_deletion_contract() -> None:
             if not (
                 function.name.startswith(("create_", "add_", "record_", "register_", "clone_"))
                 or function.name
-                in {"capture", "open_dispute", "submit_waiver", "start_cancellation"}
+                in {
+                    "capture",
+                    "open_dispute",
+                    "submit_waiver",
+                    "start_cancellation",
+                    "save_pipeline",
+                    "save_buyer",
+                }
                 or created_response
             ):
                 continue

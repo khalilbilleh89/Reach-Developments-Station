@@ -1379,3 +1379,10 @@ building costs/profits; the frontend performs no financial arithmetic. The live
 report is independent of frozen approved allocation versions. See
 [CURRENT_UNIT_COSTS.md](CURRENT_UNIT_COSTS.md) for coverage, tax, denomination,
 de-duplication and rollback rules. Migration 0034 stores editable inputs only.
+
+### Commercial Operations
+
+Sales owns project pipeline configuration and buyer milestone records through its
+operations service. Operations reads existing Sales clients, purchases and effective
+buyer signatures; it never writes contract/legal state. Counts are server-derived.
+See [Commercial Operations](COMMERCIAL_OPERATIONS.md) for scope and retention.
