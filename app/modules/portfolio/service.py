@@ -140,19 +140,34 @@ def _project_summary(
     buckets(
         "contracted_value",
         sale.contracted,
-        "Standing activated SaleContract gross price including source tax and fees.",
+        "Standing activated SaleContract gross price including source tax and fees; "
+        "completed cancellations excluded as of the reporting date.",
         "sales",
     )
     buckets(
         "confirmed_receipts",
         collection.confirmed,
-        "Confirmed gross Collections receipts; allocations are not additional cash.",
+        "Confirmed gross Collections receipts; refunds are separate cash outflows, "
+        "not netted from receipts.",
         "collections",
     )
     buckets(
-        "refunds",
-        collection.refunds,
-        "Confirmed Collections refunds shown separately from receipts.",
+        "refund_due",
+        collection.refund_due,
+        "Approved cancellation refund liability from Collections, by source currency.",
+        "collections",
+    )
+    buckets(
+        "refund_confirmed",
+        collection.refund_confirmed,
+        "Standing confirmed Collections refunds; actual cash that left the company.",
+        "collections",
+    )
+    buckets(
+        "refund_outstanding",
+        collection.refund_outstanding,
+        "Approved refund liability less standing confirmed refunds, using Collections' "
+        "canonical as-of position.",
         "collections",
     )
     buckets(
@@ -290,6 +305,7 @@ def _project_summary(
         available_units=inv.available_units,
         committed_units=committed,
         active_sold_units=len(inv.eligible_ids & sale.active_sold_ids),
+        cancelled_sales=sum(day <= as_of for day in sale.cancellations),
         remaining_units=remaining,
         sales_penetration=ratio(committed, eligible, PENETRATION_BASIS),
         sales_run_rate=run_rate,
@@ -527,6 +543,7 @@ def overview(projects: list[out.ProjectSummary], as_of: date) -> out.Overview:
         eligible_units=eligible,
         committed_units=committed,
         active_sold_units=sum(row.active_sold_units for row in projects),
+        cancelled_sales=sum(row.cancelled_sales or 0 for row in projects),
         sales_penetration=ratio(committed, eligible, PENETRATION_BASIS),
         money=calculations.currency_totals(projects),
         risk_count=len(risks),

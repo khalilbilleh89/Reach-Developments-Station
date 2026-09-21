@@ -26,14 +26,18 @@ simulated is the passage of time, never a figure.
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.modules.portfolio import service as portfolio_service
+from app.modules.portfolio.schemas import ProjectSummary
+from app.modules.projects.models import Project
 from tests.modules.conftest import (
     at,
     backdate,
@@ -1074,6 +1078,39 @@ class TestACancelledContractLeavesActiveCollections:
             collections_client, project_id, collecting_sale, as_of="2026-06-14"
         )
         return {"cancellation_id": cancellation_id, "before": before}
+
+    def test_portfolio_reconstructs_active_contract_and_completed_count_by_date(
+        self,
+        db: Session,
+        project_id: str,
+        collecting_sale: str,
+        paid_then_cancelled: dict[str, object],
+    ) -> None:
+        del paid_then_cancelled
+        backdate(
+            db,
+            table="sale_contracts",
+            row_id=collecting_sale,
+            activated_at=at("2026-01-10"),
+            cancelled_at=at("2026-06-15"),
+        )
+        scope = select(Project.id).where(Project.id == uuid.UUID(project_id))
+
+        def position(on: date) -> ProjectSummary:
+            return portfolio_service.summaries(db, scope, on)[0]
+
+        before = position(date(2026, 6, 14))
+        after = position(date(2026, 6, 15))
+        price = next(m.amount for m in before.money if m.metric_code == "contracted_value")
+        assert price is not None and price > 0
+        assert before.active_sold_units == 1 and before.cancelled_sales == 0
+        assert after.active_sold_units == 0 and after.cancelled_sales == 1
+        assert next(m.amount for m in after.money if m.metric_code == "contracted_value") == 0
+        assert next(m.amount for m in after.money if m.metric_code == "confirmed_receipts") == (
+            next(m.amount for m in before.money if m.metric_code == "confirmed_receipts")
+            == Decimal("20000")
+        )
+        assert next(m.amount for m in after.money if m.metric_code == "overdue_outstanding") == 0
 
     def test_the_receivable_was_real_before_the_unwinding(
         self,

@@ -16,7 +16,9 @@ from app.modules.sales.models import SaleContract
 @dataclass
 class CollectionsPosition:
     confirmed: dict[uuid.UUID, Decimal] = field(default_factory=dict)
-    refunds: dict[uuid.UUID, Decimal] = field(default_factory=dict)
+    refund_due: dict[uuid.UUID, Decimal] = field(default_factory=dict)
+    refund_confirmed: dict[uuid.UUID, Decimal] = field(default_factory=dict)
+    refund_outstanding: dict[uuid.UUID, Decimal] = field(default_factory=dict)
     unapplied: dict[uuid.UUID, Decimal] = field(default_factory=dict)
     overdue: dict[uuid.UUID, Decimal] = field(default_factory=dict)
     unavailable_overdue_currencies: set[uuid.UUID] = field(default_factory=set)
@@ -38,6 +40,18 @@ def positions(
     for sale in sales:
         target = result.setdefault(sale.project_id, CollectionsPosition())
         position, extras = ledgers[sale.id]
+        if not risk_only:
+            # The sale account's batched, as-of liability is the only refund
+            # answer. In particular, a withdrawn case can retain cash-out
+            # history while ceasing to owe a refund.
+            summary = service.summarise(session, position=position, as_of=as_of, extras=extras)
+            code = sale.currency_id
+            target.refund_confirmed.setdefault(code, Decimal(0))
+            for bucket, amount in (
+                (target.refund_due, summary.refund_due_total),
+                (target.refund_outstanding, summary.refund_outstanding),
+            ):
+                bucket[code] = bucket.get(code, Decimal(0)) + amount
         allocations: dict[uuid.UUID, Decimal] = {}
         for allocation in position.allocations:
             allocations[allocation.receipt_id] = (
@@ -91,7 +105,7 @@ def positions(
         )
     ):
         target = result.setdefault(refund.project_id, CollectionsPosition())
-        target.refunds[refund.currency_id] = (
-            target.refunds.get(refund.currency_id, Decimal(0)) + refund.amount
+        target.refund_confirmed[refund.currency_id] = (
+            target.refund_confirmed.get(refund.currency_id, Decimal(0)) + refund.amount
         )
     return result

@@ -9,16 +9,7 @@ import { portfolio } from "@/lib/api/portfolio";
 import type { MoneyMetric, ProjectSummary, Risk } from "@/lib/api/portfolio";
 import { money, businessDate } from "@/lib/format";
 import { SourceAction } from "./Actions";
-
-const labels: Record<string, string> = {
-  contracted_value: "Contracted value", confirmed_receipts: "Confirmed receipts", refunds: "Refunds",
-  unapplied_cash: "Unapplied confirmed cash", overdue_outstanding: "Overdue outstanding",
-  total_cash: "Total actual cash", restricted_cash: "Restricted cash", unrestricted_cash: "Unrestricted cash",
-  forecast_peak_deficit: "Forecast peak deficit", construction_control_budget: "Construction control budget",
-  construction_eac: "Construction EAC", construction_commitment: "Construction commitment (ex tax)",
-  construction_paid: "Construction paid (gross)", land_acquisition: "Land acquisition",
-  commission_released: "Released commissions (non-cash)",
-};
+import { metricLabel } from "./metricLabels";
 
 function Pending({ answer }: { answer: Answer<unknown> & { retry: () => void } }) {
   if (answer.status === "denied" || answer.status === "off") return <Notice tone="info">Portfolio is not available to your role.</Notice>;
@@ -31,7 +22,7 @@ function MetricValue({ row }: { row: MoneyMetric }) {
 }
 
 export function MoneyRegister({ rows }: { rows: MoneyMetric[] }) {
-  return <TableScroll label="Portfolio monetary facts and source coverage"><thead><tr><th scope="col">Position</th><th scope="col">Amount</th><th scope="col">Coverage</th><th scope="col">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.metric_code}:${row.currency}`}><th scope="row" className="cell-prose cell-prose-tight">{labels[row.metric_code] ?? row.metric_code}</th><td className="cell-prose"><MetricValue row={row} /></td><td>{row.contributing_project_count} contributing · {row.missing_project_count} missing</td><td className="cell-prose"><Link href={row.drilldown}>Inspect source</Link><p className="muted">{row.source_basis}</p>{row.source_version_id ? <p className="muted">Version {row.source_version_id}</p> : null}</td></tr>)}</tbody></TableScroll>;
+  return <TableScroll label="Portfolio monetary facts and source coverage"><thead><tr><th scope="col">Position</th><th scope="col">Amount</th><th scope="col">Coverage</th><th scope="col">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.metric_code}:${row.currency}`}><th scope="row" className="cell-prose cell-prose-tight">{metricLabel(row.metric_code)}</th><td className="cell-prose"><MetricValue row={row} /></td><td>{row.contributing_project_count} contributing · {row.missing_project_count} missing</td><td className="cell-prose"><Link href={row.drilldown}>Inspect source</Link><p className="muted">{row.source_basis}</p>{row.source_version_id ? <p className="muted">Version {row.source_version_id}</p> : null}</td></tr>)}</tbody></TableScroll>;
 }
 
 export function RiskRegister({ rows }: { rows: Risk[] }) {
@@ -59,7 +50,7 @@ function CapitalBands({ rows }: { rows: MoneyMetric[] }) {
     <MetricGroup>{codes.map((code) => {
       const row = rows.find((entry) => entry.currency === currency && entry.metric_code === code);
       if (!row) return null;
-      return <Metric key={code} label={labels[code]} value={row.amount === null ? "Unavailable" : money(row.amount, row.currency)}
+      return <Metric key={code} label={metricLabel(code)} value={row.amount === null ? "Unavailable" : money(row.amount, row.currency)}
         note={<><span>{row.availability === "available" ? `${row.contributing_project_count} contributing ${row.contributing_project_count === 1 ? "project" : "projects"}` : `${row.availability} · ${row.reason}`}</span><Link href={row.drilldown}>Inspect source</Link></>} />;
     })}</MetricGroup>
   </section>)}</div>;
@@ -77,6 +68,7 @@ export function PortfolioOverview() {
         <PositionFigure label="Requiring attention" value={data.projects_requiring_attention} note={`${data.risk_count} triggered risks`} />
         <PositionFigure label="Eligible inventory" value={data.eligible_units} />
         <PositionFigure label="Active sold units" value={data.active_sold_units} />
+        <PositionFigure label="Cancelled sales" value={data.cancelled_sales ?? "Not captured"} note="Completed cancellations" />
       </Position>
       <div className="portfolio-penetration">
         <div><p className="metric-label">Sales penetration</p><p className="metric-note">{data.sales_penetration.numerator} / {data.sales_penetration.denominator} eligible units · {data.sales_penetration.availability}</p></div>
@@ -92,7 +84,9 @@ export function PortfolioOverview() {
       <SectionHeader level={2} title="Commercial and capital position" />
       <Notice tone="info">{data.projects_with_incomplete_coverage} projects have incomplete source coverage. Amounts remain in their original currencies; partial sums exclude unavailable project amounts.</Notice>
       <CapitalBands rows={data.money} />
-      <Disclosure title="All source positions" context="Commercial · collections · cash · construction · land"><MoneyRegister rows={data.money} /></Disclosure>
+      <SectionHeader level={3} title="Refund position" description="Approved liability, actual cash returned, and the balance still payable remain separate from buyer receipts." />
+      <MoneyRegister rows={data.money.filter(row => ["refund_due", "refund_confirmed", "refund_outstanding"].includes(row.metric_code))} />
+      <Disclosure title="All source positions" context="Commercial · collections · refunds · cash · construction · land"><MoneyRegister rows={data.money} /></Disclosure>
     </section>
     <Card title="Needs attention" description="Reported risks, with the reason and a route to the source." actions={<Link href="/portfolio/?section=risks">All risks →</Link>}>
       <RiskRegister rows={data.priority_risks.slice(0, 3)} />
@@ -144,7 +138,8 @@ export function PortfolioProject({ id }: { id: string }) {
   const project = answer.data;
   return <><SectionHeader level={2} title={`${project.code} · ${project.name}`} /><p>{project.status} · {project.currency} · {businessDate(project.as_of)} · Coverage: {project.coverage}</p><Link href={project.drilldown}>Open project workspace</Link>
     {project.cashflow_reason_code ? <Notice tone="warning">Cashflow unavailable: source currency mismatch. Observed currencies: {project.cashflow_observed_currencies.join(", ")}. No partial cash balance is reported.</Notice> : null}
-    <Card tone="command" title="Commercial position"><MetricGroup><Metric label="Eligible units" value={project.eligible_units} /><Metric label="Committed" value={project.committed_units} /><Metric label="Active sold" value={project.active_sold_units} /><Metric label="Sales penetration" value={project.sales_penetration.percentage === null ? "Unavailable" : `${project.sales_penetration.percentage}%`} /><Metric label="Net sales / month" value={project.sales_run_rate.average_monthly_absorption ?? "Unavailable"} note="Three complete UTC months" /></MetricGroup></Card>
+    <Card tone="command" title="Commercial position"><MetricGroup><Metric label="Eligible units" value={project.eligible_units} /><Metric label="Committed" value={project.committed_units} /><Metric label="Active sold" value={project.active_sold_units} /><Metric label="Cancelled sales" value={project.cancelled_sales ?? "Not captured"} /><Metric label="Sales penetration" value={project.sales_penetration.percentage === null ? "Unavailable" : `${project.sales_penetration.percentage}%`} /><Metric label="Net sales / month" value={project.sales_run_rate.average_monthly_absorption ?? "Unavailable"} note="Three complete UTC months" /></MetricGroup></Card>
+    <Link href={`/projects/?project=${project.project_id}&section=sales&sales_view=history&transaction_status=cancelled`}>Inspect cancelled sales in Sales history</Link>
     <Card title="Project risks"><RiskRegister rows={project.risks} /></Card><Card title="Source positions" flush><MoneyRegister rows={project.money} /></Card>
     <Card title="Design and permits"><KeyValueGrid><KeyValue label="Permits recorded" value={project.permit_count} /><KeyValue label="Consultant" value={project.design.consultant_name ?? "Unavailable"} /><KeyValue label="Current stage" value={project.design.current_stage ?? "Unavailable"} /><KeyValue label="Stage status" value={project.design.stage_status} /><KeyValue label="Planned / forecast date" value={`${businessDate(project.design.planned_date)} / ${businessDate(project.design.forecast_date)}`} /><KeyValue label="Design coverage" value={`${project.design.availability}: ${project.design.reason ?? "Recorded programme"}`} /></KeyValueGrid></Card>
     <Card title="Risk evaluation basis"><KeyValueGrid>{project.risk_evaluations.map((row) => <KeyValue key={row.risk_code} label={row.risk_code.replaceAll("_", " ")} value={`${row.availability}${row.reason ? ` · ${row.reason}` : ""}`} />)}</KeyValueGrid></Card>

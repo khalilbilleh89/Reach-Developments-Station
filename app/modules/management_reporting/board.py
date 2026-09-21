@@ -19,6 +19,7 @@ def board_pack(snapshot: SnapshotOut, comparison: Comparison | None) -> BoardPac
             "Projects requiring attention",
             "Commercial",
             "Collections",
+            "Refunds",
             "Cash and funding",
             "Construction cost control",
             "Development, permits and design",
