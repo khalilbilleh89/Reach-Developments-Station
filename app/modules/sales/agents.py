@@ -10,7 +10,7 @@ from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.models import AuditEvent
 from app.modules.audit.service import record_event
-from app.modules.commissions.models import CommissionAllocation
+from app.modules.commissions.read import agent_has_commission_history
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
 from app.modules.sales import permissions, service
@@ -164,14 +164,7 @@ def delete_agent(
             select(exists().where(model.project_id == project.id, model.agent_id == agent.id))
         ):
             raise ConflictError("This Agent has buyer or transaction history. Deactivate instead.")
-    if session.scalar(
-        select(
-            exists().where(
-                CommissionAllocation.project_id == project.id,
-                CommissionAllocation.sales_agent_id == agent.id,
-            )
-        )
-    ):
+    if agent_has_commission_history(session, project_id=project.id, sales_agent_id=agent.id):
         raise ConflictError("This Agent has commission history. Deactivate instead.")
     if session.scalar(
         select(
