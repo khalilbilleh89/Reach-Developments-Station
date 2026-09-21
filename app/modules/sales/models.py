@@ -376,8 +376,44 @@ class SalesProjectPolicy(Base):
 
 
 # --------------------------------------------------------------------------- #
-# Client and buyer parties
+# Agent master, client and buyer parties
 # --------------------------------------------------------------------------- #
+
+
+class SalesAgent(Base):
+    """Project roster identity; transactions retain their own frozen attribution."""
+
+    __tablename__ = "sales_agents"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    country: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    branch: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    branch_leader: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("id", "project_id", name="sales_agent_project"),
+        CheckConstraint("length(trim(display_name)) > 0", name="name_not_blank"),
+        Index("ix_sales_agents_project_active", "project_id", "is_active"),
+    )
 
 
 class Client(Base):
@@ -407,6 +443,7 @@ class Client(Base):
     #: Human-readable reference. Never identity: see ENGINEERING_RULES §6.
     client_number: Mapped[str] = mapped_column(String(32), nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     agent_country: Mapped[str | None] = mapped_column(String(200), nullable=True)
     agent_branch: Mapped[str | None] = mapped_column(String(200), nullable=True)
     agent_branch_leader: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -447,6 +484,12 @@ class Client(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["agent_id", "project_id"],
+            ["sales_agents.id", "sales_agents.project_id"],
+            name="agent",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("project_id", "client_number", name="uq_clients_number"),
         # Every child carries project_id and points at this pair, so a client of
         # one project can never end up on another project's reservation however
@@ -573,6 +616,7 @@ class Reservation(Base):
     reservation_number: Mapped[str] = mapped_column(String(32), nullable=False)
     unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     client_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     #: The exact price version this deal was quoted from. Immutable in pricing,
     #: so the reference alone is enough to reproduce the list price.
     unit_price_version_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
@@ -681,6 +725,12 @@ class Reservation(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["agent_id", "project_id"],
+            ["sales_agents.id", "sales_agents.project_id"],
+            name="agent",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             ["unit_id", "project_id"],
             ["units.id", "units.project_id"],
@@ -914,6 +964,7 @@ class SaleContract(Base):
     reservation_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     client_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
 
     unit_price_version_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     currency_id: Mapped[uuid.UUID] = mapped_column(
@@ -983,6 +1034,12 @@ class SaleContract(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["agent_id", "project_id"],
+            ["sales_agents.id", "sales_agents.project_id"],
+            name="agent",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             ["unit_id", "project_id"],
             ["units.id", "units.project_id"],

@@ -360,6 +360,17 @@ Removal contract:
 
 ## sales
 
+PR 1-B addition: `SalesAgent` → `sales_agents` is an independent project-scoped
+roster. `POST /{project_id}/sales/agents` creates an unused Agent;
+`PATCH /{project_id}/sales/agents/{agent_id}` corrects details or active status;
+`DELETE /{project_id}/sales/agents/{agent_id}?reason=...` removes only an Agent
+never assigned to a buyer or sale. An assignment remains recorded after unlink,
+so referenced Agents are retained/deactivated. Buyer `agent_id` corrections
+affect future reservations only. Reservation and sale freeze ID plus text;
+`PUT /{project_id}/sales/contracts/{sale_id}/agent` changes only the specified
+sale with a reason. Historical snapshot text is never rewritten by a roster edit.
+
+
 - `SalesProjectPolicy` → `sales_project_policies` ([model](../app/modules/sales/models.py#L327)).
 - `Client` → `clients` ([model](../app/modules/sales/models.py#L383)).
 - `ClientParty` → `client_parties` ([model](../app/modules/sales/models.py#L459)).

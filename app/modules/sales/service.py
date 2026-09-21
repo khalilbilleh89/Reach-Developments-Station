@@ -175,6 +175,7 @@ from app.modules.sales.models import (
     SaleContractParty,
     SaleContractTaxLine,
     SaleLegalEvent,
+    SalesAgent,
     SalesProjectPolicy,
 )
 from app.modules.settings import service as settings_service
@@ -200,6 +201,7 @@ _POLICY_FIELDS = (
 _CLIENT_FIELDS = (
     "client_number",
     "display_name",
+    "agent_id",
     "kyc_status",
     "preferred_language_code",
     "owner_advisor_user_id",
@@ -212,6 +214,7 @@ _RESERVATION_FIELDS = (
     "status",
     "unit_id",
     "client_id",
+    "agent_id",
     "unit_price_version_id",
     "reservation_date",
     "expires_on",
@@ -237,6 +240,7 @@ _SALE_FIELDS = (
     "status",
     "unit_id",
     "client_id",
+    "agent_id",
     "reservation_id",
     "unit_price_version_id",
     "currency_id",
@@ -518,6 +522,43 @@ def get_client(
     )
 
 
+def require_agent(
+    session: Session, *, project_id: uuid.UUID, agent_id: uuid.UUID, active: bool = True
+) -> SalesAgent:
+    """Resolve a project-owned roster identity, never by matching a name."""
+    agent = session.scalar(
+        select(SalesAgent).where(SalesAgent.id == agent_id, SalesAgent.project_id == project_id)
+    )
+    if agent is None:
+        raise NotFoundError("Agent not found.")
+    if active and not agent.is_active:
+        raise ConflictError("This Agent is inactive. Select an active Agent or No agent.")
+    return agent
+
+
+def record_agent_assignment(
+    session: Session,
+    *,
+    agent_id: uuid.UUID,
+    client_id: uuid.UUID | None = None,
+    sale_id: uuid.UUID | None = None,
+    actor: ActorContext,
+) -> None:
+    """Keep an immutable reference even if the live attribution is later cleared."""
+    record_event(
+        session,
+        action="sales_agent.assigned",
+        entity_type="sales_agent",
+        entity_id=agent_id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        after={
+            "client_id": str(client_id) if client_id else None,
+            "sale_id": str(sale_id) if sale_id else None,
+        },
+    )
+
+
 def create_client(
     session: Session,
     *,
@@ -532,6 +573,9 @@ def create_client(
     project = lock_project(session, project.id)
 
     advisor_user_id = fields.pop("owner_advisor_user_id", None)
+    agent_id = fields.get("agent_id")
+    if agent_id is not None:
+        require_agent(session, project_id=project.id, agent_id=agent_id)
     sole_purchaser_name = fields.pop("sole_purchaser_name", None)
     if advisor_user_id is None and "sales_advisor" in actor.role_keys and not actor.is_master_admin:
         # An advisor creating a buyer owns it. Leaving it unassigned would make
@@ -574,6 +618,8 @@ def create_client(
         actor_user_id=actor.user_id,
         after=_snapshot(client, _CLIENT_FIELDS),
     )
+    if client.agent_id:
+        record_agent_assignment(session, agent_id=client.agent_id, client_id=client.id, actor=actor)
     if sole_purchaser_name is not None:
         # Explicit single-purchaser registration is one transaction. Joint
         # buyers continue to use the existing party editor and reconciliation.
@@ -637,6 +683,14 @@ def update_client(
         )
     if fields.get("kyc_status") is not None and fields["kyc_status"] not in KYC_STATUSES:
         raise ValidationError("That is not a KYC status.")
+    if fields.get("agent_id") is not None and fields["agent_id"] != client.agent_id:
+        require_agent(session, project_id=project.id, agent_id=fields["agent_id"])
+    if "agent_id" in fields and fields["agent_id"] is None:
+        # A deliberate No agent clears the buyer's legacy default, never the
+        # already-frozen reservation and sale snapshots.
+        fields.update(
+            dict.fromkeys(("agent_country", "agent_branch", "agent_branch_leader", "agent_name"))
+        )
 
     before = _snapshot(client, _CLIENT_FIELDS)
     changed = [name for name, value in fields.items() if getattr(client, name) != value]
@@ -654,6 +708,21 @@ def update_client(
         before=before,
         after={**_snapshot(client, _CLIENT_FIELDS), "changed_fields": sorted(changed)},
     )
+    if "agent_id" in changed:
+        record_event(
+            session,
+            action="client.agent_changed",
+            entity_type=ENTITY_CLIENT,
+            entity_id=client.id,
+            correlation_id=actor.correlation_id,
+            actor_user_id=actor.user_id,
+            before={"agent_id": str(before["agent_id"]) if before["agent_id"] else None},
+            after={"agent_id": str(client.agent_id) if client.agent_id else None},
+        )
+        if client.agent_id:
+            record_agent_assignment(
+                session, agent_id=client.agent_id, client_id=client.id, actor=actor
+            )
     session.commit()
     session.refresh(client)
     return client
@@ -1506,6 +1575,11 @@ def create_reservation(
     )
     if not client.is_active:
         raise ConflictError("This client is not active.")
+    agent = (
+        require_agent(session, project_id=project.id, agent_id=client.agent_id)
+        if client.agent_id
+        else None
+    )
 
     today = inventory_fields.business_today()
     # Asked here as well as at activation. Two people may both prepare terms on
@@ -1573,10 +1647,11 @@ def create_reservation(
             project_column=Reservation.project_id,
         ),
         unit_id=unit.id,
-        agent_country=client.agent_country,
-        agent_branch=client.agent_branch,
-        agent_branch_leader=client.agent_branch_leader,
-        agent_name=client.agent_name,
+        agent_id=agent.id if agent else None,
+        agent_country=agent.country if agent else client.agent_country,
+        agent_branch=agent.branch if agent else client.agent_branch,
+        agent_branch_leader=agent.branch_leader if agent else client.agent_branch_leader,
+        agent_name=agent.display_name if agent else client.agent_name,
         client_id=client.id,
         unit_price_version_id=active.id,
         status=RESERVATION_DEPOSIT_PENDING if gate_required else RESERVATION_DRAFT,
@@ -2874,6 +2949,7 @@ def create_sale(
         ),
         spa_number=(spa_number or "").strip() or None,
         reservation_id=reservation.id,
+        agent_id=reservation.agent_id,
         unit_id=unit.id,
         client_id=client.id,
         unit_price_version_id=reservation.unit_price_version_id,

@@ -1,5 +1,13 @@
 [
   {
+    "handler": "sales.create_agent",
+    "create_route": "POST /{project_id}/sales/agents",
+    "status": "implemented",
+    "removal_route": "DELETE /{project_id}/sales/agents/{agent_id}?reason=...",
+    "ui_file": "frontend/src/components/projects/sales/AgentsPanel.tsx",
+    "notes": "Unused Agent only; reason and audit required. Once assigned to a buyer or transaction, immutable attribution history prevents hard deletion even after unlinking; deactivate instead."
+  },
+  {
     "handler": "access.create_user",
     "create_route": "POST /users",
     "status": "missing",

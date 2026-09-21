@@ -9,24 +9,7 @@ import { AgentsPanel } from "./sales/AgentsPanel";
 import { NewReservation } from "./sales/NewReservation";
 import { createdSalesHref } from "./sales/salesRoutes";
 
-/**
- * Two screens over one record, because there are two jobs and only one table.
- *
- * A buyer is the counterparty: who is purchasing, how to reach them, which
- * parties sign and for what share, and which unit they are connecting to. The
- * four `agent_*` fields on the same row are something else entirely — they name
- * the salesperson's country, branch, branch leader and agent, and they exist to
- * be copied onto a reservation and frozen onto the sale that follows.
- *
- * Presenting them together, as one "Agent/Buyer" register did, invited the
- * reading that a buyer *has* a country. They do not: `agent_country` is where
- * the salesperson sits, and a screen that lets somebody mistake it for the
- * purchaser's nationality is a screen that will eventually be used to file one.
- *
- * So the two jobs are separated in the navigation and in the reading, while the
- * data underneath is untouched. There is no agent entity here and this file
- * does not invent one: `mode` chooses which question the screen answers.
- */
+/** Separate project Agent roster and buyer counterparty workflows. */
 export function AgentBuyerTab({
   mode = "buyers",
   projectId,
@@ -46,8 +29,8 @@ export function AgentBuyerTab({
   };
   if (mode === "agents") {
     return <div className="stack">
-      <PageHeader icon="sales" title="Agents" subtitle="The sales team recorded against each buyer, and copied onto their next reservation and sale." compact />
-      {projectStatus === "setup" ? <Notice tone="info">Sales team attribution becomes available when project setup is complete.</Notice> : <AgentsPanel projectId={projectId} canWrite={canWrite} />}
+      <PageHeader icon="sales" title="Agents" subtitle="Maintain the sales agents available for buyer assignment. An Agent can be registered before they have buyers or sales." compact />
+      <AgentsPanel projectId={projectId} canWrite={canWrite} />
     </div>;
   }
   return <div className="stack">

@@ -95,10 +95,36 @@ class ReasonRequest(StrictRequest):
 
 
 class AgentDetailsRequest(ReasonRequest):
-    agent_country: Name | None = None
-    agent_branch: Name | None = None
-    agent_branch_leader: Name | None = None
-    agent_name: Name | None = None
+    agent_id: uuid.UUID | None = None
+
+
+class SalesAgentCreateRequest(StrictRequest):
+    display_name: Name
+    country: Name | None = None
+    branch: Name | None = None
+    branch_leader: Name | None = None
+
+
+class SalesAgentUpdateRequest(StrictRequest):
+    display_name: Name | None = None
+    country: Name | None = None
+    branch: Name | None = None
+    branch_leader: Name | None = None
+    is_active: bool | None = None
+
+
+class SalesAgentRead(BaseModel):
+    model_config = _READ
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    display_name: str
+    country: str | None
+    branch: str | None
+    branch_leader: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 class RequoteRequest(ReasonRequest):
@@ -167,10 +193,7 @@ class ClientCreateRequest(StrictRequest):
     owner_advisor_user_id: uuid.UUID | None = None
     notes: Notes | None = None
 
-    agent_country: Name | None = None
-    agent_branch: Name | None = None
-    agent_branch_leader: Name | None = None
-    agent_name: Name | None = None
+    agent_id: uuid.UUID | None = None
 
 
 class ClientUpdateRequest(StrictRequest):
@@ -188,10 +211,7 @@ class ClientUpdateRequest(StrictRequest):
     notes: Notes | None = None
     is_active: bool | None = None
 
-    agent_country: Name | None = None
-    agent_branch: Name | None = None
-    agent_branch_leader: Name | None = None
-    agent_name: Name | None = None
+    agent_id: uuid.UUID | None = None
 
 
 class ClientSummaryRead(BaseModel):
@@ -208,6 +228,7 @@ class ClientSummaryRead(BaseModel):
     agent_branch: str | None = None
     agent_branch_leader: str | None = None
     agent_name: str | None = None
+    agent_id: uuid.UUID | None = None
 
     model_config = _READ
 
@@ -500,6 +521,7 @@ class ReservationRead(BaseModel):
     agent_branch: str | None = None
     agent_branch_leader: str | None = None
     agent_name: str | None = None
+    agent_id: uuid.UUID | None = None
 
     model_config = _READ
 
@@ -673,6 +695,7 @@ class SaleRead(BaseModel):
     agent_branch: str | None = None
     agent_branch_leader: str | None = None
     agent_name: str | None = None
+    agent_id: uuid.UUID | None = None
 
     model_config = _READ
     price_per_gross_area: DecimalStr | None = None
