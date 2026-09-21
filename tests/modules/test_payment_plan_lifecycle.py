@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from tests.modules.conftest import (
+    cancellation_terms_payload,
     current_version_id,
     fixed_row,
     plan_detail,
@@ -331,7 +332,11 @@ def test_a_cancelled_contract_cannot_gain_a_new_version(
     sale_id = plan_detail(collections_client, project_id, plan_id)["sale_id"]
     started = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{sale_id}/cancellation",
-        json={"initiated_by_party": "buyer", "reason": "Buyer withdrew"},
+        json={
+            "initiated_by_party": "buyer",
+            "reason": "Buyer withdrew",
+            **cancellation_terms_payload(sales_ops_client, project_id, sale_id),
+        },
     )
     assert started.status_code == 201, started.text
     refused = collections_client.post(

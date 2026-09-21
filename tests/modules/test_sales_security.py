@@ -372,7 +372,12 @@ def test_an_auditor_reads_everything_and_writes_nothing(
     read = auditor.get(f"{sales_url(project_id)}/contracts/{active_sale}")
     write = auditor.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/cancellation",
-        json={"initiated_by_party": "buyer", "reason": "Trying it on"},
+        json={
+            "initiated_by_party": "buyer",
+            "reason": "Trying it on",
+            "deduction_rate_fraction": "0",
+            "expected_eligible_collected_amount": "0.00",
+        },
     )
 
     assert read.status_code == 200, read.text
