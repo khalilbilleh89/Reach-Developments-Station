@@ -420,6 +420,7 @@ sale with a reason. Historical snapshot text is never rewritten by a roster edit
 - **POST** `/{project_id}/sales/cancellations/{cancellation_id}/approve-financial-terms` — `approve_cancellation_terms` ([route](../app/modules/sales/api.py#L1193)).
 - **POST** `/{project_id}/sales/cancellations/{cancellation_id}/advance` — `advance_cancellation` ([route](../app/modules/sales/api.py#L1215)).
 - **POST** `/{project_id}/sales/cancellations/{cancellation_id}/complete` — `complete_cancellation` ([route](../app/modules/sales/api.py#L1237)).
+- **POST** `/{project_id}/sales/units/{unit_id}/return-to-market` — explicit Sales Operations remarketing after completed cancellation, fresh active price and Inventory release gates; retains the old transactions ([workflow](UNIT_RETURN_TO_MARKET.md)).
 - **POST** `/{project_id}/sales/contracts/{sale_id}/handover` — `create_handover` ([route](../app/modules/sales/api.py#L1280)).
 - **PATCH** `/{project_id}/sales/handovers/{handover_id}` — `update_handover` ([route](../app/modules/sales/api.py#L1303)).
 - **POST** `/{project_id}/sales/handovers/{handover_id}/clearances/{clearance_type}` — `grant_clearance` ([route](../app/modules/sales/api.py#L1328)).

@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ApiError, inventory } from "@/lib/api";
+import { ApiError, inventory, sales } from "@/lib/api";
 import type { Unit, UnitRegister, UnitReleaseResult, UnitStatusEvent } from "@/lib/api";
-import { Button, Card, Field, Loading, Notice, RegisterPagination, TableScroll } from "@/components/ui";
+import { Button, Card, Field, Loading, Notice, PromptDialog, RegisterPagination, TableScroll } from "@/components/ui";
 import { CommercialUnitControls } from "./CommercialUnitControls";
 import { UnitStanding } from "../inventory/unit/UnitStanding";
 import { UnitHistory } from "../inventory/unit/UnitHistory";
@@ -23,6 +23,7 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
   const [error,setError] = useState<string | null>(null);
   const [picked,setPicked] = useState<Set<string>>(new Set());
   const [outcome,setOutcome] = useState<UnitReleaseResult | null>(null);
+  const [returnPrompt,setReturnPrompt] = useState(false);
   const key = JSON.stringify([projectId,search,status,offset,revision]);
   useEffect(() => {
     let active = true;
@@ -32,6 +33,7 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
   const rows = result?.key === key ? result.data : null;
   /** The same roles that may move one unit by hand may release a set of them. */
   const canRelease = ["master_admin","system_admin","project_manager","sales_operations"].some(role => roles.has(role));
+  const canReturn = roles.has("sales_operations");
   /** A unit is pickable when its own gates already pass; the rest say why not. */
   const ready = (rows?.units ?? []).filter(unit => unit.release_eligible && ["unreleased","held"].includes(unit.commercial_status));
   const chosen = ready.filter(unit => picked.has(unit.id));
@@ -50,11 +52,26 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
     catch(e) {setError(e instanceof ApiError ? e.message : "Could not read the unit.");}
     finally {setBusy(false);}
   };
+  const returnToMarket = async (reason:string) => {
+    if (!selected) return;
+    setBusy(true);setError(null);
+    try {
+      await sales.returnUnitToMarket(projectId,selected.id,reason);
+      setReturnPrompt(false);setSelected(await inventory.unit(projectId,selected.id));
+      setRevision(value=>value+1);
+    } catch(e) {setError(e instanceof ApiError ? e.message : "Could not return this unit to market.");}
+    finally {setBusy(false);}
+  };
   return <Card title="Commercial stock" description="Manage eligibility and commercial status before a buyer transaction, and inspect ongoing unit status." actions={<Button data-leaves-editor onClick={onClose}>Close</Button>}>
     {error ? <Notice tone="error">{error}</Notice> : null}
     {selected ? <div className="stack">
       <Button data-leaves-editor disabled={busy} onClick={() => {setSelected(null);setHistory(null);}}>Back to commercial stock</Button>
       <h2>{selected.unit_reference}</h2><UnitStanding unit={selected} />
+      {selected.commercial_status === "returned" ? <section className="stack">
+        <p>The cancelled Sale remains in history. Activate a fresh price in Pricing, resolve the release blockers, then explicitly return this Unit to market. A new buyer will start a new Reservation.</p>
+        {selected.release_blockers.length ? <Notice tone="info">Not ready: {selected.release_blockers.join("; ")}.</Notice> : null}
+        <div><Button disabled={busy} onClick={()=>void loadUnit(selected.id)}>Refresh eligibility</Button>{canReturn ? <Button variant="primary" disabled={busy || selected.release_blockers.length>0} onClick={()=>{setError(null);setReturnPrompt(true);}}>Return to market</Button> : null}</div>
+      </section> : null}
       <CommercialUnitControls key={selected.id} unit={selected} roles={roles} busy={busy} onSaveControls={async changes => {await inventory.releaseControls(projectId,selected.id,changes);await loadUnit(selected.id);setRevision(value=>value+1);}}
         onTransition={async move => {setBusy(true);setError(null);try {await inventory.transitionUnit(projectId,selected.id,move);await loadUnit(selected.id);setRevision(value=>value+1);} catch(e) {setError(e instanceof ApiError ? e.message : "Could not change commercial status.");throw e;} finally {setBusy(false);}}} />
       <Button disabled={busy} onClick={async () => {try {setHistory(await inventory.unitHistory(projectId,selected.id));} catch(e) {setError(e instanceof ApiError ? e.message : "Could not load history.");}}}>Status history</Button>
@@ -62,7 +79,7 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
       <UnitStages projectId={projectId} unitId={selected.id} roles={roles} />
     </div> : <>
       <Field label="Find unit"><input className="input" type="search" value={search} onChange={e=>{setSearch(e.target.value);setOffset(0);}} /></Field>
-      <Field label="Commercial status"><select className="input" value={status} onChange={e=>{setStatus(e.target.value);setOffset(0);}}><option value="">All statuses</option>{["unreleased","held","available","reserved","sold"].map(value=><option key={value} value={value}>{statusLabel(value)}</option>)}</select></Field>
+      <Field label="Commercial status"><select className="input" value={status} onChange={e=>{setStatus(e.target.value);setOffset(0);}}><option value="">All statuses</option>{["unreleased","held","available","reserved","sold","returned"].map(value=><option key={value} value={value}>{statusLabel(value)}</option>)}</select></Field>
       {outcome ? <Notice tone={outcome.skipped ? "warning" : "success"}>
         <strong>{outcome.released} {outcome.released===1 ? "unit is" : "units are"} now on sale.</strong>
         {outcome.skipped ? <ul className="unit-release-requirements">{outcome.outcomes.filter(row=>!row.released).map(row=><li key={row.unit_id}>{row.unit_reference}: {row.blockers.join("; ")}</li>)}</ul> : null}
@@ -89,5 +106,6 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
         <RegisterPagination offset={offset} total={rows.total} pageSize={50} onChange={setOffset} />
       </>}
     </>}
+    {returnPrompt && selected ? <PromptDialog title={`Return ${selected.unit_reference} to market`} description="The former Sale and Reservation remain cancelled. This publishes the Unit for a new buyer at its current approved price." label="Reason" confirmLabel="Return to market" busy={busy} error={error} onCancel={()=>{if(!busy){setReturnPrompt(false);setError(null);}}} onSubmit={reason=>void returnToMarket(reason)} /> : null}
   </Card>;
 }

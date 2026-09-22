@@ -4432,6 +4432,79 @@ def complete_cancellation(
     return cancellation
 
 
+def return_unit_to_market(
+    session: Session,
+    *,
+    project: Project,
+    unit_id: uuid.UUID,
+    actor: ActorContext,
+    reason: str,
+) -> None:
+    """Explicitly remarket a returned unit after fresh pricing and release checks.
+
+    The cancelled sale and its reservation remain closed historical transactions.
+    A subsequent buyer starts a new reservation against the current list price.
+    """
+    permissions.require_sale_writer(actor)
+    permissions.require_operational_project(project)
+    reason = _require_reason(reason, detail="Give a reason for returning this unit to market.")
+    project = lock_project(session, project.id)
+    unit = permissions.require_sellable_unit(session, project=project, actor=actor, unit_id=unit_id)
+    unit = inventory_service.lock_unit(session, project_id=project.id, unit_id=unit.id)
+    if unit.commercial_status != COMMERCIAL_STATUS_RETURNED:
+        raise ConflictError("Only a returned unit can be explicitly returned to market.")
+    completed_sale = session.scalar(
+        select(SaleContract.id)
+        .join(SaleCancellation, SaleCancellation.sale_contract_id == SaleContract.id)
+        .where(
+            SaleContract.project_id == project.id,
+            SaleContract.unit_id == unit.id,
+            SaleContract.status == SALE_CANCELLED,
+            SaleCancellation.project_id == project.id,
+            SaleCancellation.status == CANCELLATION_COMPLETED,
+        )
+        .limit(1)
+    )
+    if completed_sale is None:
+        raise ConflictError("Complete the Sale cancellation before returning this unit to market.")
+    today = inventory_fields.business_today()
+    _require_no_commitment(session, unit=unit, today=today)
+    blockers = inventory_service.release_blockers(session, unit=unit, today=today)
+    if blockers:
+        raise ConflictError(
+            "This unit cannot be returned to market yet: " + "; ".join(blockers) + "."
+        )
+    # Release gates include pricing approval; the Sales quote contract additionally
+    # proves that the newly active price is current and usable for a fresh buyer.
+    quote = pricing_service.quote_preview(session, project=project, unit=unit, inputs={})
+    inventory_service.apply_sales_commercial_status(
+        session,
+        project=project,
+        unit=unit,
+        to_status=COMMERCIAL_STATUS_AVAILABLE,
+        effective_date=today,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        reason=reason,
+    )
+    record_event(
+        session,
+        action="sales.unit_returned_to_market",
+        entity_type="unit",
+        entity_id=unit.id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        reason=reason,
+        before={"project_id": str(project.id), "commercial_status": COMMERCIAL_STATUS_RETURNED},
+        after={
+            "project_id": str(project.id),
+            "commercial_status": COMMERCIAL_STATUS_AVAILABLE,
+            "unit_price_version_id": str(quote["unit_price_version_id"]),
+        },
+    )
+    session.commit()
+
+
 # --------------------------------------------------------------------------- #
 # Handover
 # --------------------------------------------------------------------------- #
