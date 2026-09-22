@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, commissions } from "@/lib/api";
-import type { CommissionEligibleSale, CommissionGrant, CommissionAllocation } from "@/lib/api";
+import { ApiError, commissions, sales } from "@/lib/api";
+import type { CommissionEligibleSale, CommissionGrant, CommissionAllocation, SalesAgent } from "@/lib/api";
 import { money, percent, percentInput, fractionFromPercent } from "@/lib/format";
 import { COMMISSION_PREPARERS, COMMISSION_RELEASERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
@@ -18,6 +18,16 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
   const commissionHref = (id: string | null) => { const next = new URLSearchParams(params); if (id) next.set("commission", id); else next.delete("commission"); return `/projects/?${next}`; }; const [dialog, setDialog] = useState<"grant" | "edit" | "allocation" | "reverse" | null>(null); const [allocation, setAllocation] = useState<CommissionAllocation | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const canPrepare = hasAnyRole(roles, COMMISSION_PREPARERS); const canRelease = hasAnyRole(roles, COMMISSION_RELEASERS);
+  const [agents, setAgents] = useState<SalesAgent[]>([]);
+  const [agentError, setAgentError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canPrepare) return;
+    let current = true;
+    void sales.agents(projectId, { active_only: "true" }).then((result) => {
+      if (current) { setAgents(result); setAgentError(null); }
+    }).catch(() => { if (current) setAgentError("Agent roster could not be loaded. Retry by reopening Commissions."); });
+    return () => { current = false; };
+  }, [canPrepare, projectId]);
   const load = useCallback(async () => { try { const [grants, sales] = await Promise.all([commissions.list(projectId), commissions.eligibleSales(projectId)]); setRows(grants); setEligible(sales);  setLoaded(true); setError(null); } catch (e) { setError(e instanceof ApiError ? e.message : "Could not load commissions."); } }, [projectId]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]); const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(null); try { await fn(); setDialog(null); setAllocation(null); await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "That action could not be completed."); } finally { setBusy(false); } };
   return <div className="stack">
@@ -63,12 +73,25 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
     >
       {error && !dialog ? <Notice tone="error">{error}</Notice> : null}
       <section>
+        <SectionHeader title="Sale information" />
+        <dl className="stack">
+          <div><dt>Unit</dt><dd>{selected.unit_reference}</dd></div>
+          <div><dt>Sale</dt><dd>{selected.sale_reference}</dd></div>
+          <div><dt>Buyer</dt><dd>{selected.buyer_display}</dd></div>
+          <div><dt>Sale agent</dt><dd>{selected.sale_agent_name ?? "Not recorded"}{selected.sale_agent_name && !selected.sale_agent_id ? " (legacy attribution)" : ""}</dd></div>
+          <div><dt>Sale branch</dt><dd>{selected.sale_agent_branch ?? "Not recorded"}</dd></div>
+        </dl>
+      </section>
+      <section>
         <SectionHeader title="Beneficiary distribution" actions={canPrepare && selected.status === "draft" ? <Button onClick={() => { setAllocation(null); setDialog("allocation"); }}>Add beneficiary</Button> : undefined} />
+        {agentError && canPrepare ? <Notice tone="error">{agentError}</Notice> : null}
         <p className="footnote">Each beneficiary rate applies to the commissionable base. Released distributions remain read only.</p>
         {selected.allocations.length ? <TableScroll label="Beneficiary distribution" fixedFirst compact>
-          <thead><tr><th scope="col">Beneficiary</th><th scope="col" className="num">Rate against base</th><th scope="col" className="num">Calculated amount</th><th scope="col">Actions</th></tr></thead>
+          <thead><tr><th scope="col">Type</th><th scope="col">Beneficiary</th><th scope="col">Branch</th><th scope="col" className="num">Rate against base</th><th scope="col" className="num">Calculated amount</th><th scope="col">Actions</th></tr></thead>
           <tbody>{selected.allocations.map((a) => <tr key={a.id}>
-            <th scope="row">{a.beneficiary_name}</th>
+            <th scope="row">{a.beneficiary_type === "legacy" ? "Legacy" : a.beneficiary_type === "agent" ? "Agent" : a.beneficiary_type === "branch" ? "Branch" : "Other"}</th>
+            <td>{a.beneficiary_name ?? "Other beneficiary"}</td>
+            <td>{a.beneficiary_branch_snapshot ?? "—"}</td>
             <td className="num">{percent(a.rate_fraction)}</td>
             <td className="num">{money(a.calculated_amount, currencyCodes[selected.currency_id])}</td>
             <td>{canPrepare && selected.status === "draft" ? <ButtonRow>
@@ -81,20 +104,29 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
     </RecordPage> : null}
     {dialog === "grant" ? <GrantDialog busy={busy} error={error} sales={eligible} codes={currencyCodes} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => commissions.create(projectId, body))} /> : null}
     {dialog === "edit" && selected ? <EditCommissionDialog grant={selected} code={currencyCodes[selected.currency_id]} busy={busy} error={error} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => commissions.update(projectId, selected.id, body))} /> : null}
-    {dialog === "allocation" && selected ? <AllocationDialog allocation={allocation} busy={busy} error={error} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => allocation ? commissions.updateAllocation(projectId, selected.id, allocation.id, { ...body, expected_updated_at: allocation.updated_at }) : commissions.addAllocation(projectId, selected.id, body))} /> : null}
+    {dialog === "allocation" && selected ? <AllocationDialog allocation={allocation} sale={selected} agents={agents} agentError={agentError} busy={busy} error={error} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => allocation ? commissions.updateAllocation(projectId, selected.id, allocation.id, { ...body, expected_updated_at: allocation.updated_at }) : commissions.addAllocation(projectId, selected.id, body))} /> : null}
     {dialog === "reverse" && selected ? <PromptDialog busy={busy} error={error} title="Reverse commission" label="Reason" hint="This preserves the released record and does not change the sale price, Unit Economics or confirmed project cash." confirmLabel="Reverse" onCancel={() => { if (!busy) setDialog(null); }} onSubmit={(reason) => void run(() => commissions.reverse(projectId, selected.id, reason))} /> : null}
   </div>;
 }
-function GrantDialog({ busy, error, sales, codes, onCancel, onSubmit }: { busy: boolean; error: string | null; sales: CommissionEligibleSale[]; codes: Record<string, string>; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) { const [sale, setSale] = useState(sales[0]?.id ?? ""); const chosen = sales.find((x) => x.id === sale); const [base, setBase] = useState(""); const [rate, setRate] = useState(""); return <FormDialog busy={busy} title="Prepare commission" confirmLabel="Save draft" disabled={!sale || !base || !rate} onCancel={onCancel} onSubmit={() => onSubmit({ sale_contract_id: sale, commissionable_base_amount: base, granted_rate_fraction: fractionFromPercent(rate) })}>{error ? <Notice tone="error">{error}</Notice> : null}<Field label="Sold contract"><select className="input" value={sale} onChange={(e) => setSale(e.target.value)}>{sales.map((x) => <option key={x.id} value={x.id}>{x.unit_reference} · {x.buyer_display} · {money(x.sold_price, codes[x.currency_id])}</option>)}</select></Field><FieldRow><Field label="Commissionable base"><MoneyInput code={chosen ? codes[chosen.currency_id] : null} value={base} onChange={setBase} /></Field><Field label="Granted commission percentage"><RateInput value={rate} onChange={setRate} /></Field></FieldRow></FormDialog>; }
-function AllocationDialog({ allocation, busy, error, onCancel, onSubmit }: { allocation: CommissionAllocation | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
+function GrantDialog({ busy, error, sales, codes, onCancel, onSubmit }: { busy: boolean; error: string | null; sales: CommissionEligibleSale[]; codes: Record<string, string>; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) { const [sale, setSale] = useState(sales[0]?.id ?? ""); const chosen = sales.find((x) => x.id === sale); const [base, setBase] = useState(""); const [rate, setRate] = useState(""); return <FormDialog busy={busy} title="Prepare commission" confirmLabel="Save draft" disabled={!sale || !base || !rate} onCancel={onCancel} onSubmit={() => onSubmit({ sale_contract_id: sale, commissionable_base_amount: base, granted_rate_fraction: fractionFromPercent(rate) })}>{error ? <Notice tone="error">{error}</Notice> : null}<Field label="Sold contract"><select className="input" value={sale} onChange={(e) => setSale(e.target.value)}>{sales.map((x) => <option key={x.id} value={x.id}>{x.unit_reference} · {x.buyer_display} · {money(x.sold_price, codes[x.currency_id])}</option>)}</select></Field>{chosen ? <p>Sale agent: {chosen.sale_agent_name ?? "Not recorded"}{chosen.sale_agent_name && !chosen.sale_agent_id ? " (legacy attribution)" : ""}<br />Sale branch: {chosen.sale_agent_branch ?? "Not recorded"}</p> : null}<FieldRow><Field label="Commissionable base"><MoneyInput code={chosen ? codes[chosen.currency_id] : null} value={base} onChange={setBase} /></Field><Field label="Granted commission percentage"><RateInput value={rate} onChange={setRate} /></Field></FieldRow></FormDialog>; }
+function AllocationDialog({ allocation, sale, agents, agentError, busy, error, onCancel, onSubmit }: { allocation: CommissionAllocation | null; sale: CommissionGrant; agents: SalesAgent[]; agentError: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
+  const [beneficiaryType, setBeneficiaryType] = useState<"agent" | "branch" | "other">(allocation?.beneficiary_type === "legacy" ? "other" : allocation?.beneficiary_type ?? "agent");
+  const [agentId, setAgentId] = useState(allocation?.sales_agent_id ?? (agents.some((agent) => agent.id === sale.sale_agent_id) ? sale.sale_agent_id ?? "" : ""));
   const [name, setName] = useState(allocation?.beneficiary_name ?? "");
   const [rate, setRate] = useState(percentInput(allocation?.rate_fraction));
   const [notes, setNotes] = useState(allocation?.notes ?? "");
-  return <FormDialog title={allocation ? "Edit Beneficiary" : "Add beneficiary"} busy={busy} description="The percentage applies directly to the commissionable base." confirmLabel="Save beneficiary" disabled={!name || !rate} onCancel={onCancel} onSubmit={() => onSubmit({ beneficiary_name: name, rate_fraction: fractionFromPercent(rate), notes: notes || null })}>
+  const options = allocation?.beneficiary_type === "agent" && allocation.sales_agent_id && !agents.some((agent) => agent.id === allocation.sales_agent_id)
+    ? [{ id: allocation.sales_agent_id, display_name: allocation.beneficiary_name ?? "Retained Agent", branch: allocation.beneficiary_branch_snapshot, is_active: false }, ...agents]
+    : agents;
+  const disabled = !rate || (beneficiaryType === "agent" && (!agentId || Boolean(agentError))) || (beneficiaryType === "branch" && !sale.sale_agent_branch);
+  return <FormDialog title={allocation ? "Edit Beneficiary" : "Add beneficiary"} busy={busy} description="The percentage applies directly to the commissionable base." confirmLabel="Save beneficiary" disabled={disabled} onCancel={onCancel} onSubmit={() => onSubmit({ beneficiary_type: beneficiaryType, ...(beneficiaryType === "agent" ? { sales_agent_id: agentId } : beneficiaryType === "other" ? { beneficiary_name: name.trim() || null } : {}), rate_fraction: fractionFromPercent(rate), notes: notes || null })}>
     {error ? <Notice tone="error">{error}</Notice> : null}
-    <Field label="Beneficiary name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+    <Field label="Beneficiary type"><select className="input" value={beneficiaryType} onChange={(event) => setBeneficiaryType(event.target.value as "agent" | "branch" | "other")}><option value="agent">Agent</option><option value="branch">Branch</option><option value="other">Other</option></select></Field>
+    {beneficiaryType === "agent" ? <Field label="Agent"><select className="input" value={agentId} onChange={(event) => setAgentId(event.target.value)}><option value="">Select registered Agent</option>{options.map((agent) => <option key={agent.id} value={agent.id}>{agent.display_name}{agent.branch ? ` — ${agent.branch}` : ""}{!agent.is_active ? " (inactive; existing allocation only)" : ""}</option>)}</select></Field> : null}
+    {beneficiaryType === "branch" ? <p>Sale branch: {sale.sale_agent_branch ?? "No branch is recorded on this Sale. Correct the Sale attribution first."}</p> : null}
+    {beneficiaryType === "other" ? <Field label="Beneficiary name" optional><input className="input" value={name} onChange={(event) => setName(event.target.value)} /></Field> : null}
     <Field label="Beneficiary percentage against base"><RateInput value={rate} onChange={setRate} /></Field>
-    <Field label="Notes" optional><textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+    <Field label="Notes" optional><textarea className="input" value={notes} onChange={(event) => setNotes(event.target.value)} /></Field>
   </FormDialog>;
 }
 function EditCommissionDialog({ grant, code, busy, error, onCancel, onSubmit }: { grant: CommissionGrant; code: string; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {

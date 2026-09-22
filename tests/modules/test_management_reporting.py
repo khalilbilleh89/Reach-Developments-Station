@@ -113,11 +113,12 @@ def test_legacy_version_one_payload_hash_and_board_remain_readable(
             }
         )
     assert "cancelled_sales" not in historical["payload"]["overview"]
-    reloaded = SnapshotOut.model_validate(historical)
-    assert reloaded.payload.overview.cancelled_sales is None
     expected = hashlib.sha256(
         json.dumps(historical, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
+    historical["content_hash"] = expected
+    reloaded = SnapshotOut.model_validate(historical)
+    assert reloaded.payload.overview.cancelled_sales is None
     assert content_hash(reloaded) == expected
     assert any(m.metric_code == "refunds" for m in reloaded.payload.overview.money)
     assert "Refunds" in board_pack(reloaded, None).section_order

@@ -24,6 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import MONEY, RATE, Base, in_list
 
 COMMISSION_STATUSES = ("draft", "released", "reversed")
+BENEFICIARY_TYPES = ("agent", "branch", "other", "legacy")
 
 
 class CommissionGrant(Base):
@@ -110,7 +111,10 @@ class CommissionAllocation(Base):
     )
     project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     commission_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
-    beneficiary_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    beneficiary_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    sales_agent_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    beneficiary_name: Mapped[str | None] = mapped_column(String(200))
+    beneficiary_branch_snapshot: Mapped[str | None] = mapped_column(String(200))
     rate_fraction: Mapped[Decimal] = mapped_column(RATE, nullable=False)
     calculated_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -127,8 +131,27 @@ class CommissionAllocation(Base):
             ["commission_grants.id", "commission_grants.project_id"],
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["sales_agent_id", "project_id"],
+            ["sales_agents.id", "sales_agents.project_id"],
+            name="fk_commission_allocations_commission_agent_sales_agents",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("commission_id", "sequence", name="uq_commission_allocation_sequence"),
-        CheckConstraint("length(trim(beneficiary_name)) > 0", name="beneficiary_present"),
+        CheckConstraint(in_list("beneficiary_type", BENEFICIARY_TYPES), name="beneficiary_type_ok"),
+        CheckConstraint(
+            "beneficiary_name IS NULL OR length(trim(beneficiary_name)) > 0",
+            name="beneficiary_present",
+        ),
+        CheckConstraint(
+            "(beneficiary_type = 'agent' AND sales_agent_id IS NOT NULL "
+            "AND beneficiary_name IS NOT NULL) OR "
+            "(beneficiary_type IN ('branch', 'legacy') AND sales_agent_id IS NULL "
+            "AND beneficiary_name IS NOT NULL AND beneficiary_branch_snapshot IS NULL) OR "
+            "(beneficiary_type = 'other' AND sales_agent_id IS NULL "
+            "AND beneficiary_branch_snapshot IS NULL)",
+            name="beneficiary_shape",
+        ),
         CheckConstraint("rate_fraction > 0 AND rate_fraction <= 1", name="rate_range"),
         CheckConstraint("calculated_amount > 0", name="amount_positive"),
         CheckConstraint("sequence > 0", name="sequence_positive"),

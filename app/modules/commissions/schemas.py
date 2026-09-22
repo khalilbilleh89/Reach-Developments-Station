@@ -3,9 +3,9 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
 Strict = ConfigDict(extra="forbid")
 Read = ConfigDict(from_attributes=True)
@@ -30,9 +30,25 @@ class GrantUpdate(BaseModel):
 
 class AllocationWrite(BaseModel):
     model_config = Strict
-    beneficiary_name: str = Field(min_length=1, max_length=200)
+    beneficiary_type: Literal["agent", "branch", "other"]
+    sales_agent_id: uuid.UUID | None = None
+    beneficiary_name: str | None = Field(default=None, max_length=200)
     rate_fraction: DecimalStr
     notes: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def identity_fields(self) -> "AllocationWrite":
+        if self.beneficiary_type == "agent":
+            if self.sales_agent_id is None or self.beneficiary_name is not None:
+                raise ValueError("Select an Agent ID; Agent names are resolved by the server.")
+        elif self.beneficiary_type == "branch":
+            if self.sales_agent_id is not None or self.beneficiary_name is not None:
+                raise ValueError("The Branch is resolved from the Sale, not supplied here.")
+        elif self.sales_agent_id is not None:
+            raise ValueError("Other beneficiaries cannot reference an Agent.")
+        if self.beneficiary_name is not None:
+            self.beneficiary_name = self.beneficiary_name.strip() or None
+        return self
 
 
 class AllocationUpdate(AllocationWrite):
@@ -47,7 +63,10 @@ class ReasonRequest(BaseModel):
 class AllocationOut(BaseModel):
     model_config = Read
     id: uuid.UUID
-    beneficiary_name: str
+    beneficiary_type: str
+    sales_agent_id: uuid.UUID | None
+    beneficiary_name: str | None
+    beneficiary_branch_snapshot: str | None
     rate_fraction: DecimalStr
     calculated_amount: DecimalStr
     sequence: int
@@ -61,6 +80,9 @@ class GrantOut(BaseModel):
     sale_contract_id: uuid.UUID
     sale_reference: str
     sale_status: str
+    sale_agent_id: uuid.UUID | None
+    sale_agent_name: str | None
+    sale_agent_branch: str | None
     unit_id: uuid.UUID
     unit_reference: str
     buyer_display: str
@@ -92,3 +114,6 @@ class EligibleSaleOut(BaseModel):
     buyer_display: str
     sold_price: DecimalStr
     currency_id: uuid.UUID
+    sale_agent_id: uuid.UUID | None
+    sale_agent_name: str | None
+    sale_agent_branch: str | None

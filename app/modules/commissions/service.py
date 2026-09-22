@@ -19,7 +19,7 @@ from app.modules.commissions.permissions import require_preparer, require_releas
 from app.modules.inventory.models import Unit
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
-from app.modules.sales.models import SALE_ACTIVE, SaleContract, SaleContractParty
+from app.modules.sales.models import SALE_ACTIVE, SaleContract, SaleContractParty, SalesAgent
 
 
 def money(value: Decimal) -> Decimal:
@@ -84,6 +84,9 @@ def out(session: Session, row: models.CommissionGrant) -> schemas.GrantOut:
         sale_contract_id=row.sale_contract_id,
         sale_reference=sale.sale_number,
         sale_status=sale.status,
+        sale_agent_id=sale.agent_id,
+        sale_agent_name=sale.agent_name,
+        sale_agent_branch=sale.agent_branch,
         unit_id=row.unit_id,
         unit_reference=unit.unit_reference,
         buyer_display=buyer,
@@ -155,6 +158,9 @@ def eligible_sales(session: Session, project: Project) -> list[schemas.EligibleS
                 buyer_display=", ".join(parties) or "Buyer not named",
                 sold_price=sale.total_contract_price,
                 currency_id=sale.currency_id,
+                sale_agent_id=sale.agent_id,
+                sale_agent_name=sale.agent_name,
+                sale_agent_branch=sale.agent_branch,
             )
         )
     return result
@@ -240,6 +246,62 @@ def _draft(row: models.CommissionGrant) -> None:
         raise ConflictError("Released and reversed commission terms are immutable.")
 
 
+def _beneficiary_identity(
+    session: Session,
+    row: models.CommissionGrant,
+    payload: schemas.AllocationWrite,
+    existing: models.CommissionAllocation | None = None,
+) -> tuple[uuid.UUID | None, str | None, str | None]:
+    """Resolve authoritative identity without trusting a submitted display string."""
+    if payload.beneficiary_type == "agent":
+        agent = session.scalar(
+            select(SalesAgent).where(
+                SalesAgent.id == payload.sales_agent_id,
+                SalesAgent.project_id == row.project_id,
+            )
+        )
+        if agent is None:
+            raise NotFoundError("Agent not found in this project.")
+        if not agent.is_active and not (
+            existing is not None
+            and existing.beneficiary_type == "agent"
+            and existing.sales_agent_id == agent.id
+        ):
+            raise ConflictError("Inactive Agents cannot receive new commission allocations.")
+        if (
+            existing is not None
+            and existing.beneficiary_type == "agent"
+            and existing.sales_agent_id == agent.id
+        ):
+            return agent.id, existing.beneficiary_name, existing.beneficiary_branch_snapshot
+        return agent.id, agent.display_name, agent.branch
+    if payload.beneficiary_type == "branch":
+        sale = session.scalar(
+            select(SaleContract).where(
+                SaleContract.id == row.sale_contract_id,
+                SaleContract.project_id == row.project_id,
+            )
+        )
+        branch = sale.agent_branch.strip() if sale and sale.agent_branch else None
+        if not branch:
+            raise ConflictError(
+                "This Sale has no recorded Branch. Correct the Sale attribution before "
+                "allocating Commission to a Branch."
+            )
+        return None, branch, None
+    return None, payload.beneficiary_name, None
+
+
+def _allocation_identity(row: models.CommissionAllocation) -> dict[str, object]:
+    return {
+        "beneficiary_type": row.beneficiary_type,
+        "sales_agent_id": row.sales_agent_id,
+        "beneficiary_name": row.beneficiary_name,
+        "beneficiary_branch_snapshot": row.beneficiary_branch_snapshot,
+        "rate_fraction": row.rate_fraction,
+    }
+
+
 def _recalculate(session: Session, row: models.CommissionGrant) -> None:
     allocations = _allocations(session, row.id)
     for item in allocations:
@@ -323,10 +385,14 @@ def add_allocation(
         )
         or 0
     ) + 1
+    agent_id, name, branch = _beneficiary_identity(session, row, payload)
     allocation = models.CommissionAllocation(
         project_id=project.id,
         commission_id=row.id,
-        beneficiary_name=payload.beneficiary_name.strip(),
+        beneficiary_type=payload.beneficiary_type,
+        sales_agent_id=agent_id,
+        beneficiary_name=name,
+        beneficiary_branch_snapshot=branch,
         rate_fraction=payload.rate_fraction,
         calculated_amount=money(row.commissionable_base_amount * payload.rate_fraction),
         sequence=sequence,
@@ -336,7 +402,13 @@ def add_allocation(
     session.flush()
     row.prepared_by_user_id = actor.user_id
     _recalculate(session, row)
-    _audit(session, actor, "commission.allocation_added", allocation, after=payload.model_dump())
+    _audit(
+        session,
+        actor,
+        "commission.allocation_added",
+        allocation,
+        after=_allocation_identity(allocation),
+    )
     session.commit()
     return out(session, row)
 
@@ -366,11 +438,12 @@ def update_allocation(
         raise ConflictError("Allocation changed. Reload before saving.")
     if payload.rate_fraction <= 0 or payload.rate_fraction > 1:
         raise ValidationError("Beneficiary percentage must be above 0% and no greater than 100%.")
-    before = {
-        "beneficiary_name": allocation.beneficiary_name,
-        "rate_fraction": allocation.rate_fraction,
-    }
-    allocation.beneficiary_name = payload.beneficiary_name.strip()
+    before = _allocation_identity(allocation)
+    agent_id, name, branch = _beneficiary_identity(session, row, payload, allocation)
+    allocation.beneficiary_type = payload.beneficiary_type
+    allocation.sales_agent_id = agent_id
+    allocation.beneficiary_name = name
+    allocation.beneficiary_branch_snapshot = branch
     allocation.rate_fraction = payload.rate_fraction
     allocation.notes = payload.notes
     row.prepared_by_user_id = actor.user_id
@@ -381,7 +454,7 @@ def update_allocation(
         "commission.allocation_updated",
         allocation,
         before,
-        payload.model_dump(exclude={"expected_updated_at"}),
+        _allocation_identity(allocation),
     )
     session.commit()
     return out(session, row)
@@ -411,10 +484,7 @@ def remove_allocation(
         actor,
         "commission.allocation_removed",
         allocation,
-        before={
-            "beneficiary_name": allocation.beneficiary_name,
-            "rate_fraction": allocation.rate_fraction,
-        },
+        before=_allocation_identity(allocation),
     )
     session.delete(allocation)
     session.flush()

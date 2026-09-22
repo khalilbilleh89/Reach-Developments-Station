@@ -61,7 +61,11 @@ def test_prelaunch_commission_and_consultant_independence(
     assert (
         finance_client.post(
             f"{commission_url}/{gid}/allocations",
-            json={"beneficiary_name": "Agent", "rate_fraction": "0.10"},
+            json={
+                "beneficiary_type": "other",
+                "beneficiary_name": "Agent",
+                "rate_fraction": "0.10",
+            },
         ).status_code
         == 200
     )

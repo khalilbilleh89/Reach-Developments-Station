@@ -244,7 +244,7 @@ def test_integrated_gate0a_journey(
     ):
         response = finance_client.post(
             f"{grant_url}/{grant_id}/allocations",
-            json={"beneficiary_name": label, "rate_fraction": rate},
+            json={"beneficiary_type": "other", "beneficiary_name": label, "rate_fraction": rate},
         )
         assert response.status_code == 200, response.text
     assert finance_client.post(f"{grant_url}/{grant_id}/release", json={}).status_code == 403
