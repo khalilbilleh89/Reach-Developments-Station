@@ -134,11 +134,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: development_scope
     if: always() && needs.development_scope.outputs.frontend_only != 'true' && github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == true
-    # Fast runs one domain's closure, not the suite, and finishes well inside a
-    # quarter of this. The ceiling stays above Full's so the ordering the CI
-    # contract guard asserts still holds, but four hours only ever bought a
-    # stuck Draft job a longer silence.
-    timeout-minutes: 60
+    # Four hours looks generous until you read the selector: a diff touching
+    # anything every test shares — conftest, the factories — puts Fast in
+    # full-fallback and it runs the entire suite in this one job, unsharded.
+    # A single Full shard is an eighth of that suite and takes about twenty
+    # minutes, so the fallback needs hours, not the quarter-hour the targeted
+    # case finishes in. The ceiling is sized for the fallback because that is
+    # the case that can reach it.
+    timeout-minutes: 240
     services:
       postgres:
         image: postgres:16
