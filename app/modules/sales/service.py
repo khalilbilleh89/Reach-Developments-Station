@@ -3955,11 +3955,28 @@ def cancellation_terms_for_read(
 def require_cancellation_cash_change_allowed(
     session: Session, *, sale_contract_id: uuid.UUID
 ) -> None:
-    """Keep confirmed cash fixed once a cancellation checker has signed it."""
+    """Keep confirmed cash fixed while a signed cancellation is still running.
+
+    A checker signs the refund against a stated figure, so the figure may not
+    move underneath them while the case is in flight: the deduction and the
+    refund were computed from that cash, and the case has not yet acted on
+    them.
+
+    Once the case reaches a terminal status the hold serves nobody. A completed
+    cancellation cannot be withdrawn, so a freeze that outlived it would be
+    permanent, and the escape this error offers — withdraw the case — would name
+    something the operator can no longer do. That left an erroneous receipt on a
+    closed contract impossible to correct by any route, including the unit purge
+    that exists precisely to erase such history.
+
+    Terminal is both ends: withdrawn, where the terms were abandoned, and
+    completed, where they were carried out. What protects a refund already paid
+    is the refund's own record, not a lock on the receipt that funded it.
+    """
     approved = session.scalar(
         select(SaleCancellation.id).where(
             SaleCancellation.sale_contract_id == sale_contract_id,
-            SaleCancellation.status != CANCELLATION_WITHDRAWN,
+            SaleCancellation.status.not_in((CANCELLATION_WITHDRAWN, CANCELLATION_COMPLETED)),
             SaleCancellation.financial_approved_at.is_not(None),
         )
     )

@@ -666,3 +666,91 @@ class TestCashThatAlreadyLeft:
         row = next(r for r in rows if r["sale_id"] == sale_id)
         for field in ("refund_due_total", "refund_confirmed_total", "refund_outstanding"):
             assert row["summary"][field] == account[field]
+
+
+def _approved_cancellation(
+    sales_ops: TestClient, cfo: TestClient, project_id: str, sale_id: str
+) -> str:
+    """Open a cancellation and have a checker sign its refund. Returns the case id."""
+    opened = sales_ops.post(
+        f"{sales_url(project_id)}/contracts/{sale_id}/cancellation",
+        json={
+            "initiated_by_party": "buyer",
+            "reason": "Buyer withdrew",
+            **cancellation_terms_payload(sales_ops, project_id, sale_id),
+        },
+    )
+    assert opened.status_code == 201, opened.text
+    case = opened.json()
+    approved = cfo.post(
+        f"{sales_url(project_id)}/cancellations/{case['id']}/approve-financial-terms",
+        json={
+            "reason": "Terms reviewed against the contract",
+            "expected_eligible_collected_amount": case["eligible_collected_amount"],
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    case_id: str = case["id"]
+    return case_id
+
+
+class TestTheCashFreezeEndsWithTheCase:
+    """Signed refund terms hold the cash still — until the case stops running.
+
+    A checker signs against a stated figure, so while the case is in flight that
+    figure may not move underneath them. Once the case is over the hold has
+    nothing left to protect, and keeping it would be worse than useless: a
+    completed cancellation cannot be withdrawn, so the freeze would never lift
+    and a receipt recorded in error could never be corrected by any route.
+    """
+
+    def test_an_open_signed_case_still_holds_the_cash_still(
+        self,
+        sales_ops_client: TestClient,
+        cfo_client: TestClient,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+    ) -> None:
+        receipt = record_receipt(collections_client, project_id, collecting_sale, "12000.00")
+        assert receipt.status_code == 201, receipt.text
+        receipt_id = receipt.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        _approved_cancellation(sales_ops_client, cfo_client, project_id, collecting_sale)
+
+        refused = finance_client.post(
+            f"{collections_url(project_id)}/receipts/{receipt_id}/reverse",
+            json={"reason": "Recorded against the wrong contract"},
+        )
+
+        assert refused.status_code == 409
+        assert "already been approved" in refused.json()["detail"]
+
+    def test_a_completed_case_lets_an_erroneous_receipt_be_corrected(
+        self,
+        sales_ops_client: TestClient,
+        cfo_client: TestClient,
+        collections_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        collecting_sale: str,
+    ) -> None:
+        receipt = record_receipt(collections_client, project_id, collecting_sale, "12000.00")
+        assert receipt.status_code == 201, receipt.text
+        receipt_id = receipt.json()["id"]
+        assert confirm_receipt(finance_client, project_id, receipt_id).status_code == 200
+        case = _approved_cancellation(sales_ops_client, cfo_client, project_id, collecting_sale)
+        base = f"{sales_url(project_id)}/cancellations/{case}"
+        for status in ("termination_pending_approval", "ready_for_unit_return"):
+            advanced = sales_ops_client.post(f"{base}/advance", json={"to_status": status})
+            assert advanced.status_code == 200, advanced.text
+        completed = sales_ops_client.post(f"{base}/complete", json={})
+        assert completed.status_code == 200, completed.text
+
+        corrected = finance_client.post(
+            f"{collections_url(project_id)}/receipts/{receipt_id}/reverse",
+            json={"reason": "Recorded against the wrong contract"},
+        )
+
+        assert corrected.status_code == 200, corrected.text

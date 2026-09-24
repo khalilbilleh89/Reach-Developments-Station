@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from tests.modules.conftest import (
     add_pool,
+    cancellation_terms_payload,
     cover_required_pools,
     create_version,
     economics_url,
@@ -777,6 +778,10 @@ class TestTheSaleSpecificRead:
                 "initiated_by_party": "buyer",
                 "initiation_date": "2026-05-01",
                 "reason": "Buyer withdrew",
+                # The deduction and the cash basis it was decided against. This
+                # test asserts that a cancelled sale keeps its economics, so it
+                # takes the figures Collections reports rather than naming any.
+                **cancellation_terms_payload(sales_ops_client, project_id, active_sale),
             },
         )
         assert opened.status_code == 201, opened.text

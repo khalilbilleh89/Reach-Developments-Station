@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.inventory.models import Unit
 from tests.modules.conftest import (
+    cancellation_terms_payload,
     collection_account,
     collections_url,
     inventory_url,
@@ -351,7 +352,15 @@ def test_an_open_cancellation_blocks_a_handover(
     )
     opened = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/cancellation",
-        json={"initiated_by_party": "buyer", "reason": "Buyer could not complete"},
+        json={
+            "initiated_by_party": "buyer",
+            "reason": "Buyer could not complete",
+            # Opening a case now states the deduction and the cash basis it was
+            # decided against. This test is about the handover interlock, not
+            # the money, so it takes whatever Collections currently reports
+            # rather than asserting a figure of its own.
+            **cancellation_terms_payload(sales_ops_client, project_id, active_sale),
+        },
     )
     assert opened.status_code == 201, opened.text
 
@@ -369,6 +378,7 @@ def test_a_handed_over_unit_cannot_then_be_taken_back_by_a_cancellation(
     legal_client: TestClient,
     collections_client: TestClient,
     delivery_client: TestClient,
+    cfo_client: TestClient,
     project_id: str,
     active_sale: str,
     finance_client: TestClient,
@@ -388,13 +398,38 @@ def test_a_handed_over_unit_cannot_then_be_taken_back_by_a_cancellation(
         f"{sales_url(project_id)}/handovers/{handover_id}/complete",
         json={"handover_date": "2026-06-01", "acceptance_document_reference": "ACC-1"},
     )
-    case = sales_ops_client.post(
+    opened = sales_ops_client.post(
         f"{sales_url(project_id)}/contracts/{active_sale}/cancellation",
-        json={"initiated_by_party": "buyer", "reason": "Changed their mind"},
-    ).json()
+        json={
+            "initiated_by_party": "buyer",
+            "reason": "Changed their mind",
+            **cancellation_terms_payload(sales_ops_client, project_id, active_sale),
+        },
+    )
+    # Read the status before the body: this used to go straight to .json(), so a
+    # refused open surfaced as KeyError: 'id' three lines later and said nothing
+    # about what had actually gone wrong.
+    assert opened.status_code == 201, opened.text
+    case = opened.json()
     base = f"{sales_url(project_id)}/cancellations/{case['id']}"
-    sales_ops_client.post(f"{base}/advance", json={"to_status": "termination_pending_approval"})
-    sales_ops_client.post(f"{base}/advance", json={"to_status": "ready_for_unit_return"})
+    advanced = sales_ops_client.post(
+        f"{base}/advance", json={"to_status": "termination_pending_approval"}
+    )
+    assert advanced.status_code == 200, advanced.text
+    # The ledger was settled in full to open the handover gates, so there is
+    # confirmed cash to give back and the refund terms need a second signature
+    # before the unit may be returned. Sales ops opened the case, so the checker
+    # has to be someone else.
+    approved = cfo_client.post(
+        f"{base}/approve-financial-terms",
+        json={
+            "reason": "Refund terms reviewed",
+            "expected_eligible_collected_amount": case["eligible_collected_amount"],
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    ready = sales_ops_client.post(f"{base}/advance", json={"to_status": "ready_for_unit_return"})
+    assert ready.status_code == 200, ready.text
 
     response = sales_ops_client.post(f"{base}/complete", json={})
 
