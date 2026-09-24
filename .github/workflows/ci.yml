@@ -134,6 +134,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: development_scope
     if: always() && needs.development_scope.outputs.frontend_only != 'true' && github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == true
+    # Four hours looks generous until you read the selector: a diff touching
+    # anything every test shares — conftest, the factories — puts Fast in
+    # full-fallback and it runs the entire suite in this one job, unsharded.
+    # A single Full shard is an eighth of that suite and takes about twenty
+    # minutes, so the fallback needs hours, not the quarter-hour the targeted
+    # case finishes in. The ceiling is sized for the fallback because that is
+    # the case that can reach it.
     timeout-minutes: 240
     services:
       postgres:
@@ -257,7 +264,14 @@ jobs:
     name: Backend Full ${{ matrix.shard }}/${{ needs.development_scope.outputs.shard_count }}
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false)
-    timeout-minutes: 120
+    # A shard runs its share of the suite in about twenty minutes. The budget
+    # is the point at which the job has stopped making progress rather than the
+    # point at which it is merely slow: at 120 a stuck shard burned two hours of
+    # a runner and was then killed mid-run, naming neither the test nor the
+    # statement. The suite now bounds its own lock waits (tests/conftest.py), so
+    # a shard that reaches this ceiling has found something that guard does not
+    # cover, and half an hour is long enough to say so.
+    timeout-minutes: 35
     needs: [development_scope, backend_static]
     strategy:
       fail-fast: false

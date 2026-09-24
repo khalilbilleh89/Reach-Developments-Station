@@ -61,6 +61,17 @@ def make_user(
         db.add(UserRole(user_id=user.id, role_id=role.id))
     db.commit()
     db.refresh(user)
+    # ``refresh`` reads, and a read opens a transaction this session will hold
+    # until something ends it. Nothing does: the fixture hands the user back and
+    # the session stays idle inside an open transaction for the rest of the
+    # test, keeping AccessShareLock on ``users``. A migration that drops a table
+    # with a foreign key to ``users`` needs AccessExclusiveLock on it to drop
+    # the constraint, so it waits — and waits for a lock this process will never
+    # release, because the process is the thing waiting. PostgreSQL sees no
+    # deadlock to break: the holder is waiting on its client, not on the
+    # database. Ending the transaction here costs nothing. The row is already
+    # committed and this session does not expire attributes on commit.
+    db.commit()
     return user
 
 

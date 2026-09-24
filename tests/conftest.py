@@ -12,6 +12,7 @@ below instead of whatever was in scope at import time.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -32,6 +33,43 @@ from app.core.database import (
     get_session_factory,
 )
 from app.main import create_app
+
+#: How long any test statement may wait for a lock before PostgreSQL cancels it.
+#:
+#: Nothing in a throwaway test database has a legitimate reason to queue behind
+#: a lock for half a minute. A test that does is not slow, it is stuck: some
+#: earlier connection is sitting in an open transaction and will never commit,
+#: because the single process that would have committed it is itself blocked
+#: waiting for the lock it holds. PostgreSQL cannot see that cycle — the holder
+#: is waiting on the client, not on the database — so its deadlock detector
+#: never fires and the wait is genuinely forever.
+#:
+#: Forever costs two hours of a CI runner and says nothing: the job is killed
+#: mid-run, so no test is named and no statement is reported. Bounding the wait
+#: turns the same event into an ordinary failure that names both.
+#:
+#: ``lock_timeout`` bounds only the wait *for* a lock; a statement that has its
+#: locks runs as long as it needs, so slow migrations and large fixtures are
+#: unaffected.
+#:
+#: Ten seconds rather than something rounder because the budget has to be paid
+#: by every test that blocks, not just the first. If a run hits this repeatedly
+#: the shard must still finish inside its own ceiling and hand back a log that
+#: names the tests; a budget generous enough to look safe in isolation is the
+#: one that gets the job killed before it can report anything.
+LOCK_WAIT_BUDGET = "10s"
+
+#: libpq reads ``PGOPTIONS`` when it opens a connection, which is why the budget
+#: is set here rather than through a SQLAlchemy event. ``SET`` is transactional:
+#: applied on connect it would be undone by the first rollback, and the pooled
+#: connection would silently go back to waiting forever. A server parameter
+#: passed at connection time cannot be rolled back, and it reaches every
+#: connection this process opens — the application's pool, Alembic's migration
+#: runner and the fixtures' own sessions alike — without any of them knowing.
+#:
+#: ``setdefault`` so that a developer chasing a lock by hand can raise or remove
+#: the budget for one run without editing this file.
+os.environ.setdefault("PGOPTIONS", f"-c lock_timeout={LOCK_WAIT_BUDGET}")
 
 PINNED_TEST_CONFIG = {
     "APP_NAME": "reach-developments-station",
