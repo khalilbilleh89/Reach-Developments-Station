@@ -416,6 +416,14 @@ def test_return_to_market_is_scoped_and_not_an_inventory_transition(
     )
     assert other.status_code == 201, other.text
     other_project_id = other.json()["id"]
+    # Leave setup before asking. A project still in setup refuses every sales
+    # write outright, so against a brand new one this call answered 409 for a
+    # reason that had nothing to do with the unit — and the scoping this test
+    # exists to prove was never reached.
+    left_setup = admin_client.patch(
+        f"{PROJECTS}/{other_project_id}", json={"status": "predevelopment"}
+    )
+    assert left_setup.status_code == 200, left_setup.text
     grant_access(admin_client, other_project_id, sales_ops)
     assert (
         sales_ops_client.post(
