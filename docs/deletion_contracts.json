@@ -557,7 +557,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/contracts/{sale_id}",
     "ui_file": "frontend/src/components/projects/sales/SaleWorkspace.tsx",
-    "notes": "Master Administrator Delete sale retains the contract, buyer, reservation and audit while cancelling a draft/unsigned sale and releasing its unit where eligible. Signed/collection-active sales expose Start cancellation. Existing cancellation, registry and handover obligations are guarded. Tests: test_sales_agent_removal.py."
+    "notes": "Master Administrator Delete sale retains the contract, buyer, reservation and audit while cancelling a draft/unsigned sale and releasing its unit where eligible. Signed/collection-active sales require governed cancellation, fresh pricing and an explicit Sales Return to market; Returned is not directly reservable. Existing cancellation, registry and handover obligations are guarded. Tests: test_sales_agent_removal.py and test_sales_cancellation.py."
   },
   {
     "handler": "sales.record_legal_event",
@@ -573,7 +573,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/contracts/{sale_id}",
     "ui_file": "frontend/src/components/projects/sales/SaleWorkspace.tsx",
-    "notes": "Master Administrator Delete sale retains the contract, buyer, reservation and audit while cancelling a draft/unsigned sale and releasing its unit where eligible. Signed/collection-active sales expose Start cancellation. Existing cancellation, registry and handover obligations are guarded. Tests: test_sales_agent_removal.py."
+    "notes": "Master Administrator Delete sale retains the contract, buyer, reservation and audit while cancelling a draft/unsigned sale and releasing its unit where eligible. Signed/collection-active sales require governed cancellation, fresh pricing and an explicit Sales Return to market; Returned is not directly reservable. Existing cancellation, registry and handover obligations are guarded. Tests: test_sales_agent_removal.py and test_sales_cancellation.py."
   },
   {
     "handler": "sales.start_cancellation",

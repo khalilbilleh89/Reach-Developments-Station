@@ -898,6 +898,8 @@ export const sales = {
     post<SaleDetail>(`/projects/${projectId}/sales/buyer-registrations`, input),
   removeSale: (projectId: string, id: string, reason: string) =>
     remove(`/projects/${projectId}/sales/contracts/${id}?${new URLSearchParams({reason})}`),
+  returnUnitToMarket: (projectId: string, unitId: string, reason: string) =>
+    post<void>(`/projects/${projectId}/sales/units/${unitId}/return-to-market`, {reason}),
   updateSaleAgent: (projectId: string, id: string, body: Record<string, unknown>) =>
     put<SaleContract>(`/projects/${projectId}/sales/contracts/${id}/agent`, body),
   deleteClient: (projectId: string, id: string, reason: string) =>

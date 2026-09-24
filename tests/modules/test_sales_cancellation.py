@@ -16,12 +16,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.access.models import User
 from app.modules.audit.models import AuditEvent
 from tests.modules.conftest import (
+    PROJECTS,
     cancellation_terms_payload,
     collections_url,
     confirm_receipt,
+    grant_access,
     inventory_url,
+    pricing_url,
+    project_payload,
     record_legal,
     record_receipt,
     sales_url,
@@ -265,6 +270,176 @@ def test_a_returned_unit_cannot_be_reserved_again_until_it_is_repriced(
 
     assert response.status_code == 409
     assert "requires repricing" in response.json()["detail"]
+
+
+def _complete_case(client: TestClient, project_id: str, sale_id: str) -> None:
+    case = _open_case(client, project_id, sale_id)
+    base = f"{sales_url(project_id)}/cancellations/{case['id']}"
+    assert (
+        client.post(
+            f"{base}/advance", json={"to_status": "termination_pending_approval"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(f"{base}/advance", json={"to_status": "ready_for_unit_return"}).status_code
+        == 200
+    )
+    assert client.post(f"{base}/complete", json={}).status_code == 200
+
+
+def test_return_to_market_requires_fresh_price_and_keeps_old_sale_history(
+    sales_ops_client: TestClient,
+    admin_client: TestClient,
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    active_sale: str,
+    released_unit: str,
+    priced_unit: str,
+    buyer_id: str,
+    db: Session,
+) -> None:
+    old = sales_ops_client.get(f"{sales_url(project_id)}/contracts/{active_sale}").json()["sale"]
+    old_reservation_id = old["reservation_id"]
+    _complete_case(sales_ops_client, project_id, active_sale)
+    action = f"{sales_url(project_id)}/units/{released_unit}/return-to-market"
+    assert sales_ops_client.post(action, json={"reason": " "}).status_code == 422
+    blocked = sales_ops_client.post(action, json={"reason": "Remarket after cancellation"})
+    assert blocked.status_code == 409
+    assert "Pricing not approved" in blocked.json()["detail"]
+    assert _unit(sales_ops_client, project_id, released_unit)["commercial_status"] == "returned"
+    assert not any(
+        row["unit_id"] == released_unit
+        for row in sales_ops_client.get(f"{sales_url(project_id)}/unit-options").json()["items"]
+    )
+
+    new_price = finance_client.post(
+        f"{pricing_url(project_id)}/units/{released_unit}/price-versions", json={}
+    )
+    assert new_price.status_code == 201, new_price.text
+    price_id = new_price.json()["id"]
+    assert price_id != priced_unit
+    price_base = f"{pricing_url(project_id)}/price-versions/{price_id}"
+    assert finance_client.post(f"{price_base}/submit", json={}).status_code == 200
+    assert (
+        cfo_client.post(f"{price_base}/approve", json={"reason": "Fresh resale price"}).status_code
+        == 200
+    )
+    assert cfo_client.post(f"{price_base}/activate").status_code == 200
+    assert _unit(sales_ops_client, project_id, released_unit)["commercial_status"] == "returned"
+    assert not any(
+        row["unit_id"] == released_unit
+        for row in sales_ops_client.get(f"{sales_url(project_id)}/unit-options").json()["items"]
+    )
+
+    controls = f"{inventory_url(project_id)}/units/{released_unit}/release-controls"
+    assert admin_client.patch(controls, json={"block_reason": "Legal hold"}).status_code == 200
+    blocked = sales_ops_client.post(action, json={"reason": "Try despite hold"})
+    assert blocked.status_code == 409
+    assert "Commercial block: Legal hold" in blocked.json()["detail"]
+    assert admin_client.patch(controls, json={"block_reason": None}).status_code == 200
+
+    returned = sales_ops_client.post(action, json={"reason": "Approved for a new buyer"})
+    assert returned.status_code == 204, returned.text
+    assert _unit(sales_ops_client, project_id, released_unit)["commercial_status"] == "available"
+    options = sales_ops_client.get(f"{sales_url(project_id)}/unit-options").json()["items"]
+    assert any(
+        row["unit_id"] == released_unit and row["unit_price_version_id"] == price_id
+        for row in options
+    )
+    created = sales_ops_client.post(
+        f"{sales_url(project_id)}/reservations",
+        json={
+            "unit_id": released_unit,
+            "client_id": buyer_id,
+            "deposit_required_amount": "5000.00",
+        },
+    )
+    assert created.status_code == 201, created.text
+    new_reservation = created.json()["reservation"]
+    assert new_reservation["id"] != old_reservation_id
+    assert new_reservation["unit_price_version_id"] == price_id
+    assert new_reservation["unit_id"] == released_unit
+    new_reservation_base = f"{sales_url(project_id)}/reservations/{new_reservation['id']}"
+    confirmed = sales_ops_client.post(
+        f"{new_reservation_base}/confirm-deposit",
+        json={"evidence_reference": "BANK-RESALE"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    activated = sales_ops_client.post(f"{new_reservation_base}/activate", json={})
+    assert activated.status_code == 200, activated.text
+    new_sale = sales_ops_client.post(
+        f"{sales_url(project_id)}/contracts",
+        json={"reservation_id": new_reservation["id"], "spa_number": "SPA-RESALE"},
+    )
+    assert new_sale.status_code == 201, new_sale.text
+    assert new_sale.json()["sale"]["id"] != active_sale
+    assert new_sale.json()["sale"]["unit_id"] == released_unit
+    assert (
+        sales_ops_client.get(f"{sales_url(project_id)}/contracts/{active_sale}").json()["sale"][
+            "status"
+        ]
+        == "cancelled"
+    )
+    assert (
+        sales_ops_client.get(f"{sales_url(project_id)}/reservations/{old_reservation_id}").json()[
+            "reservation"
+        ]["status"]
+        == "converted"
+    )
+    assert (
+        db.scalar(select(AuditEvent).where(AuditEvent.action == "sales.unit_returned_to_market"))
+        is not None
+    )
+    assert sales_ops_client.post(action, json={"reason": "Retry"}).status_code == 409
+
+
+def test_return_to_market_is_scoped_and_not_an_inventory_transition(
+    sales_ops_client: TestClient,
+    legal_client: TestClient,
+    admin_client: TestClient,
+    project_id: str,
+    country_pack_id: str,
+    currency_id: str,
+    sales_ops: User,
+    active_sale: str,
+    released_unit: str,
+) -> None:
+    _complete_case(sales_ops_client, project_id, active_sale)
+    action = f"{sales_url(project_id)}/units/{released_unit}/return-to-market"
+    assert legal_client.post(action, json={"reason": "Try"}).status_code == 403
+    assert admin_client.post(action, json={"reason": "Try"}).status_code == 403
+    other = admin_client.post(
+        PROJECTS,
+        json=project_payload(country_pack_id, currency_id, code="RESALE2", name="Other project"),
+    )
+    assert other.status_code == 201, other.text
+    other_project_id = other.json()["id"]
+    # Leave setup before asking. A project still in setup refuses every sales
+    # write outright, so against a brand new one this call answered 409 for a
+    # reason that had nothing to do with the unit — and the scoping this test
+    # exists to prove was never reached.
+    left_setup = admin_client.patch(
+        f"{PROJECTS}/{other_project_id}", json={"status": "predevelopment"}
+    )
+    assert left_setup.status_code == 200, left_setup.text
+    grant_access(admin_client, other_project_id, sales_ops)
+    assert (
+        sales_ops_client.post(
+            f"{sales_url(other_project_id)}/units/{released_unit}/return-to-market",
+            json={"reason": "Try"},
+        ).status_code
+        == 404
+    )
+    assert (
+        sales_ops_client.post(
+            f"{inventory_url(project_id)}/units/{released_unit}/commercial-transitions",
+            json={"to_status": "available", "effective_date": "2026-02-05", "reason": "Try"},
+        ).status_code
+        == 409
+    )
+    assert _unit(sales_ops_client, project_id, released_unit)["commercial_status"] == "returned"
 
 
 def test_a_cancellation_records_a_refund_due_and_never_a_refund_paid(

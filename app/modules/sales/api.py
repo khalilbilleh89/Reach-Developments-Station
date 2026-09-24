@@ -1433,6 +1433,24 @@ def complete_cancellation(
     return _cancellation_read(session, sale=sale, cancellation=cancellation)
 
 
+@router.post(
+    "/{project_id}/sales/units/{unit_id}/return-to-market",
+    status_code=204,
+    summary="Explicitly return a repriced, released unit to the market",
+)
+def return_unit_to_market(
+    unit_id: uuid.UUID,
+    payload: ReasonRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> Response:
+    service.return_unit_to_market(
+        session, project=project, unit_id=unit_id, actor=actor, reason=payload.reason
+    )
+    return Response(status_code=204)
+
+
 # --------------------------------------------------------------------------- #
 # Handover
 # --------------------------------------------------------------------------- #
