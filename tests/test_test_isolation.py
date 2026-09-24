@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from app.core.database import get_engine
 
-from .conftest import _DATA_TABLES, empty_data_tables
+from .conftest import _DATA_TABLES, LOCK_WAIT_BUDGET, empty_data_tables
 
 
 def _rows(table: str) -> int:
@@ -82,3 +84,40 @@ def test_the_clean_covers_every_table_it_claims_to() -> None:
     for table in _DATA_TABLES:
         with get_engine().begin() as connection:
             connection.execute(text(f"SELECT 1 FROM {table} LIMIT 1"))
+
+
+def test_every_connection_carries_the_lock_wait_budget() -> None:
+    """The budget must reach connections nobody configured by hand.
+
+    It is set through ``PGOPTIONS`` precisely so that it arrives on every
+    connection this process opens without the opener participating: the
+    application's pool builds its own engine, Alembic builds another, and the
+    fixtures build a third. A budget that only covered the one engine a test
+    could name would leave the clean-up statements — the ones that actually
+    block — waiting forever.
+    """
+    with get_engine().connect() as connection:
+        assert connection.execute(text("SHOW lock_timeout")).scalar_one() == LOCK_WAIT_BUDGET
+
+
+def test_a_blocked_statement_gives_up_rather_than_waiting_forever() -> None:
+    """A lock this suite cannot get must raise, and it must raise by itself.
+
+    This is the failure the budget exists for. One connection holds a table and
+    does not let go; another asks for it. Without a budget the second waits for
+    as long as the job is allowed to live, and the job is killed rather than
+    failed — no test named, no statement reported, two hours of a runner spent.
+
+    The wait is shortened to a quarter-second for the length of this test only.
+    ``SET LOCAL`` ends with the transaction, so it cannot leak into the next
+    test, and what is being asserted is the behaviour at the end of the wait
+    rather than the length of it — the length is asserted above.
+    """
+    with get_engine().connect() as holder:
+        holder.execute(text("LOCK TABLE currencies IN ACCESS EXCLUSIVE MODE"))
+        with get_engine().connect() as blocked:
+            blocked.execute(text("SET LOCAL lock_timeout = '250ms'"))
+            with pytest.raises(OperationalError, match="lock timeout"):
+                blocked.execute(text("LOCK TABLE currencies IN ACCESS EXCLUSIVE MODE"))
+            blocked.rollback()
+        holder.rollback()
