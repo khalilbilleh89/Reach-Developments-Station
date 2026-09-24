@@ -15,6 +15,7 @@ from app.modules.sales.models import Client, SaleContract
 from tests.factories import client_for, make_user
 from tests.modules.conftest import (
     PROJECTS,
+    cancellation_terms_payload,
     collections_url,
     inventory_url,
     project_payload,
@@ -47,17 +48,46 @@ def payload(owner: TestClient, url: str) -> dict:
     }
 
 
-def cancel(owner: TestClient, project_id: str, sale_id: str) -> None:
+def cancel(
+    owner: TestClient, project_id: str, sale_id: str, approver: TestClient | None = None
+) -> None:
+    """Cancel a contract outright, so a purge has closed history to work on.
+
+    The cash basis comes from the server's own preview rather than a number
+    written here: opening a cancellation states what was collected, and a test
+    that asserts its own figure would pass while disagreeing with the ledger.
+
+    ``approver`` is needed only when there is confirmed cash to give back. The
+    refund then has to be sanctioned before the unit may be returned, and by
+    somebody other than whoever opened the case — which is the separation the
+    server enforces, so it cannot be the owner passed in here.
+    """
     base = sales_url(project_id)
     opened = owner.post(
         f"{base}/contracts/{sale_id}/cancellation",
-        json={"initiated_by_party": "seller", "reason": "Test cleanup"},
+        json={
+            "initiated_by_party": "seller",
+            "reason": "Test cleanup",
+            **cancellation_terms_payload(owner, project_id, sale_id),
+        },
     )
     assert opened.status_code == 201, opened.text
-    case = f"{base}/cancellations/{opened.json()['id']}"
-    for status in ("termination_pending_approval", "ready_for_unit_return"):
-        response = owner.post(f"{case}/advance", json={"to_status": status})
-        assert response.status_code == 200, response.text
+    case_body = opened.json()
+    case = f"{base}/cancellations/{case_body['id']}"
+    advanced = owner.post(f"{case}/advance", json={"to_status": "termination_pending_approval"})
+    assert advanced.status_code == 200, advanced.text
+    if case_body["financial_approval_required"]:
+        assert approver is not None, "This contract collected cash; its refund needs a checker."
+        approved = approver.post(
+            f"{case}/approve-financial-terms",
+            json={
+                "reason": "Refund terms reviewed",
+                "expected_eligible_collected_amount": case_body["eligible_collected_amount"],
+            },
+        )
+        assert approved.status_code == 200, approved.text
+    ready = owner.post(f"{case}/advance", json={"to_status": "ready_for_unit_return"})
+    assert ready.status_code == 200, ready.text
     response = owner.post(f"{case}/complete", json={})
     assert response.status_code == 200, response.text
 
@@ -219,13 +249,14 @@ def test_reviewed_delete_order_respects_foreign_keys() -> None:
 def test_confirmed_cash_requires_reversal_before_purge(
     owner: TestClient,
     finance_client: TestClient,
+    cfo_client: TestClient,
     project_id: str,
     unit_id: str,
     active_sale: str,
     confirmed_receipt: str,
     db: Session,
 ) -> None:
-    cancel(owner, project_id, active_sale)
+    cancel(owner, project_id, active_sale, approver=cfo_client)
     url = remove(owner, project_id, unit_id)
     preview = owner.get(f"{url}/purge-preview").json()
     assert any("Confirmed receipt" in message for message in preview["blockers"])
