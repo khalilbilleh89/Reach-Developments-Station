@@ -89,6 +89,14 @@ FIELD_POLICIES: dict[str, dict[str, CurrencyFieldPolicy]] = {
     "pricing_configurations": {
         "pricing_currency_id": CurrencyFieldPolicy("Pricing", "explicit pricing policy", "preserve")
     },
+    "projects": {
+        "base_currency_id": CurrencyFieldPolicy(
+            "Projects", "governing project denomination", "replace"
+        ),
+        "reporting_currency_id": CurrencyFieldPolicy(
+            "Projects", "explicit or old-base-following reporting choice", "follow_if_old_base"
+        ),
+    },
     "reservations": {
         "currency_id": CurrencyFieldPolicy(
             "Sales", "price-inherited frozen quote", "direct_price_chain"
@@ -136,7 +144,8 @@ def require_complete_currency_review() -> None:
     actual = {
         table.name: frozenset(column.name for column in table.c if "currency" in column.name)
         for table in Base.metadata.tables.values()
-        if "project_id" in table.c and any("currency" in column.name for column in table.c)
+        if ("project_id" in table.c or table.name == "projects")
+        and any("currency" in column.name for column in table.c)
     }
     reviewed = {table: frozenset(columns) for table, columns in FIELD_POLICIES.items()}
     if actual != reviewed:

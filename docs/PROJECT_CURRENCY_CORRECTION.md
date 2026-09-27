@@ -22,6 +22,8 @@ The Projects domain owns the command, locks the project row, and commits one tra
 | Pricing | `pricing_configurations.pricing_currency_id` | Explicit pricing policy | Preserve |
 | Pricing | `market_benchmarks.currency_id` | Explicit external observation | Preserve |
 | Pricing | `unit_price_versions.currency_id` | Direct project-base price or configured price | Relabel direct prices only; preserve configured prices |
+| Projects | `projects.base_currency_id` | Governing project denomination | Replace with the corrected currency |
+| Projects | `projects.reporting_currency_id` | Explicit or old-base-following reporting choice | Follow only when equal to the old base |
 | Sales | `reservations.currency_id` | Frozen from the selected price | Relabel only for a corrected direct-price chain |
 | Sales | `reservations.deposit_currency_id` | Frozen from the reservation | Relabel only for a corrected direct-price chain |
 | Sales | `sale_contracts.currency_id` | Frozen from the reservation | Relabel only for a corrected direct-price chain |

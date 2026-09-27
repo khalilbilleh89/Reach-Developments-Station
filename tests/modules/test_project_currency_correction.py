@@ -54,7 +54,8 @@ def test_every_project_currency_column_has_a_reviewed_policy() -> None:
     actual = {
         table.name: frozenset(column.name for column in table.c if "currency" in column.name)
         for table in Base.metadata.tables.values()
-        if "project_id" in table.c and any("currency" in column.name for column in table.c)
+        if ("project_id" in table.c or table.name == "projects")
+        and any("currency" in column.name for column in table.c)
     }
     reviewed = {
         table: frozenset(columns) for table, columns in currency_correction.FIELD_POLICIES.items()
