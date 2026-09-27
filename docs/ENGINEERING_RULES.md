@@ -557,6 +557,34 @@ delete PR branch
   the applicable lane in §10a; the temporary integration exception is defined
   in the roadmap. A main candidate asks for Full by becoming Ready.
 
+### Review contract and truthful evidence
+
+Every PR uses `.github/pull_request_template.md`; do not replace it with a generated
+commit summary. Inspect repository reality before proposing a new implementation.
+Explain root cause, scope, non-goals, cohesion and applicable impacts precisely;
+concise answers are welcome. Non-applicability requires a reason.
+
+- PR template = authoring contract.
+- PR Quality workflow = deterministic delivery-contract enforcement.
+- CI = implementation/test evidence.
+- GitHub ruleset = merge enforcement (owner configuration after merge).
+
+Passing PR Quality does not prove the code is correct. Passing Backend/Frontend
+does not make a poor or misleading PR description acceptable. Both are required.
+Drafts may report pending validation but must explain their core design and scope.
+Ready PRs must complete the contract, resolve declarations and explain limitations.
+
+A test, build, migration, browser review, deployment check or manual validation may
+be claimed as passed only if that exact check actually ran successfully against the
+reported code. Name the command/test family and result. If PostgreSQL is unavailable,
+say that integration tests did not run locally and CI is still required; never turn
+missing evidence into "Backend: pass" or "Fully tested". PR Quality can check the
+representation, not verify that an author's claims are true. Independent review and
+exact-head CI remain required. Agents never merge; a human merges.
+
+See [AGENT_AUTOMATION.md](AGENT_AUTOMATION.md) for the validator's limits, local usage
+and the manual ruleset activation step.
+
 ### Size discipline
 
 - One roadmap PR = one reviewable change.
@@ -582,7 +610,8 @@ A PR is done when all of the following hold:
 - [ ] Migrations apply forward and reverse cleanly.
 - [ ] `npm run lint` and `npm run build` pass.
 - [ ] CI is green.
-- [ ] The PR template is filled in, including dependency and contract impact.
+- [ ] The PR template is filled in truthfully, including dependency and contract impact,
+      and the PR Quality check passes for the current description and head.
 - [ ] No secret, credential or production connection string is in the diff.
 - [ ] Financial rules in section 6 are respected wherever money is touched.
 - [ ] Documentation affected by the change has been updated in the same PR.
