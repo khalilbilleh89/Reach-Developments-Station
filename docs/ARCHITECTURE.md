@@ -1386,3 +1386,9 @@ Sales owns project pipeline configuration and buyer milestone records through it
 operations service. Operations reads existing Sales clients, purchases and effective
 buyer signatures; it never writes contract/legal state. Counts are server-derived.
 See [Commercial Operations](COMMERCIAL_OPERATIONS.md) for scope and retention.
+
+### Project agreement library
+
+Commercial > Agreements uses the projects domain for final client purchase drafts,
+with bounded PostgreSQL document storage and authorized downloads. It creates no
+sale or signature state. See [AGREEMENTS.md](AGREEMENTS.md) for scope and retention.

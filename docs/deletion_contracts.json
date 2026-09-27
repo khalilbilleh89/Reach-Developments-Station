@@ -718,5 +718,13 @@
     "removal_route": "POST /projects/{project_id}/team/{member_id}/delete",
     "ui_file": "frontend/src/components/projects/team/TeamSection.tsx",
     "notes": "Delete member on every contact card; named reason confirmation, project manager/admin and whole-project write scope, version guard, retained row and audit. No login, access or linked business records are created or cascaded. Tested in test_project_team.py."
+  },
+  {
+    "handler": "projects.create_agreement",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{agreement_id}/delete",
+    "ui_file": "frontend/src/components/projects/AgreementsTab.tsx",
+    "notes": "Authorized project-wide writers can delete final-draft library entries with reason and stale-version protection; metadata, document and audit retained. These templates have no client-signature or transaction links."
   }
 ]

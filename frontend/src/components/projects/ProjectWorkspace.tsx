@@ -1,5 +1,7 @@
 "use client";
 
+import { AgreementsTab } from "./AgreementsTab";
+
 import { DevelopmentWorkspace } from "./DevelopmentWorkspace";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -272,6 +274,7 @@ export function ProjectWorkspace({
         {section === "agents" ? (
           <AgentBuyerTab mode="agents" projectId={projectId} projectStatus={project.status} roles={roles} />
         ) : null}
+        {section === "agreements" ? <AgreementsTab projectId={projectId} roles={roles} /> : null}
         {section === "sales" ? (
           <SalesTab
             projectId={projectId}

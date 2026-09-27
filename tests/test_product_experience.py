@@ -614,6 +614,7 @@ class TestOnlyEntitledReadersAsk:
             "prelaunch",
             "consultant",
             "inventory",
+            "agreements",
             # "agent-buyer" split into the two jobs it was doing: registering a
             # purchaser, and recording which sales team brought them. The old
             # key survives as a route alias for existing links and resolves to
@@ -638,6 +639,7 @@ class TestOnlyEntitledReadersAsk:
         for key, role_set in (
             ("prelaunch", "CASHFLOW_READERS"),
             ("consultant", "CONSULTANT_READERS"),
+            ("agreements", "AGREEMENT_READERS"),
             ("buyers", "SALES_READERS"),
             ("agents", "SALES_READERS"),
             ("sales", "SALES_READERS"),
