@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("removed_by_user_id", sa.UUID(), nullable=True),
         sa.CheckConstraint(
             "category IN ('interior', 'exterior', 'render_3d')",
-            name="ck_project_images_category_allowed",
+            name="category_allowed",
         ),
         sa.ForeignKeyConstraint(
             ["project_id"],
