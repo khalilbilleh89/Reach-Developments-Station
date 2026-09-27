@@ -101,7 +101,7 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
     "projects": (
         "tests/modules/test_projects.py::test_a_project_is_created_with_its_configured_basis",
         "tests/modules/test_projects.py::test_the_basis_may_be_corrected_during_setup",
-        "tests/modules/test_projects.py::test_the_basis_locks_once_the_project_leaves_setup",
+        "tests/modules/test_projects.py::test_the_base_currency_requires_a_controlled_correction_after_setup",
         "tests/modules/test_project_access.py::test_an_inaccessible_project_reports_not_found_rather_than_forbidden",
     ),
     "inventory": (
@@ -187,6 +187,12 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "0036_sales_operations.py": (
         "sales",
         ("tests/modules/test_sales_operations.py::test_operations_migration_roundtrip",),
+    ),
+    "0039_project_images.py": (
+        "projects",
+        (
+            "tests/modules/test_project_images.py::test_image_migration_roundtrip_and_retained_history",
+        ),
     ),
     "0034_unit_current_costs.py": (
         "unit_economics",

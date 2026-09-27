@@ -343,11 +343,10 @@ _PROJECT_CLEARABLE = frozenset(
     }
 )
 
-#: Changing the legal or monetary basis of a project after work has started
-#: would silently restate every amount already recorded against it. Allowed
-#: only while the project is still being set up, and then only while the
-#: guards below still hold.
-_BASIS_FIELDS = ("country_pack_id", "base_currency_id", "reporting_currency_id")
+#: Country configuration can change only during setup. Reporting currency is
+#: descriptive; base currency is separately guarded because it denominates
+#: project amounts and a later change requires a controlled correction.
+_BASIS_FIELDS = ("country_pack_id",)
 
 
 def lock_project(session: Session, project_id: uuid.UUID) -> Project:
@@ -694,8 +693,7 @@ def update_project(
     ]
     if basis_changes and project.status != PROJECT_STATUS_SETUP:
         raise ConflictError(
-            "The country pack and currencies can only be changed while the project "
-            "is still in setup."
+            "The country pack can only be changed while the project is still in setup."
         )
 
     # Setup is the opening configuration state, not a state to come back to.
@@ -705,6 +703,11 @@ def update_project(
         raise ConflictError("A project cannot return to setup once it has left it.")
 
     if "base_currency_id" in updates and updates["base_currency_id"] != project.base_currency_id:
+        if project.status != PROJECT_STATUS_SETUP:
+            raise ConflictError(
+                "Base currency cannot be changed after setup without a controlled correction "
+                "of existing project records."
+            )
         _guard_base_currency_change(session, project.id)
     if "country_pack_id" in updates and updates["country_pack_id"] != project.country_pack_id:
         _guard_country_pack_change(session, project.id)
@@ -770,6 +773,69 @@ def update_project(
         actor_user_id=actor_user_id,
         before=before,
         after=_snapshot(project, _PROJECT_FIELDS),
+    )
+    session.commit()
+    session.refresh(project)
+    return project
+
+
+def correct_base_currency(
+    session: Session,
+    *,
+    project: Project,
+    new_base_currency_id: uuid.UUID,
+    reason: str,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+) -> Project:
+    """Correct the original denomination without changing any numeric amount.
+
+    The project lock serializes this with child creation, whose foreign key
+    takes a key-share lock on the same row. Row updates and the audit trail are
+    committed together; an error rolls them all back.
+    """
+    from app.modules.projects.currency_correction import relabel_project_rows
+
+    project = lock_project(session, project.id)
+    old_currency_id = project.base_currency_id
+    if new_base_currency_id == old_currency_id:
+        raise ConflictError("The project already uses that base currency.")
+    _require_active_currency(session, new_base_currency_id, label="Base currency")
+    clean_reason = reason.strip()
+    if len(clean_reason) < 8:
+        raise ValidationError("Explain the currency correction in at least eight characters.")
+    counts = relabel_project_rows(
+        session,
+        project_id=project.id,
+        old_currency_id=old_currency_id,
+        new_currency_id=new_base_currency_id,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        reason=clean_reason,
+    )
+    old_reporting_currency_id = project.reporting_currency_id
+    project.base_currency_id = new_base_currency_id
+    if project.reporting_currency_id == old_currency_id:
+        project.reporting_currency_id = new_base_currency_id
+    session.flush()
+    record_event(
+        session,
+        action="project_currency.corrected",
+        entity_type=ENTITY_PROJECT,
+        entity_id=project.id,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        reason=clean_reason,
+        before={
+            "base_currency_id": old_currency_id,
+            "reporting_currency_id": old_reporting_currency_id,
+        },
+        after={
+            "base_currency_id": new_base_currency_id,
+            "reporting_currency_id": project.reporting_currency_id,
+            "amounts_unchanged": True,
+            "corrected_rows": counts,
+        },
     )
     session.commit()
     session.refresh(project)

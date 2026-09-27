@@ -22,9 +22,11 @@ test("setup editor exposes all creation inputs and preserves existing inactive s
   for (const name of ["code", "name", "developer_entity", "status", "project_type_code", "country_pack_id", "base_currency_id", "reporting_currency_id", "fiscal_year_start_month", "city", "location", "latitude", "longitude", "planned_start", "planned_completion"]) assert.ok(names.includes(name), name);
   for (const name of ["country_pack_id", "base_currency_id", "reporting_currency_id"]) assert.equal(fields.find(f => f.name === name).options[0].value, "existing");
 });
-test("operational editor keeps editable identity and excludes locked basis and setup transition", () => {
+test("operational editor keeps reporting currency editable and corrects base separately", () => {
   const fields = exports.projectFields({ ...project, status: "active" }, packs, currencies);
   assert.ok(fields.find(f => f.name === "code"));
-  for (const name of ["country_pack_id", "base_currency_id", "reporting_currency_id"]) assert.equal(fields.find(f => f.name === name).visible, false);
+  assert.equal(fields.find(f => f.name === "country_pack_id").visible, false);
+  assert.equal(fields.find(f => f.name === "base_currency_id").visible, false);
+  assert.notEqual(fields.find(f => f.name === "reporting_currency_id").visible, false);
   assert.ok(!fields.find(f => f.name === "status").options.some(o => o.value === "setup"));
 });

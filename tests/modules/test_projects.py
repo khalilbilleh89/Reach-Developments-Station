@@ -277,14 +277,10 @@ def test_the_basis_may_be_corrected_during_setup(admin_client: TestClient, proje
     assert response.json()["reporting_currency_code"] == "USD"
 
 
-def test_the_basis_locks_once_the_project_leaves_setup(
+def test_the_base_currency_requires_a_controlled_correction_after_setup(
     admin_client: TestClient, project_id: str
 ) -> None:
-    """Given an active project, then changing its monetary basis is refused.
-
-    Amounts already recorded against the project are denominated in its base
-    currency, and this MVP has no FX or restatement to move them with.
-    """
+    """An active project may have money beyond the original land and permit guard."""
     spare = admin_client.post(
         f"{SETTINGS}/currencies", json={"code": "USD", "name": "US dollar"}
     ).json()
@@ -297,7 +293,7 @@ def test_the_basis_locks_once_the_project_leaves_setup(
     )
 
     assert response.status_code == 409
-    assert "still in setup" in response.json()["detail"]
+    assert "controlled correction" in response.json()["detail"]
 
 
 def test_a_no_op_basis_field_after_setup_is_not_a_conflict(

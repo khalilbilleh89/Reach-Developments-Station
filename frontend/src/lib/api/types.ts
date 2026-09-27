@@ -50,6 +50,15 @@ export interface Currency {
   is_active: boolean;
 }
 
+export interface ProjectImage {
+  id: string;
+  project_id: string;
+  category: "interior" | "exterior" | "render_3d";
+  filename: string;
+  media_type: string;
+  created_at: string;
+}
+
 export interface CountryPack {
   id: string;
   country_code: string;

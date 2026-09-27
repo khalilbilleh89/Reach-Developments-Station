@@ -417,6 +417,7 @@ def domain_of_migration(path: str) -> str | None:
         "0023_permit_removal",
         "0026_permit_completed",
         "0033_project_company",
+        "0039_project_images",
     }:
         return "projects"
     if stem.endswith("_governance_access"):

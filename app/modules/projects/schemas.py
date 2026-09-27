@@ -116,6 +116,23 @@ class ProjectDetail(ProjectSummary):
     planned_duration_days: int | None = None
 
 
+class ProjectImageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    category: str
+    filename: str
+    media_type: str
+    created_at: datetime
+
+
+class ProjectCurrencyCorrectionRequest(StrictRequest):
+    new_base_currency_id: uuid.UUID
+    reason: str = Field(min_length=8, max_length=500)
+    keep_amounts_unchanged: Literal[True]
+
+
 class ProjectCreateRequest(StrictRequest):
     code: ProjectCode
     name: str = Field(min_length=1, max_length=200)

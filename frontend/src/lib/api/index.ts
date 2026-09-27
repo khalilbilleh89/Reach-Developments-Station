@@ -192,6 +192,10 @@ export const settings = {
     symbol?: string | null;
     minor_units: number;
   }) => post<Currency>("/settings/currencies", input),
+  updateCurrency: (id: string, input: { name?: string; symbol?: string | null }) =>
+    patch<Currency>(`/settings/currencies/${id}`, input),
+  deleteCurrency: (id: string, reason: string) =>
+    remove(`/settings/currencies/${id}?${new URLSearchParams({ reason })}`),
 
   countryPacks: () => get<CountryPack[]>("/settings/country-packs"),
   createCountryPack: (input: {
@@ -257,6 +261,14 @@ export const audit = {
  * itself on each request; these helpers just describe the shape of the call.
  */
 export const projects = {
+  images: (id: string) => get<import("./types").ProjectImage[]>(`/projects/${id}/images`),
+  imageUrl: (id: string, imageId: string) => `/api/v1/projects/${id}/images/${imageId}/file`,
+  addImage: async (id: string, category: string, file: File) =>
+    postBinary<import("./types").ProjectImage>(
+      `/projects/${id}/images?${new URLSearchParams({ category, filename: file.name })}`,
+      await file.arrayBuffer(),
+    ),
+  removeImage: (id: string, imageId: string) => remove(`/projects/${id}/images/${imageId}`),
   permitAssignees: (id: string) => get<{ id: string; display_name: string }[]>(`/projects/${id}/permit-assignees`),
   removePermit: (id: string, permitId: string) => remove(`/projects/${id}/permits/${permitId}`),
   list: (query: { search?: string; status?: string } = {}) => {
@@ -270,6 +282,12 @@ export const projects = {
     post<ProjectDetail>("/projects", input),
   update: (id: string, input: Record<string, unknown>) =>
     patch<ProjectDetail>(`/projects/${id}`, input),
+  correctCurrency: (id: string, newBaseCurrencyId: string, reason: string) =>
+    post<ProjectDetail>(`/projects/${id}/currency-corrections`, {
+      new_base_currency_id: newBaseCurrencyId,
+      reason,
+      keep_amounts_unchanged: true,
+    }),
 
   access: (id: string) => get<ProjectAccess[]>(`/projects/${id}/access`),
   grantAccess: (id: string, userId: string) =>

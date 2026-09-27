@@ -23,6 +23,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     UniqueConstraint,
@@ -51,6 +52,8 @@ PROJECT_STATUSES = (
 #: The one status in which the legal and monetary basis of a project may still
 #: be corrected. See :func:`app.modules.projects.service.update_project`.
 PROJECT_STATUS_SETUP = "setup"
+
+PROJECT_IMAGE_CATEGORIES = ("interior", "exterior", "render_3d")
 
 #: How much of a project's inventory a member may see. The column lives on
 #: ``user_project_access`` because it narrows that membership, so the closed set
@@ -176,6 +179,40 @@ class Project(Base):
             name="planned_dates_ordered",
         ),
         Index("ix_projects_status", "status"),
+    )
+
+
+class ProjectImage(Base):
+    """Project presentation image stored with its project and retained removal history."""
+
+    __tablename__ = "project_images"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    filename: Mapped[str] = mapped_column(String(200), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    image_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    removed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(in_list("category", PROJECT_IMAGE_CATEGORIES), name="category_allowed"),
     )
 
 

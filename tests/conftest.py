@@ -214,6 +214,7 @@ _DATA_TABLES = (
     "phases",
     "area_types",
     "document_references",
+    "project_images",
     "permit_status_events",
     "permits",
     "planning_controls",

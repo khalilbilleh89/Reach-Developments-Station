@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { ApiError, projects, settings } from "@/lib/api";
 import type { CurrentUser, ProjectDetail } from "@/lib/api";
 import { CurrencyProvider } from "@/lib/currency";
+import { ProjectImages } from "./ProjectImages";
 import {
   PROJECT_FINANCIAL_READERS,
   PROJECT_WRITERS,
@@ -203,7 +204,7 @@ export function ProjectWorkspace({
       return (
         <>
           {editing ? (
-            <ProjectEdit project={project} onSaved={changed} onClose={() => setEditing(false)} />
+            <ProjectEdit project={project} canConfigure={isAdmin} onSaved={changed} onClose={() => setEditing(false)} />
           ) : null}
           <ProjectCommandCenter
             project={project}
@@ -213,6 +214,7 @@ export function ProjectWorkspace({
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
+          <ProjectImages projectId={projectId} canEdit={canWriteProject} />
           <Disclosure title={<> Project construction stage configuration </>}>
             <ProjectStages projectId={projectId} roles={roles} />
           </Disclosure>

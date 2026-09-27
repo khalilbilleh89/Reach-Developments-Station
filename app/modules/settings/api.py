@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.modules.access.dependencies import ActiveActor, DbSession, SystemAdmin
 from app.modules.settings import service
@@ -88,6 +88,23 @@ def update_currency(
         **payload.model_dump(exclude_unset=True),
     )
     return CurrencyRead.model_validate(currency)
+
+
+@router.delete("/currencies/{currency_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_currency(
+    currency_id: uuid.UUID,
+    reason: Annotated[str, Query(min_length=8, max_length=500)],
+    session: DbSession,
+    actor: SystemAdmin,
+) -> Response:
+    service.delete_currency(
+        session,
+        currency_id=currency_id,
+        reason=reason,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --------------------------------------------------------------------------- #

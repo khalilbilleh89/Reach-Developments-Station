@@ -13,6 +13,6 @@ test("returned units have a Sales-owned, reasoned action separate from Inventory
   assert.match(stock, /selected\.release_blockers\.length>0/);
   assert.match(stock, /sales\.returnUnitToMarket\(projectId,selected\.id,reason\)/);
   assert.match(stock, /<PromptDialog[^>]*title=\{`Return \$\{selected\.unit_reference\} to market`\}/);
-  assert.match(api, /returnUnitToMarket:.*\n\s*post<void>\(`/);
+  assert.match(api, /returnUnitToMarket:.*\r?\n\s*post<void>\(`/);
   assert.doesNotMatch(stock, /inventory\.transitionUnit\(projectId,selected\.id,\{[^}]*returned/);
 });

@@ -5973,3 +5973,13 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 /* Operations uses server-reported buyer counts. */
 .operations-position { padding: var(--space-4); background: var(--surface-stage); border-radius: var(--radius-card); }
 .operations-lead { font-size: var(--metric-hero); font-variant-numeric: tabular-nums; }
+
+.project-images-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin-block: 1rem; }
+.project-images-controls .field { min-width: 12rem; }
+.project-images-section { margin-block: 1.5rem; }
+.project-images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 1rem; }
+.project-image { margin: 0; border: 1px solid var(--line-default); border-radius: .5rem; overflow: hidden; }
+.project-image img { display: block; width: 100%; height: 11rem; object-fit: cover; }
+.project-image figcaption { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .65rem; overflow-wrap: anywhere; }
+.project-currency-confirm { display: flex; align-items: flex-start; gap: .6rem; margin-block: 1rem; line-height: 1.5; }
+.project-currency-confirm input { margin-top: .3rem; }

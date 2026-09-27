@@ -1,4 +1,4 @@
-"""The project's legal and monetary basis, and why it stops being editable.
+"""The project's legal and monetary basis, and when a correction is safe.
 
 A project's base currency is not a label on the record — it is what every amount
 recorded under the project *means*. Changing it does not move the numbers, so
@@ -163,6 +163,22 @@ def test_the_reporting_currency_is_not_blocked_by_recorded_money(
     assert response.json()["reporting_currency_code"] == "USD"
 
 
+def test_reporting_currency_and_symbol_are_editable_after_setup(
+    admin_client: TestClient, project_id: str, spare_currency: str
+) -> None:
+    assert (
+        admin_client.patch(f"{PROJECTS}/{project_id}", json={"status": "active"}).status_code == 200
+    )
+    reporting = admin_client.patch(
+        f"{PROJECTS}/{project_id}", json={"reporting_currency_id": spare_currency}
+    )
+    assert reporting.status_code == 200
+    assert reporting.json()["reporting_currency_code"] == "USD"
+    symbol = admin_client.patch(f"{SETTINGS}/currencies/{spare_currency}", json={"symbol": "$"})
+    assert symbol.status_code == 200
+    assert symbol.json()["symbol"] == "$"
+
+
 # --------------------------------------------------------------------------- #
 # Country pack
 # --------------------------------------------------------------------------- #
@@ -295,10 +311,10 @@ def test_a_project_cannot_return_to_setup(admin_client: TestClient, project_id: 
     assert response.json() == {"detail": "A project cannot return to setup once it has left it."}
 
 
-def test_the_basis_stays_locked_after_the_round_trip_is_refused(
+def test_the_base_currency_stays_locked_after_the_round_trip_is_refused(
     admin_client: TestClient, project_id: str, spare_currency: str
 ) -> None:
-    """Given the return to setup is refused, then the basis remains locked."""
+    """A refused return to setup cannot bypass existing monetary safeguards."""
     admin_client.patch(f"{PROJECTS}/{project_id}", json={"status": "active"})
     admin_client.patch(f"{PROJECTS}/{project_id}", json={"status": "setup"})
 
@@ -307,7 +323,7 @@ def test_the_basis_stays_locked_after_the_round_trip_is_refused(
     )
 
     assert response.status_code == 409
-    assert "still in setup" in response.json()["detail"]
+    assert "controlled correction" in response.json()["detail"]
 
 
 def test_other_status_moves_are_unaffected(admin_client: TestClient, project_id: str) -> None:

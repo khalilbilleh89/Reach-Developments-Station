@@ -152,6 +152,36 @@ def test_unrelated_currency_edits_still_apply_while_a_pack_depends_on_it(
     assert response.json()["is_active"] is True
 
 
+def test_unused_currency_can_be_removed_with_audited_reason(
+    client: TestClient, currency_id: str, db: Session
+) -> None:
+    response = client.delete(
+        f"{CURRENCIES}/{currency_id}", params={"reason": "Duplicate entered in error"}
+    )
+    assert response.status_code == 204, response.text
+    assert (
+        client.delete(
+            f"{CURRENCIES}/{currency_id}", params={"reason": "Duplicate entered in error"}
+        ).status_code
+        == 404
+    )
+    assert db.get(Currency, uuid.UUID(currency_id)) is None
+    event = db.scalar(select(AuditEvent).where(AuditEvent.action == "currency.deleted"))
+    assert event is not None
+    assert event.reason == "Duplicate entered in error"
+
+
+def test_referenced_currency_cannot_be_removed(
+    client: TestClient, currency_id: str, pack_id: str, db: Session
+) -> None:
+    response = client.delete(
+        f"{CURRENCIES}/{currency_id}", params={"reason": "Attempt to remove used currency"}
+    )
+    assert response.status_code == 409, response.text
+    assert db.get(Currency, uuid.UUID(currency_id)) is not None
+    assert db.scalar(select(AuditEvent).where(AuditEvent.action == "currency.deleted")) is None
+
+
 # --------------------------------------------------------------------------- #
 # Country packs
 # --------------------------------------------------------------------------- #

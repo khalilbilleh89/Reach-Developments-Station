@@ -594,10 +594,10 @@
   {
     "handler": "settings.create_currency",
     "create_route": "POST /currencies",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Deactivation exists; unused configuration Delete is missing; code-based references require protection."
+    "status": "implemented",
+    "removal_route": "DELETE /currencies/{currency_id}",
+    "ui_file": "frontend/src/components/projects/ProjectEdit.tsx",
+    "notes": "System Administrator can remove an unused currency with reason; foreign keys block every referenced currency, and the creation/removal audit trail remains."
   },
   {
     "handler": "settings.create_reference_value",
@@ -702,5 +702,13 @@
     "removal_route": "DELETE /projects/{project_id}/operations/buyers/{client_id}",
     "status": "implemented",
     "handler": "sales.save_buyer"
+  },
+  {
+    "handler": "projects.add_project_image",
+    "create_route": "POST /projects/{project_id}/images",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/images/{image_id}",
+    "ui_file": "frontend/src/components/projects/ProjectImages.tsx",
+    "notes": "Whole-project writers confirm removal; scoped images disappear from the gallery while the image row and audit event are retained."
   }
 ]

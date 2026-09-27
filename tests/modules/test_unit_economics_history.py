@@ -1162,7 +1162,7 @@ def rebase_project(
     """
     refused = admin_client.patch(f"{PROJECTS}/{project_id}", json={"base_currency_id": currency_id})
     assert refused.status_code == 409, refused.text
-    assert "still in setup" in refused.json()["detail"]
+    assert "controlled correction" in refused.json()["detail"]
     _stamp(db, "projects", project_id, "base_currency_id", currency_id)
 
 
