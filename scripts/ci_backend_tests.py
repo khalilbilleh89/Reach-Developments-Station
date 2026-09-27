@@ -99,6 +99,7 @@ ALWAYS_RUN = (
     # they guard the repository itself rather than any part of the product,
     # and because a guard nobody runs is a guard that silently stops guarding.
     "tests/test_agent_guardrails.py",
+    "tests/test_pr_quality.py",
 )
 
 #: Which test files belong to which domain, matched against the file name with
@@ -300,6 +301,10 @@ AGENT_TOOLING = frozenset(
     }
 )
 AGENT_TESTS = "tests/test_agent_guardrails.py"
+
+# Delivery-contract tooling is separate from test selectors and product scripts.
+PR_QUALITY_SCRIPT = "scripts/validate_pr_description.py"
+PR_QUALITY_TESTS = "tests/test_pr_quality.py"
 
 #: The one-time legacy cutover package. Its own domain rather than the
 #: full-suite fallback that everything else under ``scripts/`` gets.
@@ -568,6 +573,10 @@ def select(changed: list[str], available: list[str]) -> Selection:
             reasons.append(f"{path} is shared test support")
             continue
 
+        if path == PR_QUALITY_SCRIPT:
+            if PR_QUALITY_TESTS in available_set:
+                direct.add(PR_QUALITY_TESTS)
+            continue
         if path in CI_TOOLING:
             direct.update(
                 p for p in ALWAYS_RUN if p.startswith("tests/test_ci_") and p in available_set

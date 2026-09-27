@@ -329,3 +329,42 @@ def test_the_workflow_passes_the_computed_scope_to_both_shard_commands() -> None
         assert "ci_backend_shards.py" in content
         assert "--scope ${{ needs.development_scope.outputs.full_scope || 'all' }}" in content
         assert "development_scope" in setting(job, "needs") or ""
+
+
+def test_pr_quality_events_are_separate_from_expensive_ci() -> None:
+    text = (ROOT / ".github/workflows/pr-quality.yml").read_text(encoding="utf-8-sig")
+    triggers = text.split("permissions:")[0]
+    assert "  pull_request:" in triggers
+    assert "branches: [main, integration/mvp3, integration/mvp3-management]" in triggers
+    assert set(re.search(r"types: \[(.+)\]", triggers)[1].split(", ")) == {
+        "opened",
+        "edited",
+        "synchronize",
+        "reopened",
+        "ready_for_review",
+        "converted_to_draft",
+    }
+    assert "push:" not in triggers
+    assert "pull_request_target:" not in text
+    assert "edited" not in source().split("permissions:")[0]
+    assert "name: PR Quality" in text
+    assert "ref: ${{ github.event.pull_request.head.sha }}" in text
+    assert "fetch-depth: 0" in text
+    assert "persist-credentials: false" in text
+    assert "run: python scripts/validate_pr_description.py" in text
+    assert 0 < int(re.search(r"timeout-minutes: (\d+)", text)[1]) <= 5
+    assert re.search(r"permissions:\n  contents: read\n\n", text)
+    for forbidden in (
+        "services:",
+        "postgres",
+        "pip install",
+        "npm ",
+        "setup-node",
+        "backend_full",
+        "secrets.",
+        ": write",
+        "continue-on-error",
+        "paths-ignore:",
+        "paths:",
+    ):
+        assert forbidden not in text
