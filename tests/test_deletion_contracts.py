@@ -19,7 +19,7 @@ def test_every_record_creator_has_a_reviewed_deletion_contract() -> None:
         ROOT / "app/modules/sales/operations_api.py",
     ]:
         for function in ast.parse(path.read_text(encoding="utf-8")).body:
-            if not isinstance(function, ast.FunctionDef):
+            if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             created_response = any(
                 isinstance(decorator, ast.Call)
