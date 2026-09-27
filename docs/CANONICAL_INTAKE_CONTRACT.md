@@ -98,6 +98,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `operation_stages` | Project checklist stages; explicit application entry. |
 | `operation_buyers` | Buyer purpose and edit revision; application-owned operational records. |
 | `operation_progress` | Buyer milestones; application-owned with retained audit evidence. |
+| `project_team_members` | Project directory contacts entered in Governance; not imported by legacy bundles. |
 | `project_companies` | Company information entered in Development; not imported by legacy bundles. |
 | `company_bank_accounts` | Company bank instructions maintained by authorized project users; not imported by legacy bundles. |
 | `user_roles` | Authorisation configuration. |
