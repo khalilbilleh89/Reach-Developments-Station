@@ -37,6 +37,7 @@ import { ProjectStages } from "@/components/projects/construction/StageWorkspace
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { ProjectEdit } from "@/components/projects/ProjectEdit";
 import { ProjectImages } from "@/components/projects/ProjectImages";
+import { ProjectCurrencyCorrection } from "@/components/projects/ProjectCurrencyCorrection";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
 import { CompanyTab } from "@/components/projects/CompanyTab";
@@ -83,6 +84,7 @@ export function ProjectWorkspace({
   // the Inventory section opens. One record file, reached from wherever the
   // person was.
   const [editing, setEditing] = useState(false);
+  const [correctingCurrency, setCorrectingCurrency] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // Every load takes a ticket, and a response that arrives after a newer
@@ -206,11 +208,20 @@ export function ProjectWorkspace({
           {editing ? (
             <ProjectEdit project={project} onSaved={changed} onClose={() => setEditing(false)} />
           ) : null}
+          {correctingCurrency ? (
+            <ProjectCurrencyCorrection
+              project={project}
+              onSaved={changed}
+              onClose={() => setCorrectingCurrency(false)}
+            />
+          ) : null}
           <ProjectCommandCenter
             project={project}
             roles={roles}
             canEdit={canWriteProject}
             onEdit={() => setEditing((open) => !open)}
+            canCorrectCurrency={isAdmin && project.status !== "setup"}
+            onCorrectCurrency={() => setCorrectingCurrency(true)}
             onNavigate={navigate}
             refreshKey={refreshKey}
           />

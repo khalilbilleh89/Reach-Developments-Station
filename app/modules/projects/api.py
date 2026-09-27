@@ -54,6 +54,7 @@ from app.modules.projects.schemas import (
     ProjectAccessRead,
     ProjectAccessUpdateRequest,
     ProjectCreateRequest,
+    ProjectCurrencyCorrectionRequest,
     ProjectDetail,
     ProjectImageRead,
     ProjectSummary,
@@ -209,6 +210,29 @@ def update_project(
         **payload.model_dump(exclude_unset=True),
     )
     return _project_detail(session, updated)
+
+
+@router.post(
+    "/{project_id}/currency-corrections",
+    response_model=ProjectDetail,
+    summary="Correct a mistaken project base denomination",
+)
+def correct_project_currency(
+    payload: ProjectCurrencyCorrectionRequest,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: SystemAdmin,
+) -> ProjectDetail:
+    from app.modules.projects.currency_correction import correct_project_base_currency
+
+    corrected = correct_project_base_currency(
+        session,
+        project_id=project.id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        **payload.model_dump(),
+    )
+    return _project_detail(session, corrected)
 
 
 # --------------------------------------------------------------------------- #
