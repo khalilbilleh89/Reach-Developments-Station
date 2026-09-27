@@ -705,7 +705,7 @@
   },
   {
     "handler": "projects.add_project_image",
-    "create_route": "POST /projects/{project_id}/images",
+      "create_route": "POST /{project_id}/images",
     "status": "implemented",
     "removal_route": "DELETE /projects/{project_id}/images/{image_id}",
     "ui_file": "frontend/src/components/projects/ProjectImages.tsx",
