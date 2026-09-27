@@ -5973,3 +5973,8 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 /* Operations uses server-reported buyer counts. */
 .operations-position { padding: var(--space-4); background: var(--surface-stage); border-radius: var(--radius-card); }
 .operations-lead { font-size: var(--metric-hero); font-variant-numeric: tabular-nums; }
+
+.faq-answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

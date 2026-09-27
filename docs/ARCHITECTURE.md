@@ -1386,3 +1386,9 @@ Sales owns project pipeline configuration and buyer milestone records through it
 operations service. Operations reads existing Sales clients, purchases and effective
 buyer signatures; it never writes contract/legal state. Counts are server-derived.
 See [Commercial Operations](COMMERCIAL_OPERATIONS.md) for scope and retention.
+
+### Commercial FAQs
+
+Sales owns project-scoped reusable plain-text questions and answers. Dedicated FAQ
+routes use Sales reader permissions and whole-project FAQ writers, project locks,
+optimistic versions and immutable audit snapshots. See [Commercial FAQs](COMMERCIAL_FAQS.md).
