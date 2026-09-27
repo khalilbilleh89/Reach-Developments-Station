@@ -36,6 +36,7 @@ from app.modules.management_actions import models as management_actions_models  
 from app.modules.management_reporting import (  # noqa: E402
     models as management_reporting_models,  # noqa: F401
 )
+from app.modules.marketing import models as marketing_models  # noqa: E402,F401
 from app.modules.payment_plans import models as payment_plan_models  # noqa: E402,F401
 from app.modules.pricing import models as pricing_models  # noqa: E402,F401
 from app.modules.projects import company_models  # noqa: E402,F401

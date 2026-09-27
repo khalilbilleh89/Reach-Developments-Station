@@ -1,6 +1,7 @@
 import type { IconName } from "@/components/ui/Icon";
 import {
   AUDIT_READERS,
+  MARKETING_READERS,
   CASHFLOW_READERS,
   COLLECTION_READERS,
   SPECIFICATION_READERS,
@@ -35,6 +36,9 @@ import type { Roles } from "@/lib/roles";
  */
 
 export type ProjectSection =
+  | "marketing-bio"
+  | "marketing-economics"
+  | "marketing-branding"
   | "overview"
   | "company"
   | "land"
@@ -143,6 +147,21 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         description:
           "Every unit in this development, and what stops each one being released.",
         visible: everyone,
+      },
+    ],
+  },
+  {
+    key: "marketing",
+    label: "Marketing",
+    items: [
+      {
+        key: "marketing-bio", label: "Project Bio", icon: "overview", description: "The project story, location, amenities and evidenced return range.", visible: roles => hasAnyRole(roles, MARKETING_READERS),
+      },
+      {
+        key: "marketing-economics", label: "Economics", icon: "economics", description: "Compare indicative rental returns for every unit and track the local market.", visible: roles => hasAnyRole(roles, MARKETING_READERS),
+      },
+      {
+        key: "marketing-branding", label: "Branding", icon: "documents", description: "The project name, its meaning, colour palette and typography.", visible: roles => hasAnyRole(roles, MARKETING_READERS),
       },
     ],
   },

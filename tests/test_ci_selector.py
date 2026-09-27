@@ -30,6 +30,7 @@ select = selector.select
 #: A stand-in checkout: enough real file names to exercise the map without
 #: depending on the suite's exact contents on any given day.
 AVAILABLE = [
+    "tests/modules/test_marketing.py",
     "tests/test_config.py",
     "tests/test_health.py",
     "tests/test_migrations.py",
@@ -251,6 +252,7 @@ def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
         "construction",
         "cutover",
         "management_reporting",
+        "marketing",
         "payment_plans",
         "portfolio",
         "prelaunch",
@@ -276,6 +278,7 @@ def test_an_inventory_change_reaches_everything_it_feeds() -> None:
         "cutover",
         "inventory",
         "management_reporting",
+        "marketing",
         "payment_plans",
         "portfolio",
         "prelaunch",
@@ -303,6 +306,7 @@ def test_two_changed_domains_select_the_union_of_both_closures() -> None:
         "cutover",
         "inventory",
         "management_reporting",
+        "marketing",
         "payment_plans",
         "portfolio",
         "prelaunch",
@@ -693,6 +697,7 @@ def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
         "construction",
         "cutover",
         "management_reporting",
+        "marketing",
         "payment_plans",
         "portfolio",
         "prelaunch",
@@ -846,6 +851,7 @@ def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
         "construction",
         "cutover",
         "management_reporting",
+        "marketing",
         "payment_plans",
         "portfolio",
         "prelaunch",

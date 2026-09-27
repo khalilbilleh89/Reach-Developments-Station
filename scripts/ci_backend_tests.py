@@ -106,6 +106,7 @@ ALWAYS_RUN = (
 #: that no domain claims is caught by ``unclaimed_test_files`` below, so this
 #: map cannot silently rot as files are added.
 DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
+    "marketing": ("marketing",),
     "access": ("auth", "authorization", "phase_access", "project_access"),
     "audit": ("audit",),
     "settings": ("settings", "migration_governance"),
@@ -174,7 +175,7 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # manifest names, so this module's contract is one the cutover depends on.
     "projects": ("inventory", "cutover", "management_actions"),
     "inventory": ("pricing",),
-    "pricing": ("sales",),
+    "pricing": ("sales", "marketing"),
     "sales": ("payment_plans", "unit_economics"),
     # Construction calls payment plans' milestone certification contract, so a
     # change to that contract can break construction. The edge is the code

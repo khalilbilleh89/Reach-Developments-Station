@@ -265,3 +265,7 @@ export const ANALYSIS_TECHNICAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_
 export const PORTFOLIO_READERS: Roles = new Set([
   "system_admin", "project_manager", "finance", "approver_cfo", "executive_viewer", "auditor",
 ]);
+
+/** Indicative buyer returns and project collateral; mirrors marketing/permissions.py. */
+export const MARKETING_READERS: Roles = new Set(["system_admin", "project_manager", "finance", "approver_cfo", "executive_viewer", "auditor", "sales_operations", "sales_advisor"]);
+export const MARKETING_WRITERS: Roles = new Set(["system_admin", "project_manager", "finance", "sales_operations"]);

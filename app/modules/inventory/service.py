@@ -2857,6 +2857,21 @@ def list_units(
     )
 
 
+def marketing_unit_references(
+    session: Session, *, project_id: uuid.UUID, unit_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Identity-only read for retained assumptions after whole-project authorization."""
+    if not unit_ids:
+        return {}
+    return dict(
+        session.execute(
+            select(Unit.id, Unit.unit_reference).where(
+                Unit.project_id == project_id, Unit.id.in_(unit_ids)
+            )
+        ).all()
+    )
+
+
 def unit_register_totals(
     session: Session, *, project: Project, actor: ActorContext, **filters: object
 ) -> dict[str, int]:
