@@ -64,11 +64,11 @@ def test_two_changed_products_are_cross_domain_without_becoming_full() -> None:
 def test_new_domain_migration_adds_migration_and_invariant_packs_not_full() -> None:
     result = chosen(
         "app/modules/projects/models.py",
-        "app/db/migrations/versions/0039_projects.py",
+        "app/db/migrations/versions/0039_project_images.py",
     )
     assert result.risk == "module"
     assert result.migration
-    assert result.migrations == ["0039_projects.py"]
+    assert result.migrations == ["0039_project_images.py"]
     assert "tests/test_migrations.py" in result.paths
     assert "tests/modules/test_migration_projects.py" in result.paths
     assert "tests/modules/test_cutover_intake_contract.py" in result.paths

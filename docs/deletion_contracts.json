@@ -702,5 +702,13 @@
     "removal_route": "DELETE /projects/{project_id}/operations/buyers/{client_id}",
     "status": "implemented",
     "handler": "sales.save_buyer"
+  },
+  {
+    "handler": "projects.add_image",
+    "create_route": "POST /projects/{project_id}/images",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/images/{image_id}",
+    "ui_file": "frontend/src/components/projects/ProjectImages.tsx",
+    "notes": "Project writers remove gallery images after a named confirmation. Removed rows, actor attribution and byte content are retained; ordinary lists and file reads hide removed records."
   }
 ]

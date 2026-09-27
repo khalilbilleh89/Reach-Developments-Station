@@ -97,6 +97,7 @@ import type {
   PreLaunchRegister,
   ProjectAccess,
   ProjectDetail,
+  ProjectImage,
   ProjectSummary,
   QuotePreview,
   ReferenceValue,
@@ -270,6 +271,16 @@ export const projects = {
     post<ProjectDetail>("/projects", input),
   update: (id: string, input: Record<string, unknown>) =>
     patch<ProjectDetail>(`/projects/${id}`, input),
+  images: (id: string) => get<ProjectImage[]>(`/projects/${id}/images`),
+  addImage: (id: string, category: ProjectImage["category"], file: File) => {
+    const params = new URLSearchParams({ category, filename: file.name });
+    return file.arrayBuffer().then(bytes =>
+      postBinary<ProjectImage>(`/projects/${id}/images?${params.toString()}`, bytes),
+    );
+  },
+  imageUrl: (id: string, imageId: string) => `/api/v1/projects/${id}/images/${imageId}/file`,
+  removeImage: (id: string, imageId: string) =>
+    remove(`/projects/${id}/images/${imageId}`),
 
   access: (id: string) => get<ProjectAccess[]>(`/projects/${id}/access`),
   grantAccess: (id: string, userId: string) =>
