@@ -417,116 +417,42 @@ Tests protect business behaviour, not implementation trivia.
 
 ---
 
-## 10a. Smoke, Fast and sharded Full CI
+## 10a. Risk-based module CI
 
-PR-ENG-04 replaces serial Full execution with four independent jobs without
-changing which backend tests Full executes. Canonical temporary MVP 3 delivery
-and exception topology: [MVP2_GATE0A_ROADMAP.md](MVP2_GATE0A_ROADMAP.md). It is an explicitly
-reviewed temporary integration mechanism, not a permanent second production branch.
+CI scope is determined by code risk, not pull-request size or Draft/Ready state.
+The required statuses remain **PR Quality**, **Backend**, and **Frontend**.
 
-| Event/base | Backend lane | Frontend |
-| --- | --- | --- |
-| PR to integration/mvp3, Draft or Ready | Backend Smoke | Always |
-| Draft PR to main | Backend Fast | Always |
-| Ready PR to main | Backend Static + all four Full shards → Backend | Always |
-| Push to main | Same complete sharded Full → Backend | Always |
+- **Module:** one changed product domain, the invariant pack, that domain's
+  tests, and direct consumer tests/contracts.
+- **Cross-domain:** every intentionally changed domain plus each one's direct
+  consumers and cross-domain contracts. Selection is one hop, not transitive.
+- **System:** foundational core, access, database/session, dependency, pytest,
+  migration-environment, or shared test-harness behavior. Complete regression
+  is required and may use the eight-way shard helper.
 
-### Backend Smoke
+An ordinary migration runs migration graph/convergence, upgrade-to-head, drift,
+canonical intake, deletion/retention and changed-domain checks. It does not by
+itself mean System. A change to `app/db/migrations/env.py` does.
 
-Smoke answers whether an integration change is structurally sound and its
-directly affected domains still work. It is **not main merge evidence** and
-makes no full-regression claim. Target under 10–15 minutes, hard job timeout
-30 minutes; actual timing must be reported, never promised from estimates.
+An unregistered `app/modules/<name>/` path fails the plan immediately with the
+registration required in `scripts/ci_backend_tests.py`; it does not silently
+spend a Full run. Routine module registration in `app/main.py` is not System.
 
-`scripts/ci_backend_smoke.py` owns a separate explicit backbone and direct-domain
-node-ID map. The backbone exercises configuration, real PostgreSQL readiness,
-API namespace/error behavior, authentication/authorization, audit, strict requests,
-migration history and representative CI selector/workflow/shard guards. The full
-guard files still run in Fast and Full; Smoke explicitly selects their routing,
-refusal, coverage and aggregation cases. It does not inherit
-the larger historical Fast backbone. Domain contracts name representative happy
-paths, access controls and critical financial/physical invariants. The map and
-its tests are the executable ownership authority; new domains register both
-Fast ownership and their own Smoke contract when introduced.
+The required Backend aggregate always reports. Docs-only and frontend-only
+changes take its no-backend success path without PostgreSQL. Main pushes use the
+same plan over the merged before/after diff. Newer runs cancel obsolete work for
+the same PR. Frontend remains always-on and includes lint, its complete tests,
+and production build.
 
-Classify before dependency installation and structural checks. Missing diff,
-unknown domain, empty/missing contract and unclassified migration fail immediately;
-none silently passes or invokes Full. Core, access, shared test fixtures,
-dependencies/runtime configuration, CI workflow, shared applicability-date
-helper and shared DB infrastructure
-refuse Smoke-only review. Avoid unnecessary shared changes or use the explicit
-full-gate exception/review path in the roadmap. No silent bypass flag.
+`.github/workflows/full-backend-shadow.yml` provides an explicit complete suite
+for manual dispatch or the `ci:full` label. It publishes JUnit, logs, totals,
+duration and slowest tests, remains visibly red on failure, and is not a required
+Backend dependency. Agents never add `ci:full` merely to be safe; they explain
+the blast radius that warrants it.
 
-Normal domain migrations require explicit owner plus integrity-test registration.
-They still run against CI PostgreSQL 16, never Render. Smoke runs pip check,
-Ruff lint/format, compileall app/scripts, upgrade head, Alembic drift check,
-backbone, direct contracts and registered migration checks. No SQLite, mocked
-invariant substitute, disabled migration, deleted test or maxfail shortcut.
-Changing a large domain test file selects the domain representatives rather than
-silently importing the entire file into Smoke; all tests still belong to Full.
-
-### Backend Fast
-
-Keep `scripts/ci_backend_tests.py` for ordinary main drafts. Existing explicit
-ownership and transitive downstream selection remain. Unknown infrastructure or
-full-risk changes still select all tests and print why; the 240-minute ceiling
-supports that fallback. Fast means selected scope, not a duration guarantee.
-Changed test files run, and always-run safety/CI guards remain. The exact CI
-helper paths added by PR-ENG-04 select their guards instead of treating them as
-Render startup scripts; unrecognized operational scripts still require Full.
-
-### Complete Full across independent shards
-
-A structural job runs dependencies, lint/format, compile, PostgreSQL migration/
-drift checks and CI guards, then validates complete shard assignment. Each of
-four matrix jobs has its own runner, PostgreSQL 16 service, Python process,
-dependencies and migrated database. No shared database/artifact tricks or xdist.
-
-`scripts/ci_backend_shards.py --shard N --count 4 --out selected-tests.txt`
-collects pytest's actual test counts, discovers all test files, greedily assigns
-largest count first to the currently lightest shard (stable path/index tie-breaks)
-and sorts each output. A file belongs to exactly one nonempty shard. Parametrized
-cases count separately in weights; counts are balancing estimates, not durations.
-Collection failure refuses the assignment. Every new test file is discovered;
-coverage guards prove no omission/duplication and remain valid for other counts.
-
-Every assigned file runs via pytest with durations, without marker exclusions,
-maxfail, skipped slow/security/concurrency/migration/cutover/history/financial
-families or changed-path selection. Structural CI guards may run additionally
-before the matrix; they still have exactly one assignment in the full partition.
-Matrix fail-fast is false so a failing shard does not cancel its peers.
-
-The final check is named **Backend**, depends on structural and matrix results,
-and uses always() to evaluate failed/skipped dependencies. Only success of both
-can return success. Failure, cancellation, skipped shards or invalid assignment
-cannot yield a green Backend. Frontend remains a separate required check.
-Check out the event's exact head SHA, not a moving branch; the merge decision
-must also confirm base compatibility/current review. Started is not passed.
-
-Smoke and structural jobs are bounded at 30 minutes, Full shards at 120, Fast
-at 240, the aggregator at 5 and Frontend at 15. Sharding aims materially below
-the old observed ~2.5 hours, with 30–60 minutes an initial engineering expectation,
-not a measured claim. Record the first approved Full run's shard durations,
-slowest shard, first-start to last-finish wall-clock, all verdicts, Backend and
-Frontend. Do not weaken coverage to reach a target; rebalance from actual evidence.
-
-### Review and main health
-
-Open Draft, run the applicable lane and Frontend, stop for independent review,
-fix findings, and mark Ready only after the candidate is accepted for full review.
-Main candidates require final exact-head Full Backend and Frontend before a human
-merges. The temporary integration exception is exclusively defined in the roadmap;
-Smoke never authorizes a main merge. Agents never merge.
-
-Every push to main receives Full and Frontend using this same implementation.
-Superseded PR runs cancel; main runs have unique run-ID concurrency groups so
-neither running nor queued main evidence is displaced by a later merge. Pending
-main CI does not prevent starting authorized Draft work. A failing main run is
-the most urgent repository issue; fix it through normal review, not a direct push.
-Render remains on main. Nothing in this workflow deploys or points to production.
-
-Workflow semantics are checked against GitHub's [workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
-and [concurrency documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+Ordinary Backend targets at most ten minutes, warns above fifteen, and times out
+around twenty. Frontend targets at most three minutes. System Full may take
+longer because it is rare by design. See [CI_STRATEGY.md](CI_STRATEGY.md).
 
 ---
 
@@ -553,9 +479,36 @@ delete PR branch
 - Squash merge normal feature PRs. Delete merged branches.
 - Branch naming: `mvp/pr-NN-short-slug` for roadmap PRs, `eng/pr-NN-short-slug`
   for horizontal engineering work that adds no functional scope.
-- **Open the pull request as a draft.** Draft is the iteration state and runs
-  the applicable lane in §10a; the temporary integration exception is defined
-  in the roadmap. A main candidate asks for Full by becoming Ready.
+- **Open the pull request as a draft.** Draft is the iteration state. Draft and
+  Ready run the same risk plan for the same diff; readiness never widens CI.
+
+### Review contract and truthful evidence
+
+Every PR uses `.github/pull_request_template.md`; do not replace it with a generated
+commit summary. Inspect repository reality before proposing a new implementation.
+Explain root cause, scope, non-goals, cohesion and applicable impacts precisely;
+concise answers are welcome. Non-applicability requires a reason.
+
+- PR template = authoring contract.
+- PR Quality workflow = deterministic delivery-contract enforcement.
+- CI = implementation/test evidence.
+- GitHub ruleset = merge enforcement (owner configuration after merge).
+
+Passing PR Quality does not prove the code is correct. Passing Backend/Frontend
+does not make a poor or misleading PR description acceptable. Both are required.
+Drafts may report pending validation but must explain their core design and scope.
+Ready PRs must complete the contract, resolve declarations and explain limitations.
+
+A test, build, migration, browser review, deployment check or manual validation may
+be claimed as passed only if that exact check actually ran successfully against the
+reported code. Name the command/test family and result. If PostgreSQL is unavailable,
+say that integration tests did not run locally and CI is still required; never turn
+missing evidence into "Backend: pass" or "Fully tested". PR Quality can check the
+representation, not verify that an author's claims are true. Independent review and
+exact-head CI remain required. Agents never merge; a human merges.
+
+See [AGENT_AUTOMATION.md](AGENT_AUTOMATION.md) for the validator's limits, local usage
+and the manual ruleset activation step.
 
 ### Size discipline
 
@@ -572,17 +525,17 @@ delete PR branch
 A PR is done when all of the following hold:
 
 - [ ] Scope matches its roadmap entry; nothing extra was smuggled in.
-- [ ] Independent review and the applicable §10a gate passed. Main candidates
-      are Ready with `Backend` Full green **on the current head SHA**; the
-      temporary integration exception follows the canonical roadmap.
+- [ ] Independent review and the applicable §10a risk gate passed on the exact
+      head SHA. System-risk candidates include required Full regression.
 - [ ] `ruff check .` and `ruff format --check .` pass.
 - [ ] `python -m compileall app` passes.
 - [ ] `pip check` reports no broken requirements.
-- [ ] Applicable PostgreSQL tests pass; main candidates require every Full shard.
+- [ ] Applicable PostgreSQL tests pass; System-risk candidates require every Full shard.
 - [ ] Migrations apply forward and reverse cleanly.
 - [ ] `npm run lint` and `npm run build` pass.
 - [ ] CI is green.
-- [ ] The PR template is filled in, including dependency and contract impact.
+- [ ] The PR template is filled in truthfully, including dependency and contract impact,
+      and the PR Quality check passes for the current description and head.
 - [ ] No secret, credential or production connection string is in the diff.
 - [ ] Financial rules in section 6 are respected wherever money is touched.
 - [ ] Documentation affected by the change has been updated in the same PR.

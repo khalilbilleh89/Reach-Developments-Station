@@ -220,7 +220,7 @@ tokens, CI, PR template, and Render build/start separation.
 > PR-MVP-05's deposit and first-payment gates are attestations that evidence
 > exists. They are never subtracted from a schedule and never read as a receipt.
 
-## PR-ENG-01 — Two-Speed CI ✅
+## PR-ENG-01 — Two-Speed CI ✅ (historical; superseded by risk-based CI)
 
 Horizontal engineering hardening. **Does not change the functional MVP count.**
 
@@ -243,7 +243,11 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > pull request is marked ready re-runs it, so the green tick always belongs to
 > the exact commit somebody would merge.
 
-## PR-ENG-03 — Post-Merge CI on main 🚧
+The current policy is [CI_STRATEGY.md](CI_STRATEGY.md): Draft and Ready use the
+same module/cross-domain/system plan, downstream selection is direct rather than
+transitive, and Full is required only for System risk.
+
+## PR-ENG-03 — Post-Merge CI on main ✅ (historical; superseded by risk-based CI)
 
 Horizontal engineering hardening. **Does not change the functional MVP count.**
 
@@ -265,6 +269,9 @@ Horizontal engineering hardening. **Does not change the functional MVP count.**
 > commit no run had ever reported on. Pre-merge CI asks *may this merge?* and
 > binds only while somebody waits; post-merge CI asks *is main sound right now?*
 > and becomes true without anybody's patience. A release is cut from `main`.
+
+Main still receives a verdict, but now over the actual merged diff; it no longer
+launches complete backend regression for every push.
 
 ## PR-MVP-07 — Collections ✅
 

@@ -98,7 +98,9 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `operation_stages` | Project checklist stages; explicit application entry. |
 | `operation_buyers` | Buyer purpose and edit revision; application-owned operational records. |
 | `operation_progress` | Buyer milestones; application-owned with retained audit evidence. |
+| `project_team_members` | Project directory contacts entered in Governance; not imported by legacy bundles. |
 | `project_companies` | Company information entered in Development; not imported by legacy bundles. |
+| `project_agreements` | Project final-draft library and retained uploads, maintained through Agreements; not legacy-imported. |
 | `company_bank_accounts` | Company bank instructions maintained by authorized project users; not imported by legacy bundles. |
 | `user_roles` | Authorisation configuration. |
 | `user_sessions` | Runtime state; meaningless outside a live session. |
@@ -183,6 +185,13 @@ That is target-side preflight, and it is why preflight has a target half at all.
 
 <!-- disposition:EXCLUDED -->
 
+| Table | Disposition |
+| --- | --- |
+| `marketing_content` | New marketing content; never legacy-imported. |
+| `marketing_rental_scenarios` | Rental assumptions; excluded from legacy import. |
+| `marketing_indicators` | Market observations; excluded from legacy import. |
+
+
 | Table | Why not |
 |---|---|
 | `land_parcels` | Land acquisition is history the operating system does not need to run. Add it when somebody names a report that requires it. |
@@ -190,6 +199,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `land_market_assumptions` | Owner-entered annual estimates; no legacy import or inferred market rates. |
 | `permits` | Live permits are re-entered through the application, where the status machine applies. A migrated permit with no event history is a permit whose SLA clock never started. |
 | `document_references` | Pointers to files the migration does not move. |
+| `project_images` | Project gallery content uploaded through the application; the legacy batch neither moves image bytes nor fabricates gallery history. |
 | `unit_features` | MVP 2 descriptive annotations, entered through the unit workspace; excluded from the legacy batch contract. |
 | `construction_stages` | MVP 2 project checklist configured through the project workspace; excluded from the legacy batch contract. |
 | `unit_stage_events` | MVP 2 physical completion history entered through the unit workspace; excluded from the legacy batch contract. |

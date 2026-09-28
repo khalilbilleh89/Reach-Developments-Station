@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -163,6 +164,49 @@ def update_currency(
     session.commit()
     session.refresh(currency)
     return currency
+
+
+def delete_currency(
+    session: Session,
+    *,
+    currency_id: uuid.UUID,
+    reason: str,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+) -> None:
+    """Delete only an unused currency; foreign keys remain the final usage guard."""
+    currency = session.scalar(
+        select(Currency)
+        .where(Currency.id == currency_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if currency is None:
+        raise NotFoundError("Currency not found.")
+    clean_reason = reason.strip()
+    if len(clean_reason) < 8:
+        raise ValidationError("Explain the currency removal in at least eight characters.")
+    before = _snapshot(currency, _CURRENCY_FIELDS)
+    session.delete(currency)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise ConflictError(
+            "Currency is in use and cannot be deleted. Retire it instead if it should no "
+            "longer be selected."
+        ) from exc
+    record_event(
+        session,
+        action="currency.deleted",
+        entity_type=ENTITY_CURRENCY,
+        entity_id=currency_id,
+        correlation_id=correlation_id,
+        actor_user_id=actor_user_id,
+        reason=clean_reason,
+        before=before,
+    )
+    session.commit()
 
 
 # --------------------------------------------------------------------------- #

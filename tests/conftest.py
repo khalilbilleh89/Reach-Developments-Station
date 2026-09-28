@@ -21,7 +21,8 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from psycopg import Connection
-from sqlalchemy import Engine, event, text
+from sqlalchemy import Connection as SQLAlchemyConnection
+from sqlalchemy import Engine, event, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -156,78 +157,16 @@ def postgres() -> None:
 # Governance schema and data isolation
 # --------------------------------------------------------------------------- #
 
-#: Emptied before every test. `roles` is excluded: it is seeded by migration and
-#: is reference data, not test state.
-_DATA_TABLES = (
-    "commercial_faqs",
-    "operation_progress",
-    "operation_buyers",
-    "operation_stages",
-    "operation_pipelines",
-    "ue_current_cost_settings",
-    "company_bank_accounts",
-    "project_companies",
-    # Retained reporting documents require privileged test lifecycle cleanup.
-    # Do not rely on their foreign keys making an unrelated TRUNCATE cascade to
-    # them: migration tests must start with no retained history. TRUNCATE is
-    # confined to this throwaway database fixture, never an application bypass.
-    "management_report_snapshot_projects",
-    "management_report_snapshots",
-    "unit_stage_events",
-    "construction_stages",
-    "audit_events",
-    "installment_trigger_events",
-    "payment_plan_installments",
-    "payment_plan_versions",
-    "payment_plans",
-    "user_sessions",
-    "user_roles",
-    "unit_custom_field_values",
-    "land_parcel_custom_field_values",
-    "project_custom_field_values",
-    "custom_field_options",
-    "custom_field_definitions",
-    "handover_clearances",
-    "handover_records",
-    "sale_cancellations",
-    "sale_legal_events",
-    "sale_contract_tax_lines",
-    "sale_contract_parties",
-    "sale_contracts",
-    "reservation_status_events",
-    "reservation_adjustments",
-    "reservations",
-    "client_parties",
-    "clients",
-    "sales_project_policies",
-    "unit_features",
-    "unit_documents",
-    "unit_status_events",
-    "unit_area_values",
-    "unit_area_schedules",
-    "inventory_common_areas",
-    "technical_specifications",
-    "inventory_sub_assets",
-    "units",
-    "floors",
-    "buildings",
-    "user_phase_access",
-    "phases",
-    "area_types",
-    "document_references",
-    "permit_status_events",
-    "permits",
-    "planning_controls",
-    "land_parcels",
-    "user_project_access",
-    "projects",
-    "users",
-    "country_approval_thresholds",
-    "tax_rules",
-    "reference_values",
-    "country_packs",
-    "currencies",
-)
+#: Tables owned by the migration/runtime rather than test-created application
+#: data. Repository history confirms that ``roles`` is the only seeded table;
+#: Alembic owns its revision ledger. Everything else in ``public`` is discovered
+#: and cleaned automatically, including a table added by a future migration.
+PRESERVED_TABLES = frozenset({"roles", "alembic_version"})
+
+
+def data_tables(connection: SQLAlchemyConnection) -> list[str]:
+    """Discover every public application table from the migrated database."""
+    return sorted(set(inspect(connection).get_table_names(schema="public")) - PRESERVED_TABLES)
 
 
 def alembic_config() -> Config:
@@ -242,24 +181,6 @@ def alembic_config() -> Config:
 def migrated_schema() -> None:
     """Bring the test database to head once for the whole session."""
     command.upgrade(alembic_config(), "head")
-
-
-#: Which of the data tables actually hold a row, answered in one round trip.
-#:
-#: ``TRUNCATE`` costs roughly the same whether a table has a million rows or
-#: none: it takes a lock and rewrites the file. Naming all fifty-six of them
-#: therefore cost about 0.8 of a second per test whatever the test did, and
-#: with three and a half thousand tests that is most of an hour of CI spent
-#: emptying tables that were already empty. A typical test touches a handful.
-#:
-#: Asking first costs about a millisecond, because every branch is an
-#: ``EXISTS`` that stops at the first row.
-_OCCUPIED_TABLES = text(
-    " UNION ALL ".join(
-        f"SELECT '{table}' AS occupied WHERE EXISTS (SELECT 1 FROM {table})"
-        for table in _DATA_TABLES
-    )
-)
 
 
 @pytest.fixture(autouse=True)
@@ -294,9 +215,16 @@ def empty_data_tables() -> list[str]:
     """
     engine = get_engine()
     with engine.begin() as connection:
-        occupied = [row[0] for row in connection.execute(_OCCUPIED_TABLES)]
+        tables = data_tables(connection)
+        quote = connection.dialect.identifier_preparer.quote
+        probes = " UNION ALL ".join(
+            f"SELECT '{table}' AS occupied WHERE EXISTS (SELECT 1 FROM {quote(table)})"
+            for table in tables
+        )
+        occupied = [row[0] for row in connection.execute(text(probes))] if probes else []
         if occupied:
-            connection.execute(text(f"TRUNCATE {', '.join(occupied)} RESTART IDENTITY CASCADE"))
+            targets = ", ".join(quote(table) for table in occupied)
+            connection.execute(text(f"TRUNCATE {targets} RESTART IDENTITY CASCADE"))
     return occupied
 
 

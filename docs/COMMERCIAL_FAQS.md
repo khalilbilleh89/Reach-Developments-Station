@@ -19,7 +19,7 @@ The library starts empty. No business answers or customer records are imported.
 
 ## Schema and rollback
 
-Migration 0039_commercial_faqs follows 0038_commission_beneficiaries and adds one table
+Migration 0043_commercial_faqs follows 0042_marketing and adds one table
 with project foreign key, project index, text limits and a positive version. No backfill.
 Downgrade refuses while FAQ rows remain. Prefer rolling back application code while
 retaining the additive table. Export and explicitly resolve FAQs before schema downgrade;

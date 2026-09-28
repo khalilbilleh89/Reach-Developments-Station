@@ -97,6 +97,7 @@ import type {
   PreLaunchRegister,
   ProjectAccess,
   ProjectDetail,
+  ProjectImage,
   ProjectSummary,
   QuotePreview,
   ReferenceValue,
@@ -192,6 +193,10 @@ export const settings = {
     symbol?: string | null;
     minor_units: number;
   }) => post<Currency>("/settings/currencies", input),
+  updateCurrency: (id: string, input: { symbol: string | null }) =>
+    patch<Currency>(`/settings/currencies/${id}`, input),
+  deleteCurrency: (id: string, reason: string) =>
+    remove(`/settings/currencies/${id}?${new URLSearchParams({ reason }).toString()}`),
 
   countryPacks: () => get<CountryPack[]>("/settings/country-packs"),
   createCountryPack: (input: {
@@ -270,6 +275,22 @@ export const projects = {
     post<ProjectDetail>("/projects", input),
   update: (id: string, input: Record<string, unknown>) =>
     patch<ProjectDetail>(`/projects/${id}`, input),
+  images: (id: string) => get<ProjectImage[]>(`/projects/${id}/images`),
+  addImage: (id: string, category: ProjectImage["category"], file: File) => {
+    const params = new URLSearchParams({ category, filename: file.name });
+    return file.arrayBuffer().then(bytes =>
+      postBinary<ProjectImage>(`/projects/${id}/images?${params.toString()}`, bytes),
+    );
+  },
+  imageUrl: (id: string, imageId: string) => `/api/v1/projects/${id}/images/${imageId}/file`,
+  removeImage: (id: string, imageId: string) =>
+    remove(`/projects/${id}/images/${imageId}`),
+  correctCurrency: (id: string, input: {
+    expected_base_currency_id: string;
+    target_currency_id: string;
+    reason: string;
+    keep_amounts_unchanged: true;
+  }) => post<ProjectDetail>(`/projects/${id}/currency-corrections`, input),
 
   access: (id: string) => get<ProjectAccess[]>(`/projects/${id}/access`),
   grantAccess: (id: string, userId: string) =>

@@ -43,14 +43,17 @@ from app.modules.construction.api import router as construction_router
 from app.modules.consultant_engineering.api import router as consultant_router
 from app.modules.inventory.api import router as inventory_router
 from app.modules.management_reporting.api import router as management_reporting_router
+from app.modules.marketing.api import router as marketing_router
 from app.modules.payment_plans.api import router as payment_plans_router
 from app.modules.portfolio.action_api import router as management_actions_router
 from app.modules.portfolio.api import router as portfolio_router
 from app.modules.prelaunch.api import router as prelaunch_router
 from app.modules.pricing.api import router as pricing_router
 from app.modules.project_analysis.api import router as project_analysis_router
+from app.modules.projects.agreement_api import router as agreement_router
 from app.modules.projects.api import router as projects_router
 from app.modules.projects.company_api import router as company_router
+from app.modules.projects.team_api import router as team_router
 from app.modules.sales.api import router as sales_router
 from app.modules.sales.faq_api import router as faq_router
 from app.modules.sales.operations_api import router as operations_router
@@ -240,6 +243,9 @@ def create_app() -> FastAPI:
         settings_router,
         projects_router,
         company_router,
+        marketing_router,
+        team_router,
+        agreement_router,
         inventory_router,
         pricing_router,
         sales_router,

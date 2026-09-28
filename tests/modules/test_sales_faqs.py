@@ -125,7 +125,7 @@ def test_faq_project_isolation(
 
 def test_faq_migration_roundtrip(postgres: None) -> None:
     config = Config("alembic.ini")
-    command.downgrade(config, "0038_commission_beneficiaries")
+    command.downgrade(config, "0042_marketing")
     command.upgrade(config, "head")
     command.check(config)
 
@@ -133,5 +133,5 @@ def test_faq_migration_roundtrip(postgres: None) -> None:
 def test_faq_migration_preserves_answers(admin_client: TestClient, project_id: str) -> None:
     assert admin_client.post(url(project_id), json=BODY).status_code == 201
     with pytest.raises(RuntimeError, match="Retained FAQs"):
-        command.downgrade(Config("alembic.ini"), "0038_commission_beneficiaries")
+        command.downgrade(Config("alembic.ini"), "0042_marketing")
     assert admin_client.get(url(project_id)).json()["items"][0]["answer"] == BODY["answer"]

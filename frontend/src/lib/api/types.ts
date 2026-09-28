@@ -160,6 +160,16 @@ export interface ProjectDetail extends ProjectSummary {
   planned_duration_days: number | null;
 }
 
+export interface ProjectImage {
+  id: string;
+  project_id: string;
+  category: "interior" | "exterior" | "render_3d";
+  filename: string;
+  media_type: "image/jpeg" | "image/png" | "image/webp";
+  created_by_user_id: string;
+  created_at: string;
+}
+
 export interface ProjectAccess {
   id: string;
   project_id: string;

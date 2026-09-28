@@ -16,6 +16,9 @@
 
 export type Roles = ReadonlySet<string>;
 
+export const AGREEMENT_READERS: Roles = new Set(["system_admin", "project_manager", "sales_operations", "sales_advisor", "legal", "collections", "finance", "approver_cfo", "executive_viewer", "auditor"]);
+export const AGREEMENT_WRITERS: Roles = new Set(["system_admin", "project_manager", "sales_operations", "legal"]);
+
 /** Physical stage configuration and progress; no financial approval rights. */
 export const CONSTRUCTION_STAGE_CONFIGURERS: Roles = new Set(["project_manager"]);
 export const CONSTRUCTION_STAGE_WRITERS: Roles = new Set(["project_manager", "design_engineering", "finance"]);
@@ -265,3 +268,7 @@ export const ANALYSIS_TECHNICAL_READERS: Roles = new Set([...ANALYSIS_FINANCIAL_
 export const PORTFOLIO_READERS: Roles = new Set([
   "system_admin", "project_manager", "finance", "approver_cfo", "executive_viewer", "auditor",
 ]);
+
+/** Indicative buyer returns and project collateral; mirrors marketing/permissions.py. */
+export const MARKETING_READERS: Roles = new Set(["system_admin", "project_manager", "finance", "approver_cfo", "executive_viewer", "auditor", "sales_operations", "sales_advisor"]);
+export const MARKETING_WRITERS: Roles = new Set(["system_admin", "project_manager", "finance", "sales_operations"]);

@@ -4,26 +4,35 @@ Reach Developments Station — MVP 1.0 pull request template.
 Governing policy: docs/ENGINEERING_RULES.md
 Roadmap position: docs/MVP_ROADMAP.md
 
-Delete sections that genuinely do not apply. Do not delete a section merely
-because filling it in is inconvenient.
+Keep every required section. For non-applicable sections give a brief reason.
+PR Quality enforces this contract; comments and checkboxes are not explanations.
+Draft requires Context, Scope, Non-goals, Architecture, Contract Impact,
+Migration Impact and Validation results; explicit pending evidence is allowed.
+Ready requires all delivery sections below. Page layout is required for frontend
+source changes. Broad Drafts and Ready PRs also require Change cohesion.
 -->
 
 ## CI phase
 
 <!--
-Draft  = iteration. Runs `Backend Fast`. NEVER merge from this state.
-Ready  = merge candidate. Runs the full `Backend` suite on the exact head.
+Draft and Ready run the same risk-based `Backend` plan for the exact code diff.
+Readiness is a review state, not a test-blast-radius signal. System-risk changes
+still require Full; `ci:full` requests an optional non-required confidence sweep.
 
-Any commit pushed after the PR is marked ready re-runs the full suite, so the
-green tick always belongs to the current head. Never merge on an older SHA.
+Any code commit reruns the same risk plan, so the green ticks belong to the
+current head. Never merge on an older SHA.
 -->
 
-- [ ] Draft — focused CI while iterating
-- [ ] Ready for review — full exact-head regression
+- [ ] Draft — iteration state; risk-based CI
+- [ ] Ready for review — merge candidate; same exact-head risk plan
 
 ## Context
 
 <!-- Why does this PR exist? Which roadmap PR is it? -->
+
+## Repo reality / Root cause
+
+<!-- What already exists, what is actually missing, what is reused, and why? -->
 
 ## Scope
 
@@ -32,6 +41,12 @@ green tick always belongs to the current head. Never merge on an older SHA.
 ## Non-goals
 
 <!-- What does this PR deliberately not build? -->
+
+## Change cohesion
+
+<!-- Why does everything belong in one reviewable change? For 20+ files, 800+
+additions or multiple backend domains, explain the shared delivery outcome and
+why separation is unsafe, or split the PR. One precise sentence can suffice. -->
 
 ## Architecture
 
@@ -94,7 +109,10 @@ Financial-data exposure impact:
 Audit impact:
 ```
 
-## Deletion coverage (required for every record-creating feature)
+## Deletion / Retention
+
+<!-- Deletion coverage is required for every record-creating feature.
+Otherwise explain that this creates no user-created persistent record. -->
 
 - [ ] Every new or changed user-created record has a visible Delete action, including child rows and configuration choices.
 - [ ] Unused/draft deletion works through the UI and API; confirmation names the record and explains consequences.
@@ -103,9 +121,14 @@ Audit impact:
 - [ ] Lists, selections and affected totals refresh correctly after removal.
 - [ ] `docs/deletion_contracts.json` is updated; no new removal gaps are introduced.
 
-Deletion UI location, endpoint, allowed states and test evidence:
+Creation route, removal route, UI location, allowed removal states, retention behavior
+and test evidence:
 
 ## Validation results
+
+<!-- Name the exact checks and results that actually ran against this code.
+Never claim a pass for an unexecuted check. Explain unavailable checks and
+required CI explicitly. Bare N/A is invalid; give a reason. -->
 
 ```text
 Backend tests:
@@ -124,6 +147,10 @@ Rollback procedure:
 Post-merge checks:
 ```
 
+## Review focus
+
+<!-- Identify the decisions, risks or edge cases the independent reviewer should inspect. -->
+
 ## Follow-up
 
 <!-- Only genuine deferred scope. No speculative "future engine" follow-ups. -->
@@ -133,3 +160,5 @@ Post-merge checks:
 - [ ] Record creation, editing, details and drilldowns use full pages; no side drawers.
 - [ ] Back preserves register context; unsaved changes and deletion controls still work.
 - [ ] Desktop and mobile layouts checked; only small centered dialogs remain.
+
+Layout explanation and desktop/mobile evidence (or reasoned non-applicability):

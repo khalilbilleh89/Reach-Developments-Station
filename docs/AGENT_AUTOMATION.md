@@ -1,6 +1,6 @@
 # Agent automation
 
-Four layers decide what a coding agent may do in this repository, and each one
+Five layers decide what a coding agent may do in this repository, and each one
 answers a question the others cannot.
 
 | Layer | Holds | Where |
@@ -8,7 +8,8 @@ answers a question the others cannot.
 | **Skills** | Specialised knowledge and judgement, loaded when the task matches | `.claude/skills/*/SKILL.md` |
 | **Permanent policy** | The rules that apply to every change | `CLAUDE.md`, `AGENTS.md`, `docs/ENGINEERING_RULES.md` |
 | **Guard scripts** | Deterministic decisions any agent or human can reuse | `scripts/agent_guard.py`, `scripts/agent_preflight.py` |
-| **CI** | The authoritative merge evidence, whatever produced the change | `.github/workflows/ci.yml` |
+| **PR Quality** | Deterministic review-package validation | `scripts/validate_pr_description.py`, `.github/workflows/pr-quality.yml` |
+| **CI** | Implementation correctness evidence, whatever produced the change | `.github/workflows/ci.yml` |
 
 `.claude/settings.json` is not on that list on purpose. It is an **adapter**:
 it tells Claude Code when to invoke the guard scripts. It holds no rule of its
@@ -144,6 +145,72 @@ When you do add one:
 2. Test it in `tests/test_agent_guardrails.py`, both the deny case and the
    ordinary-work case it must not block.
 3. Add the adapter entry to `.claude/settings.json`.
-4. Classify the new file in `scripts/ci_backend_tests.py`, or it will run the
-   entire backend suite on every change.
+4. Classify the new file in `scripts/ci_backend_tests.py`. New product modules
+   fail the CI plan until registered; unknown infrastructure is System risk.
 5. Document it in the table above.
+
+## PR Quality on every device
+
+Codex on PC A, Codex on PC B, Claude Code, another AI agent and a human all submit
+to the same GitHub PR Quality workflow, repository validator and template contract.
+Local/global instructions and Claude hooks are conveniences, not governance.
+No Codex-specific setup is required. Required status checks become merge enforcement
+only after the owner configures the ruleset below.
+
+The workflow handles opened, edited, synchronize, reopened, ready_for_review and
+converted_to_draft PR events on main, integration/mvp3 and integration/mvp3-management.
+Editing a description reruns this lightweight check; it does not trigger main CI.
+It reads GITHUB_EVENT_PATH and the merge-base-to-head local Git diff, with no API
+calls, secrets, application installs, PostgreSQL or Node. Git failures refuse validation.
+Only contents: read is granted; descriptions are never auto-edited and nothing merges.
+
+Draft requires meaningful Context, Scope, Non-goals, Architecture, Contract Impact,
+Migration Impact and Validation results; pending implementation/checks are permitted.
+Ready requires the complete template delivery contract, a descriptive title, resolved
+Yes/No declarations, reasoned non-applicability, and named validation evidence or
+explicit limitations. HTML comments, checkbox-only answers and empty labels do not
+count. Headings use level two; fenced field blocks and multiline evidence are accepted.
+
+Migration paths require Migration Required and Database Schema Changed to be Yes.
+Frontend source changes require Page layout plus frontend evidence; production Python
+requires backend test evidence, not Ruff alone. Dependency files require a delta.
+Financial path/scope signals require financial field explanations or reasoned
+non-applicability. Human review decides whether these explanations are correct.
+Deletion/Retention retains the creation/removal route, UI, allowed states, retention
+and test-evidence contract; tests/test_deletion_contracts.py still checks implementation.
+
+At 20 changed paths, 800 added lines, or two backend domains, both Draft and Ready
+require a Change cohesion explanation of at least 12 words. These are review signals,
+not proof that domains are unrelated. Size alone never rejects a coherent change.
+The modest word floor catches empty answers; it cannot assess architecture, formulas,
+commercial assumptions, aesthetics, truthfulness or whether to merge.
+
+Local use (committed diff; use --draft for the Draft contract):
+
+```bash
+python scripts/validate_pr_description.py --body-file /path/to/pr.md --title "Describe the concrete change" --base origin/main --head HEAD
+python -m pytest -q tests/test_pr_quality.py
+```
+
+Risk-based Backend classifies the validator as repository tooling and runs its
+guards without product Full. The PR Quality workflow itself installs no
+dependencies. Draft/Ready state never changes Backend breadth.
+
+## Owner action after merge: require the checks
+
+Inspected on 2026-09-27: the active `code review` ruleset targets `~DEFAULT_BRANCH`
+and has non-fast-forward protection, Copilot code review, a pull-request requirement
+with squash-only merges, and linear history. It has no required-status-check rule.
+Repository files do not mutate these settings; this PR does not change the ruleset.
+
+After this PR merges and the new check has run, the owner must open:
+**Repository → Settings → Rules → Rulesets → code review → Require status checks to pass**.
+Add **PR Quality**, **Backend**, and **Frontend** as required checks. Keep
+`~DEFAULT_BRANCH` and all existing review, squash, linear-history and non-fast-forward
+protections. Do not bypass permissions if the agent cannot change rulesets.
+
+The workflow executes reviewed head code, like existing CI. Required checks are not
+a tamper-proof sandbox against an author changing the validator/workflow itself;
+independent review must inspect governance changes. Protect these files through the
+repository's review process. Passing PR Quality certifies the delivery representation,
+not code correctness; Backend and Frontend supply their separate execution evidence.

@@ -15,6 +15,7 @@ import {
 } from "@/components/shell/navigation";
 import { AccountSection } from "@/components/settings/AccountSection";
 import { AuditSection } from "@/components/settings/AuditSection";
+import { CurrencySection } from "@/components/settings/CurrencySection";
 import { UsersSection } from "@/components/settings/UsersSection";
 import { PageHeader } from "@/components/ui";
 
@@ -59,6 +60,7 @@ function SettingsScreen() {
       <PageHeader icon="settings" eyebrow="Settings" title={item?.label ?? "Settings"} subtitle={item?.description} />
       {section === "users" ? <UsersSection currentUserId={user.id} onOwnPermissionsChanged={refresh} /> : null}
       {section === "audit" ? <AuditSection /> : null}
+      {section === "currencies" ? <CurrencySection /> : null}
       {section === "account" ? (
         <AccountSection onChanged={() => router.replace("/login/")} />
       ) : null}

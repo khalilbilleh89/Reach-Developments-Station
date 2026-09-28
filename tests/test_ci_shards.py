@@ -69,6 +69,30 @@ def test_failed_collection_cannot_return_a_smaller_suite(tmp_path: Path) -> None
         shards.collected_weights(tmp_path)
 
 
+def test_selector_plan_is_validated_and_can_be_assigned_exactly_once(tmp_path: Path) -> None:
+    plan = tmp_path / "selected-tests.txt"
+    paths = shards.discover()[:9]
+    plan.write_text("\n".join(reversed(paths)) + "\n", encoding="utf-8")
+
+    chosen = shards.selected(plan)
+    assert chosen == paths
+    assignment = shards.assign(dict.fromkeys(chosen, 1), 3)
+    assert Counter(path for group in assignment for path in group) == Counter(paths)
+
+
+@pytest.mark.parametrize(
+    "contents",
+    ["", "tests/not-real.py\n", "tests/test_config.py\ntests/test_config.py\n"],
+)
+def test_selector_plan_refuses_empty_unknown_or_duplicate_paths(
+    tmp_path: Path, contents: str
+) -> None:
+    plan = tmp_path / "selected-tests.txt"
+    plan.write_text(contents, encoding="utf-8")
+    with pytest.raises(ValueError):
+        shards.selected(plan)
+
+
 # --------------------------------------------------------------------------- #
 # Scoping Full to the guards a frontend change can actually reach
 # --------------------------------------------------------------------------- #

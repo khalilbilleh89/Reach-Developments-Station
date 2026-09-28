@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import test from "node:test";
 
-const source = path => readFileSync(new URL(path, import.meta.url), "utf8");
+const source = path => readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 test("returned units have a Sales-owned, reasoned action separate from Inventory release", () => {
   const stock = source("../src/components/projects/sales/CommercialUnits.tsx");

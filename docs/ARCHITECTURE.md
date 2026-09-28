@@ -1392,3 +1392,9 @@ See [Commercial Operations](COMMERCIAL_OPERATIONS.md) for scope and retention.
 Sales owns project-scoped reusable plain-text questions and answers. Dedicated FAQ
 routes use Sales reader permissions and whole-project FAQ writers, project locks,
 optimistic versions and immutable audit snapshots. See [Commercial FAQs](COMMERCIAL_FAQS.md).
+
+### Project agreement library
+
+Commercial > Agreements uses the projects domain for final client purchase drafts,
+with bounded PostgreSQL document storage and authorized downloads. It creates no
+sale or signature state. See [AGREEMENTS.md](AGREEMENTS.md) for scope and retention.

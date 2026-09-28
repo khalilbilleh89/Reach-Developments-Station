@@ -1,6 +1,5 @@
-# Engineering governance: Smoke for temporary MVP 3 integration, Fast for main
-# drafts, and complete sharded Full for ready main candidates and every main push.
-# No deployment. Canonical temporary topology: docs/MVP3_ROADMAP.md.
+# Required PR checks are named Backend and Frontend. Backend breadth is decided
+# by code risk, never by Draft/Ready state.
 name: CI
 
 on:
@@ -14,269 +13,49 @@ permissions:
   contents: read
 
 concurrency:
-  # Unique main groups also preserve queued main runs (Actions replaces older
-  # pending runs even when cancel-in-progress is false in a shared group).
-  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: ci-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  development_scope:
-    name: Development UI scope
+  scope:
+    name: Backend scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      frontend_only: ${{ steps.scope.outputs.frontend_only }}
-      full_scope: ${{ steps.scope.outputs.full_scope }}
-      shards: ${{ steps.width.outputs.shards }}
-      shard_count: ${{ steps.width.outputs.shard_count }}
+      risk: ${{ steps.plan.outputs.risk }}
+      backend_required: ${{ steps.plan.outputs.backend_required }}
+      full_required: ${{ steps.plan.outputs.full_required }}
+      selected_count: ${{ steps.plan.outputs.selected_count }}
+      targeted_shards: ${{ steps.plan.outputs.targeted_shards }}
     steps:
-      - name: Check out reviewed tree
+      - name: Check out exact tested head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      # How wide Full runs, decided in one place and read by the matrix, the
-      # shard command and the job name. It used to be the literal 4 in three
-      # spots in this file and three assertions in test_ci_workflow.py, so
-      # changing it meant changing six things and hoping.
-      #
-      # Eight, not more: a single run is then twelve jobs, and a pull request
-      # run overlapping a push to main is twenty-four against this account's
-      # twenty concurrent jobs. Wider shards would queue and give the time
-      # straight back.
-      - name: Decide how wide Full runs
-        id: width
+      - name: Build risk-based backend plan
+        id: plan
         env:
-          SHARD_COUNT: 8
-        run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, os
-          count = int(os.environ["SHARD_COUNT"])
-          print(f"shard_count={count}")
-          print("shards=" + json.dumps(list(range(1, count + 1))))
-          PY
-      - name: Check complete delivery scope
-        id: scope
-        env:
-          CI_EVENT: ${{ github.event_name }}
-          CI_BASE: ${{ github.event.pull_request.base.ref }}
-          CI_HEAD: ${{ github.event.pull_request.head.ref }}
-          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          CI_REPOSITORY: ${{ github.repository }}
-          CI_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-        run: node scripts/ci_development_ui.mjs
+          DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python scripts/ci_backend_tests.py --base "$DIFF_BASE" --head "$DIFF_HEAD" --out selected-tests.txt
+      - name: Upload selected test plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-plan
+          path: selected-tests.txt
+          if-no-files-found: error
 
-  backend_smoke:
-    name: Backend Smoke
+  backend_targeted:
+    name: Backend targeted ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && (github.event.pull_request.base.ref == 'integration/mvp3' || github.event.pull_request.base.ref == 'integration/mvp3-management')
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: reach_station_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      APP_ENV: test
-      APP_DEBUG: "false"
-      TZ: UTC
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
-    steps:
-      - name: Check out reviewed tree
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
-      - name: Refuse unknown or full-risk integration work
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: python scripts/ci_backend_smoke.py --base "$PR_BASE_SHA" --out selected-smoke.txt
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-      - name: Verify dependency tree
-        run: pip check
-      - name: Lint
-        run: ruff check .
-      - name: Check formatting
-        run: ruff format --check .
-      - name: Compile
-        run: python -m compileall app scripts
-      - name: Apply migrations
-        run: alembic upgrade head
-      - name: Check for model and schema drift
-        run: alembic check
-      - name: Test smoke backbone and direct contracts
-        run: pytest -q $(tr '\n' ' ' < selected-smoke.txt) --durations=20
-
-  backend_fast:
-    name: Backend Fast
-    runs-on: ubuntu-latest
-    needs: development_scope
-    if: always() && needs.development_scope.outputs.frontend_only != 'true' && github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == true
-    # Four hours looks generous until you read the selector: a diff touching
-    # anything every test shares — conftest, the factories — puts Fast in
-    # full-fallback and it runs the entire suite in this one job, unsharded.
-    # A single Full shard is an eighth of that suite and takes about twenty
-    # minutes, so the fallback needs hours, not the quarter-hour the targeted
-    # case finishes in. The ceiling is sized for the fallback because that is
-    # the case that can reach it.
-    timeout-minutes: 240
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: reach_station_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      APP_ENV: test
-      APP_DEBUG: "false"
-      TZ: UTC
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
-    steps:
-      - name: Check out reviewed tree
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-      - name: Verify dependency tree
-        run: pip check
-      - name: Lint
-        run: ruff check .
-      - name: Check formatting
-        run: ruff format --check .
-      - name: Compile
-        run: python -m compileall app scripts
-      - name: Apply migrations
-        run: alembic upgrade head
-      - name: Check for model and schema drift
-        run: alembic check
-      - name: Choose downstream tests
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: python scripts/ci_backend_tests.py --base "$PR_BASE_SHA" --out selected-tests.txt
-      - name: Test targeted (Full fallback retained)
-        run: pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20
-
-  backend_static:
-    name: Backend Static / Structural
-    runs-on: ubuntu-latest
-    needs: development_scope
-    if: always() && needs.development_scope.outputs.frontend_only != 'true' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false))
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: reach_station_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      APP_ENV: test
-      APP_DEBUG: "false"
-      TZ: UTC
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
-    steps:
-      - name: Check out reviewed tree
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-      - name: Verify dependency tree
-        run: pip check
-      - name: Lint
-        run: ruff check .
-      - name: Check formatting
-        run: ruff format --check .
-      - name: Compile
-        run: python -m compileall app scripts
-      - name: Apply migrations
-        run: alembic upgrade head
-      - name: Check for model and schema drift
-        run: alembic check
-      - name: CI contract guards
-        run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py tests/test_deletion_contracts.py
-      - name: Validate complete Full assignment
-        run: python scripts/ci_backend_shards.py --count ${{ needs.development_scope.outputs.shard_count }} --scope ${{ needs.development_scope.outputs.full_scope || 'all' }}
-
-  backend_full:
-    name: Backend Full ${{ matrix.shard }}/${{ needs.development_scope.outputs.shard_count }}
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false)
-    # A shard runs its share of the suite in about twenty minutes. The budget
-    # is the point at which the job has stopped making progress rather than the
-    # point at which it is merely slow: at 120 a stuck shard burned two hours of
-    # a runner and was then killed mid-run, naming neither the test nor the
-    # statement. The suite now bounds its own lock waits (tests/conftest.py), so
-    # a shard that reaches this ceiling has found something that guard does not
-    # cover, and half an hour is long enough to say so.
-    timeout-minutes: 35
-    needs: [development_scope, backend_static]
+    needs: scope
+    if: needs.scope.outputs.backend_required == 'true' && needs.scope.outputs.full_required != 'true'
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.development_scope.outputs.shards) }}
+        shard: ${{ fromJSON(needs.scope.outputs.targeted_shards) }}
     services:
       postgres:
         image: postgres:16
@@ -297,7 +76,80 @@ jobs:
       TZ: UTC
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
     steps:
-      - name: Check out reviewed tree
+      - name: Check out exact tested head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Download selected test plan
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-test-plan
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Verify dependency tree
+        run: pip check
+      - name: Lint
+        run: ruff check .
+      - name: Check formatting
+        run: ruff format --check .
+      - name: Compile
+        run: python -m compileall app scripts
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Check for model and schema drift
+        run: alembic check
+      - name: Assign selected tests to this targeted shard
+        run: python scripts/ci_backend_shards.py --input selected-tests.txt --shard ${{ matrix.shard }} --count ${{ strategy.job-total }} --out assigned-tests.txt
+      - name: Test invariants, domains, and direct consumers
+        shell: bash
+        run: |
+          started=$(date +%s)
+          pytest -q $(tr '\n' ' ' < assigned-tests.txt) --durations=20
+          elapsed=$(( $(date +%s) - started ))
+          echo "Backend targeted duration: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+          if (( elapsed > 900 )); then
+            echo "::warning::Targeted Backend exceeded the 15-minute investigation threshold (${elapsed}s)."
+          fi
+
+  backend_system_static:
+    name: Backend system static
+    runs-on: ubuntu-latest
+    needs: scope
+    if: needs.scope.outputs.full_required == 'true'
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reach_station_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      TZ: UTC
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
+    steps:
+      - name: Check out exact tested head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -315,57 +167,129 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-      - name: Apply migrations to this shard's own database
+      - name: Verify dependency tree
+        run: pip check
+      - name: Lint
+        run: ruff check .
+      - name: Check formatting
+        run: ruff format --check .
+      - name: Compile
+        run: python -m compileall app scripts
+      - name: Apply migrations
         run: alembic upgrade head
-      - name: Assign every file exactly once
-        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count ${{ needs.development_scope.outputs.shard_count }} --out selected-tests.txt --scope ${{ needs.development_scope.outputs.full_scope || 'all' }}
+      - name: Check for model and schema drift
+        run: alembic check
+      - name: Test CI and repository invariants
+        run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py tests/test_test_isolation.py tests/test_deletion_contracts.py tests/test_pr_quality.py
+      - name: Validate complete system-risk assignment
+        run: python scripts/ci_backend_shards.py --count 8
+
+  backend_system_full:
+    name: Backend system Full ${{ matrix.shard }}/8
+    runs-on: ubuntu-latest
+    needs: [scope, backend_system_static]
+    if: needs.scope.outputs.full_required == 'true' && needs.backend_system_static.result == 'success'
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reach_station_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      TZ: UTC
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
+    steps:
+      - name: Check out exact tested head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Apply migrations to this shard's database
+        run: alembic upgrade head
+      - name: Assign every test file exactly once
+        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 8 --out selected-tests.txt
       - name: Test every assigned file
         run: pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20
 
   backend:
     name: Backend
     runs-on: ubuntu-latest
-    needs: [development_scope, backend_static, backend_full]
-    if: always() && needs.development_scope.outputs.frontend_only != 'true' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false))
+    needs: [scope, backend_targeted, backend_system_static, backend_system_full]
+    if: always()
     timeout-minutes: 5
     steps:
-      - name: Require structure and every Full shard to succeed
+      - name: Require the selected backend lane
         env:
-          STRUCTURAL_RESULT: ${{ needs.backend_static.result }}
-          SHARDS_RESULT: ${{ needs.backend_full.result }}
-        run: python -c 'import os, sys; sys.exit(0 if os.environ["STRUCTURAL_RESULT"] == "success" and os.environ["SHARDS_RESULT"] == "success" else 1)'
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          BACKEND_REQUIRED: ${{ needs.scope.outputs.backend_required }}
+          FULL_REQUIRED: ${{ needs.scope.outputs.full_required }}
+          TARGETED_RESULT: ${{ needs.backend_targeted.result }}
+          SYSTEM_STATIC_RESULT: ${{ needs.backend_system_static.result }}
+          SYSTEM_FULL_RESULT: ${{ needs.backend_system_full.result }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          if os.environ["SCOPE_RESULT"] != "success":
+              sys.exit("Backend scope failed")
+          if os.environ["BACKEND_REQUIRED"] != "true":
+              print("No backend-affecting files changed — PASS")
+              raise SystemExit(0)
+          if os.environ["FULL_REQUIRED"] == "true":
+              ok = os.environ["SYSTEM_STATIC_RESULT"] == os.environ["SYSTEM_FULL_RESULT"] == "success"
+          else:
+              ok = os.environ["TARGETED_RESULT"] == "success"
+          raise SystemExit(0 if ok else 1)
+          PY
 
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
-    # Observed at about a minute. Anything near this ceiling is hung, not slow.
     timeout-minutes: 15
-
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Check out repository
+      - name: Check out exact tested head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
       - name: Install dependencies
         run: npm ci
-
       - name: Lint
         run: npm run lint
-
-      # `next build` type-checks the whole project, so a separate tsc pass would
-      # be the same work twice. It runs on every push in both states because it
-      # finishes in well under a minute.
-      - name: Production build
+      - name: Production build and complete frontend tests
+        # package.json runs npm test as the prebuild step.
         run: npm run build
