@@ -274,7 +274,7 @@ export const SETTINGS_NAVIGATION: NavGroup<SettingsSection>[] = [
     items: [
       {
         key: "currencies",
-        label: "Currencies",
+        label: "Currency registry",
         icon: "money",
         description: "Shared currency codes, names and display symbols.",
         visible: (roles) => roles.has(ROLE_SYSTEM_ADMIN),
