@@ -81,6 +81,11 @@ FIELD_POLICIES: dict[str, dict[str, CurrencyFieldPolicy]] = {
     "market_benchmarks": {
         "currency_id": CurrencyFieldPolicy("Pricing", "explicit external observation", "preserve")
     },
+    "marketing_rental_scenarios": {
+        "currency_id": CurrencyFieldPolicy(
+            "Marketing", "explicit sourced rental assumption", "preserve"
+        )
+    },
     "payment_plan_versions": {
         "currency_id": CurrencyFieldPolicy(
             "Payment Plans", "sale-inherited frozen schedule", "sale_chain"
@@ -263,6 +268,7 @@ def correct_project_base_currency(
                 "preserved_explicit_fields": [
                     "pricing_configurations.pricing_currency_id",
                     "market_benchmarks.currency_id",
+                    "marketing_rental_scenarios.currency_id",
                     "sale_legal_events.currency_id",
                 ],
             },

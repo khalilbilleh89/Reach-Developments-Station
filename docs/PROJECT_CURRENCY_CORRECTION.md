@@ -18,6 +18,7 @@ The Projects domain owns the command, locks the project row, and commits one tra
 | Construction | `construction_contracts.currency_id` | Project-base contract | Relabel |
 | Construction | `construction_forecast_versions.currency_id` | Project-base forecast | Relabel |
 | Construction | `construction_payments.currency_id` | Contract-inherited payment | Relabel |
+| Marketing | `marketing_rental_scenarios.currency_id` | Explicit sourced rental assumption | Preserve |
 | Payment Plans | `payment_plan_versions.currency_id` | Frozen from a sale | Relabel only when that sale descends from a corrected direct price |
 | Pricing | `pricing_configurations.pricing_currency_id` | Explicit pricing policy | Preserve |
 | Pricing | `market_benchmarks.currency_id` | Explicit external observation | Preserve |
