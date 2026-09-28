@@ -38,7 +38,10 @@ from app.modules.management_reporting import (  # noqa: E402
 )
 from app.modules.payment_plans import models as payment_plan_models  # noqa: E402,F401
 from app.modules.pricing import models as pricing_models  # noqa: E402,F401
-from app.modules.projects import company_models  # noqa: E402,F401
+from app.modules.projects import (  # noqa: E402
+    company_models,  # noqa: F401
+    team_models,  # noqa: F401
+)
 from app.modules.projects import models as projects_models  # noqa: E402,F401
 from app.modules.sales import models as sales_models  # noqa: E402,F401
 from app.modules.sales import operations_models  # noqa: E402,F401

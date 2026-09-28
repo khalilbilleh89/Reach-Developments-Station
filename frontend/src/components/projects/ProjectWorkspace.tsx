@@ -40,6 +40,7 @@ import { ProjectImages } from "@/components/projects/ProjectImages";
 import { ProjectCurrencyCorrection } from "@/components/projects/ProjectCurrencyCorrection";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
+import { TeamTab } from "@/components/projects/TeamTab";
 import { CompanyTab } from "@/components/projects/CompanyTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
@@ -289,6 +290,7 @@ export function ProjectWorkspace({
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "team" ? <TeamTab key={projectId} projectId={projectId} /> : null}
         {section === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
       </>
     );

@@ -710,5 +710,13 @@
     "removal_route": "DELETE /projects/{project_id}/images/{image_id}",
     "ui_file": "frontend/src/components/projects/ProjectImages.tsx",
     "notes": "Project writers remove gallery images after a named confirmation. Removed rows, actor attribution and byte content are retained; ordinary lists and file reads hide removed records."
+  },
+  {
+    "handler": "projects.create_team_member",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/team/{member_id}/delete",
+    "ui_file": "frontend/src/components/projects/team/TeamSection.tsx",
+    "notes": "Delete member on every contact card; named reason confirmation, project manager/admin and whole-project write scope, version guard, retained row and audit. No login, access or linked business records are created or cascaded. Tested in test_project_team.py."
   }
 ]

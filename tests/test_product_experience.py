@@ -628,6 +628,7 @@ class TestOnlyEntitledReadersAsk:
             "construction",
             "economics",
             "cashflow",
+            "team",
             "documents",
             "access",
         ]

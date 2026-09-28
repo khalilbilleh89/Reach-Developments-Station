@@ -61,6 +61,7 @@ export type ProjectSection =
   | "economics"
   | "cashflow"
   | "documents"
+  | "team"
   | "access";
 
 export interface NavItem<Key extends string = string> {
@@ -245,6 +246,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "governance",
     label: "Governance",
     items: [
+      {
+        key: "team", label: "Team", icon: "user",
+        description: "The people, responsibilities and contacts behind this project.",
+        visible: everyone,
+      },
       {
         key: "documents",
         label: "Documents",
