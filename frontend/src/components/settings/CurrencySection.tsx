@@ -135,7 +135,7 @@ export function CurrencySection() {
             <thead><tr><th scope="col">Currency</th><th scope="col">Symbol</th><th scope="col">Minor units</th><th scope="col">Status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
             <tbody>{shown.map(currency => (
               <tr key={currency.id}>
-                <th scope="row"><strong>{currency.code}</strong><span className="cell-subtitle">{currency.name}</span></th>
+                <th scope="row"><strong>{currency.code}</strong><span className="cell-secondary">{currency.name}</span></th>
                 <td>{currency.symbol ?? "—"}</td>
                 <td className="figure">{currency.minor_units}</td>
                 <td><Badge tone={currency.is_active ? "success" : "neutral"}>{currency.is_active ? "Active" : "Inactive"}</Badge></td>
