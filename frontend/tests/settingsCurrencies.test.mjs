@@ -71,7 +71,7 @@ function field(view, label) {
 test("currency administration explains shared symbol impact and creates then refreshes", async () => {
   const h = harness();
   let tree = h.render();
-  assert.match(textOf(tree), /changes how that currency is displayed on every screen/);
+  assert.match(textOf(tree), /financial screens continue to identify amounts by currency code/);
   nodes(tree).find(node => node.type === "Button" && node.props.children === "Add currency").props.onClick();
   let view = nodes(h.render());
   field(view, "Currency code").props.children.props.onChange({ target: { value: "usd" } });
@@ -98,7 +98,7 @@ test("symbol editing updates shared configuration and refreshes the registry", a
   view.find(node => node.type === "Button" && node.props.children === "Edit symbol").props.onClick();
   view = nodes(h.render());
   const dialog = view.find(node => node.type === "FormDialog");
-  assert.match(dialog.props.description, /Numeric amounts remain unchanged/);
+  assert.match(dialog.props.description, /Numeric amounts and their currency codes remain unchanged/);
   field(view, "Symbol").props.children.props.onChange({ target: { value: "JD" } });
   nodes(h.render()).find(node => node.type === "FormDialog").props.onSubmit();
   await settle();

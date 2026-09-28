@@ -109,8 +109,8 @@ export function CurrencySection() {
   return (
     <div className="stack">
       <Notice tone="info">
-        Currency symbols are shared configuration. Editing a symbol changes how that currency
-        is displayed on every screen; it does not convert or recalculate any amount.
+        Currency symbols are shared display metadata. Editing one does not convert or
+        recalculate any amount; financial screens continue to identify amounts by currency code.
       </Notice>
       {error && !adding && !editing && !removing ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
@@ -159,7 +159,7 @@ export function CurrencySection() {
       ) : null}
 
       {editing ? (
-        <FormDialog title={`Edit ${editing.code} symbol`} description="This shared symbol will appear anywhere the currency is displayed. Numeric amounts remain unchanged." confirmLabel="Save symbol" busy={busy} onCancel={() => { if (!busy) setEditing(null); }} onSubmit={() => void saveSymbol()}>
+        <FormDialog title={`Edit ${editing.code} symbol`} description="This changes the stored display symbol only. Numeric amounts and their currency codes remain unchanged." confirmLabel="Save symbol" busy={busy} onCancel={() => { if (!busy) setEditing(null); }} onSubmit={() => void saveSymbol()}>
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Field label="Symbol" optional hint="Leave blank to display the currency code without a symbol."><input className="input input-short" maxLength={8} value={symbol} onChange={event => setSymbol(event.target.value)} /></Field>
         </FormDialog>
