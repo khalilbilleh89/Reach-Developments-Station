@@ -7,6 +7,7 @@ import type { Currency, ProjectDetail } from "@/lib/api";
 import {
   Button,
   Card,
+  DraftBoundary,
   Field,
   Form,
   FormActions,
@@ -25,6 +26,7 @@ export function ProjectCurrencyCorrection({
   onClose: () => void;
 }) {
   const [currencies, setCurrencies] = useState<Currency[] | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [target, setTarget] = useState("");
   const [reason, setReason] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
@@ -34,14 +36,17 @@ export function ProjectCurrencyCorrection({
   useEffect(() => {
     let active = true;
     settings.currencies().then(rows => {
-      if (active) setCurrencies(rows);
+      if (active) {
+        setCurrencies(rows);
+        setError(null);
+      }
     }).catch(caught => {
       if (active) {
         setError(caught instanceof ApiError ? caught.message : "Could not load currency options.");
       }
     });
     return () => { active = false; };
-  }, []);
+  }, [loadAttempt]);
 
   const available = (currencies ?? []).filter(
     currency => currency.is_active && currency.id !== project.base_currency_id,
@@ -82,7 +87,19 @@ export function ProjectCurrencyCorrection({
         denomination and eligible labels inherited from its mistaken base currency are corrected.
       </Notice>
       <Card>
-        {currencies === null && !error ? <Loading label="Loading currencies…" /> : null}
+        {currencies === null ? error ? (
+          <div className="stack">
+            <Notice tone="error">{error}</Notice>
+            <Button onClick={() => { setError(null); setLoadAttempt(value => value + 1); }}>
+              Try again
+            </Button>
+          </div>
+        ) : <Loading label="Loading currencies…" /> : (
+        <DraftBoundary
+          dirty={Boolean(target || reason || acknowledged)}
+          busy={busy}
+          onDiscard={() => { setTarget(""); setReason(""); setAcknowledged(false); }}
+        >
         <Form onSubmit={event => { event.preventDefault(); void submit(); }}>
           <div className="stack">
             <Field label="Current base currency">
@@ -114,6 +131,8 @@ export function ProjectCurrencyCorrection({
             </FormActions>
           </div>
         </Form>
+        </DraftBoundary>
+        )}
       </Card>
     </RecordPage>
   );

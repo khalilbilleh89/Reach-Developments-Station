@@ -166,6 +166,35 @@ test("a failed correction retains all entered evidence", async () => {
   );
 });
 
+test("a failed currency read offers retry before showing the correction form", async () => {
+  class ApiError extends Error {}
+  let attempts = 0;
+  const render = mount(
+    {
+      ApiError,
+      settings: { currencies: async () => {
+        attempts++;
+        if (attempts === 1) throw new ApiError("Currency register unavailable.");
+        return [{ id: "usd-id", code: "USD", name: "Dollar", is_active: true }];
+      } },
+      projects: { correctCurrency: async () => {} },
+    },
+    { onSaved: async () => {}, onClose: () => {} },
+  );
+
+  render();
+  await settle();
+  let tree = render();
+  assert.ok(nodes(tree).some(node => node.type === "Notice" && textOf(node).includes("Currency register unavailable")));
+  assert.ok(!nodes(tree).some(node => node.type === "Form"));
+  nodes(tree).find(node => node.type === "Button" && node.props.children === "Try again").props.onClick();
+  render();
+  await settle();
+  tree = render();
+  assert.equal(attempts, 2);
+  assert.ok(nodes(tree).some(node => node.type === "Form"));
+});
+
 test("the workspace exposes correction only to administrators outside setup", () => {
   const command = readFileSync(
     new URL("../src/components/dashboard/ProjectCommandCenter.tsx", import.meta.url),
@@ -179,4 +208,10 @@ test("the workspace exposes correction only to administrators outside setup", ()
   assert.match(command, /Correct base currency/);
   assert.match(workspace, /canCorrectCurrency=\{isAdmin && project\.status !== "setup"\}/);
   assert.match(workspace, /ProjectCurrencyCorrection/);
+  const correction = readFileSync(
+    new URL("../src/components/projects/ProjectCurrencyCorrection.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(correction, /<DraftBoundary/);
+  assert.match(correction, /dirty=\{Boolean\(target \|\| reason \|\| acknowledged\)\}/);
 });
