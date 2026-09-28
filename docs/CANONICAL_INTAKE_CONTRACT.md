@@ -100,6 +100,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `operation_progress` | Buyer milestones; application-owned with retained audit evidence. |
 | `project_team_members` | Project directory contacts entered in Governance; not imported by legacy bundles. |
 | `project_companies` | Company information entered in Development; not imported by legacy bundles. |
+| `project_agreements` | Project final-draft library and retained uploads, maintained through Agreements; not legacy-imported. |
 | `company_bank_accounts` | Company bank instructions maintained by authorized project users; not imported by legacy bundles. |
 | `user_roles` | Authorisation configuration. |
 | `user_sessions` | Runtime state; meaningless outside a live session. |

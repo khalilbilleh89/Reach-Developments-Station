@@ -1,5 +1,6 @@
 import type { IconName } from "@/components/ui/Icon";
 import {
+  AGREEMENT_READERS,
   AUDIT_READERS,
   CASHFLOW_READERS,
   COLLECTION_READERS,
@@ -52,6 +53,7 @@ export type ProjectSection =
   | "agent-buyer"
   | "buyers"
   | "agents"
+  | "agreements"
   | "sales"
   | "payments"
   | "collections"
@@ -151,6 +153,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "commercial",
     label: "Commercial",
     items: [
+      {
+        key: "agreements", label: "Agreements", icon: "documents",
+        description: "Final agreement drafts clients need to sign to complete their purchase.",
+        visible: (roles) => hasAnyRole(roles, AGREEMENT_READERS),
+      },
       {
         key: "buyers",
         label: "Buyers",

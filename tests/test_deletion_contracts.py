@@ -17,6 +17,7 @@ def test_every_record_creator_has_a_reviewed_deletion_contract() -> None:
         *(ROOT / "app/modules").glob("*/api.py"),
         ROOT / "app/modules/projects/company_api.py",
         ROOT / "app/modules/projects/team_api.py",
+        ROOT / "app/modules/projects/agreement_api.py",
         ROOT / "app/modules/sales/operations_api.py",
     ]:
         for function in ast.parse(path.read_text(encoding="utf-8")).body:
