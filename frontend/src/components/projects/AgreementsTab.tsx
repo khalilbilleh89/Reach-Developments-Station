@@ -7,8 +7,9 @@ import { AGREEMENT_READERS, AGREEMENT_WRITERS, hasAnyRole, type Roles } from "@/
 import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, PageHeader, RecordPage, TableScroll } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
-export function AgreementForm({ row, onSave, onClose }: {
-  row?: Agreement; onSave: (fields: AgreementFields, file: File | null) => Promise<void>; onClose: () => void;
+export function AgreementForm({ row, onSave, onSaved, onClose }: {
+  row?: Agreement; onSave: (fields: AgreementFields, file: File | null) => Promise<void>;
+  onSaved: () => void; onClose: () => void;
 }) {
   const [initial] = useState<AgreementFields>(() => ({ name: row?.name ?? "", signing_company: row?.signing_company ?? "", draft_created_on: row?.draft_created_on ?? "" }));
   const [fields, setFields] = useState(initial);
@@ -22,7 +23,7 @@ export function AgreementForm({ row, onSave, onClose }: {
         if (busy) return;
         if (!row && !file) { setError("Choose the final agreement document."); return; }
         setBusy(true); setError(null);
-        try { await onSave(fields, file); onClose(); }
+        try { await onSave(fields, file); onClose(); onSaved(); }
         catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save. Your entries have been kept."); }
         finally { setBusy(false); }
       }}>
@@ -44,7 +45,7 @@ export function AgreementForm({ row, onSave, onClose }: {
 
 export function AgreementsTab({ projectId, roles }: { projectId: string; roles: Roles }) {
   const answer = useAnswer(hasAnyRole(roles, AGREEMENT_READERS), () => agreements.list(projectId), [projectId]);
-  const canWrite = hasAnyRole(roles, AGREEMENT_WRITERS);
+  const canWrite = answer.status === "ready" && hasAnyRole(roles, AGREEMENT_WRITERS);
   const [editor, setEditor] = useState<{ row?: Agreement } | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -71,10 +72,9 @@ export function AgreementsTab({ projectId, roles }: { projectId: string; roles: 
           </tr>)}</tbody>
         </TableScroll>}
     </Card> : null}
-    {editor ? <AgreementForm key={editor.row?.id ?? "new"} row={editor.row} onClose={() => setEditor(null)} onSave={async (fields, file) => {
+    {editor ? <AgreementForm key={editor.row?.id ?? "new"} row={editor.row} onClose={() => setEditor(null)} onSaved={answer.retry} onSave={async (fields, file) => {
       if (editor.row) await agreements.update(projectId, editor.row, fields);
       else if (file) await agreements.create(projectId, fields, file);
-      answer.retry();
     }} /> : null}
   </div>;
 }

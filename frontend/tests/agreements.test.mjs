@@ -63,12 +63,13 @@ test("failed and loading reads cannot appear as an empty register", () => {
  for (const status of ["failed","loading","denied"]) {
   h.setAnswer({status,message:"Network failure"});const tree=h.render("AgreementsTab",{projectId:"p",roles:new Set(["legal"])});
   assert.equal(find(tree,"EmptyState").length,0);
+  assert.equal(find(tree,"PageHeader")[0].props.actions,undefined);
  }
 });
 
 test("new form requires a file and preserves typed values on failed save", async () => {
  const h=harness();let calls=0;let closed=false;
- const props={onSave:async()=>{calls++;throw new Error("Upload failed");},onClose:()=>{closed=true;}};
+ const props={onSave:async()=>{calls++;throw new Error("Upload failed");},onSaved(){},onClose:()=>{closed=true;}};
  let tree=h.render("AgreementForm",props);
  await find(tree,"form")[0].props.onSubmit({preventDefault(){}});
  assert.equal(calls,0);
@@ -82,11 +83,11 @@ test("new form requires a file and preserves typed values on failed save", async
  assert.equal(calls,1);assert.equal(closed,false);assert.equal(find(tree,"input")[0].props.value,"SPA");assert.equal(find(tree,"Notice").length,1);
 });
 
-test("editing submits date-only metadata and closes only after success", async () => {
- const h=harness();let saved;let closed=false;
- const props={row,onSave:async fields=>{saved=fields;},onClose:()=>{closed=true;}};
+test("editing submits date-only metadata, closes, then refreshes", async () => {
+ const h=harness();let saved;const order=[];
+ const props={row,onSave:async fields=>{saved=fields;},onClose:()=>{order.push("close");},onSaved:()=>{order.push("refresh");}};
  const tree=h.render("AgreementForm",props);
  assert.equal(find(tree,"input").filter(n=>n.props.type==="file").length,0);
  await find(tree,"form")[0].props.onSubmit({preventDefault(){}});
- assert.equal(saved.draft_created_on,"2026-09-27");assert.equal(saved.signing_company,"Example Ltd");assert.equal(closed,true);
+ assert.equal(saved.draft_created_on,"2026-09-27");assert.equal(saved.signing_company,"Example Ltd");assert.deepEqual(order,["close","refresh"]);
 });
