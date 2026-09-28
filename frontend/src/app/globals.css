@@ -5434,6 +5434,30 @@ a:not([class]):hover { color: var(--accent-hover); }
 .count-value-zero { fill: var(--text-muted); font-size: var(--text-xs); font-weight: 500; }
 .count-period { fill: var(--text-muted); font-size: var(--text-xs); text-anchor: middle; }
 
+
+/* Project team: distinct department headings and readable contact cards. */
+.team-section { display: grid; gap: var(--space-5); min-width: 0; padding-block: var(--space-5); border-top: 1px solid var(--line-default); }
+.team-section-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
+.team-section-glyph, .team-avatar { display: grid; place-items: center; width: var(--space-7); height: var(--space-7); flex-shrink: 0; background: var(--accent-soft); color: var(--accent); border-radius: var(--radius-card); font-weight: 700; }
+.team-section-engineering .team-section-glyph { background: var(--success-soft); color: var(--success); }
+.team-section-intro { flex: 1; min-width: 0; }
+.team-section-intro h2 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--title-section); }
+.team-section-intro p { margin-top: var(--space-2); }
+.team-member-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--space-4); }
+.team-member-grid > .card { margin: 0; }
+.team-member-grid > .card > .card-body { height: 100%; }
+.team-member-card { height: 100%; display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.team-member-identity { display: flex; gap: var(--space-3); align-items: center; overflow-wrap: anywhere; }
+.team-member-identity h3 { font-size: var(--text-lg); }
+.team-member-identity p { margin-top: var(--space-1); }
+.team-avatar { border-radius: var(--radius-pill); }
+.team-member-scope { flex: 1; }
+.team-scope-preview, .team-scope-full { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary); }
+.team-scope-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin-bottom: var(--space-2); }
+.team-member-contact { display: grid; gap: var(--space-1); overflow-wrap: anywhere; font-size: var(--text-sm); }
+.team-member-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--line-soft); }
+.team-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: var(--space-5); }
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -5600,6 +5624,8 @@ a:not([class]):hover { color: var(--accent-hover); }
 }
 
 @media (width < 48rem) {
+  .team-section-heading { display: grid; grid-template-columns: var(--space-7) minmax(0, 1fr); }
+  .team-section-heading > .button { grid-column: 1 / -1; justify-self: start; }
   .register-position .position { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .register-position .position-figure-lead { grid-column: 1 / -1; }
 
@@ -5969,6 +5995,16 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 @media (max-width: 520px) { .stock-summary > div { padding: 1rem; } .stock-summary strong { font-size: 1.6rem; } .stock-register-heading { align-items: flex-start; padding: 1rem; } }
 
 .specification-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.project-images-controls { display: grid; grid-template-columns: minmax(10rem, .7fr) minmax(15rem, 1.6fr) auto; align-items: end; gap: var(--space-4); margin-bottom: var(--space-5); }
+.project-images-section { padding: var(--space-5) 0; border-top: 1px solid var(--line-soft); }
+.project-images-section > h3 { margin: 0 0 var(--space-4); font-size: 1rem; }
+.project-images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: var(--space-4); }
+.project-image { min-width: 0; margin: 0; border: 1px solid var(--line-default); border-radius: var(--radius-control); overflow: hidden; background: var(--surface); }
+.project-image img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-secondary); }
+.project-image figcaption { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); }
+.project-image figcaption span { min-width: 0; overflow-wrap: anywhere; font-size: .8rem; }
+@media (max-width: 760px) { .project-images-controls { grid-template-columns: 1fr; align-items: stretch; } }
 
 /* Operations uses server-reported buyer counts. */
 .operations-position { padding: var(--space-4); background: var(--surface-stage); border-radius: var(--radius-card); }

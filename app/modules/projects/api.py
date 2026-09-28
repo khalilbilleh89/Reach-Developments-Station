@@ -11,9 +11,10 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Response, status
+from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy import select
 
+from app.core.errors import ValidationError
 from app.modules.access.dependencies import (
     ActiveActor,
     ActorContext,
@@ -22,8 +23,8 @@ from app.modules.access.dependencies import (
     require_roles,
 )
 from app.modules.access.models import User
-from app.modules.projects import service
-from app.modules.projects.models import Project
+from app.modules.projects import images, service
+from app.modules.projects.models import Project, ProjectImage
 from app.modules.projects.permissions import (
     AccessibleProject,
     can_view_project_financials,
@@ -53,7 +54,9 @@ from app.modules.projects.schemas import (
     ProjectAccessRead,
     ProjectAccessUpdateRequest,
     ProjectCreateRequest,
+    ProjectCurrencyCorrectionRequest,
     ProjectDetail,
+    ProjectImageRead,
     ProjectSummary,
     ProjectUpdateRequest,
 )
@@ -207,6 +210,114 @@ def update_project(
         **payload.model_dump(exclude_unset=True),
     )
     return _project_detail(session, updated)
+
+
+@router.post(
+    "/{project_id}/currency-corrections",
+    response_model=ProjectDetail,
+    summary="Correct a mistaken project base denomination",
+)
+def correct_project_currency(
+    payload: ProjectCurrencyCorrectionRequest,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: SystemAdmin,
+) -> ProjectDetail:
+    from app.modules.projects.currency_correction import correct_project_base_currency
+
+    corrected = correct_project_base_currency(
+        session,
+        project_id=project.id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        **payload.model_dump(),
+    )
+    return _project_detail(session, corrected)
+
+
+# --------------------------------------------------------------------------- #
+# Project images
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/{project_id}/images",
+    response_model=list[ProjectImageRead],
+    summary="List project image metadata",
+)
+def list_project_images(project: AccessibleProject, session: DbSession) -> list[ProjectImage]:
+    return images.list_images(session, project.id)
+
+
+@router.post(
+    "/{project_id}/images",
+    response_model=ProjectImageRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a project image",
+)
+async def add_project_image(
+    request: Request,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: ActiveActor,
+    category: Annotated[str, Query(max_length=24)],
+    filename: Annotated[str, Query(min_length=1, max_length=1024)],
+) -> ProjectImage:
+    require_project_writer(actor)
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > images.MAX_IMAGE_BYTES:
+            raise ValidationError("Image must be between 1 byte and 10 MB.")
+    return images.add_image(
+        session,
+        project_id=project.id,
+        category=category,
+        filename=filename,
+        data=bytes(body),
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+    )
+
+
+@router.get(
+    "/{project_id}/images/{image_id}/file",
+    response_class=Response,
+    summary="Read project image bytes",
+)
+def read_project_image_file(
+    project: AccessibleProject,
+    image_id: uuid.UUID,
+    session: DbSession,
+) -> Response:
+    image = images.get_image(session, project.id, image_id, include_data=True)
+    return Response(
+        content=image.image_data,
+        media_type=image.media_type,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.delete(
+    "/{project_id}/images/{image_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a project image",
+)
+def remove_project_image(
+    project: AccessibleProject,
+    image_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+) -> Response:
+    require_project_writer(actor)
+    images.remove_image(
+        session,
+        project_id=project.id,
+        image_id=image_id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --------------------------------------------------------------------------- #

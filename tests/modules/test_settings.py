@@ -152,6 +152,109 @@ def test_unrelated_currency_edits_still_apply_while_a_pack_depends_on_it(
     assert response.json()["is_active"] is True
 
 
+def test_currency_symbol_edit_is_audited_without_changing_other_fields(
+    client: TestClient, currency_id: str, db: Session
+) -> None:
+    response = client.patch(f"{CURRENCIES}/{currency_id}", json={"symbol": "JD"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["symbol"] == "JD"
+    assert response.json()["code"] == "JOD"
+    assert response.json()["minor_units"] == 3
+    event = db.scalar(
+        select(AuditEvent)
+        .where(AuditEvent.action == "currency.updated")
+        .order_by(AuditEvent.occurred_at.desc())
+    )
+    assert event is not None
+    assert event.before_data["symbol"] is None
+    assert event.after_data["symbol"] == "JD"
+
+
+def test_unused_currency_can_be_deleted_with_attributable_audit(
+    client: TestClient, admin: User, currency_id: str, db: Session
+) -> None:
+    response = client.delete(
+        f"{CURRENCIES}/{currency_id}", params={"reason": "Duplicate entered in error"}
+    )
+
+    assert response.status_code == 204, response.text
+    assert client.get(CURRENCIES).json() == []
+    assert (
+        client.delete(
+            f"{CURRENCIES}/{currency_id}", params={"reason": "Duplicate entered in error"}
+        ).status_code
+        == 404
+    )
+    db.expire_all()
+    assert db.get(Currency, uuid.UUID(currency_id)) is None
+    event = db.scalar(select(AuditEvent).where(AuditEvent.action == "currency.deleted"))
+    assert event is not None
+    assert event.actor_user_id == admin.id
+    assert event.reason == "Duplicate entered in error"
+    assert event.before_data == {
+        "id": currency_id,
+        "code": "JOD",
+        "name": "Jordanian Dinar",
+        "symbol": None,
+        "minor_units": 3,
+        "is_active": True,
+    }
+    assert event.after_data is None
+
+
+def test_currency_deletion_requires_a_meaningful_reason(
+    client: TestClient, currency_id: str, db: Session
+) -> None:
+    response = client.delete(f"{CURRENCIES}/{currency_id}", params={"reason": "short"})
+
+    assert response.status_code == 422
+    assert db.get(Currency, uuid.UUID(currency_id)) is not None
+    assert db.scalar(select(AuditEvent).where(AuditEvent.action == "currency.deleted")) is None
+
+
+def test_referenced_currency_cannot_be_deleted_and_writes_no_success_audit(
+    client: TestClient, currency_id: str, pack_id: str, db: Session
+) -> None:
+    response = client.delete(
+        f"{CURRENCIES}/{currency_id}", params={"reason": "Attempt to remove used currency"}
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {
+        "detail": (
+            "Currency is in use and cannot be deleted. Retire it instead if it should no "
+            "longer be selected."
+        )
+    }
+    assert db.get(Currency, uuid.UUID(currency_id)) is not None
+    assert db.scalar(select(AuditEvent).where(AuditEvent.action == "currency.deleted")) is None
+
+
+def test_non_admin_cannot_mutate_currency_registry(
+    client: TestClient, currency_id: str, db: Session
+) -> None:
+    manager = make_user(db, email="currency-manager@example.com", roles=("project_manager",))
+    manager_client = client_for(manager.email)
+
+    assert manager_client.get(CURRENCIES).status_code == 200
+    assert (
+        manager_client.post(CURRENCIES, json={"code": "USD", "name": "US Dollar"}).status_code
+        == 403
+    )
+    assert (
+        manager_client.patch(f"{CURRENCIES}/{currency_id}", json={"symbol": "JD"}).status_code
+        == 403
+    )
+    assert (
+        manager_client.delete(
+            f"{CURRENCIES}/{currency_id}", params={"reason": "Unauthorized removal attempt"}
+        ).status_code
+        == 403
+    )
+    assert db.get(Currency, uuid.UUID(currency_id)) is not None
+
+
 # --------------------------------------------------------------------------- #
 # Country packs
 # --------------------------------------------------------------------------- #

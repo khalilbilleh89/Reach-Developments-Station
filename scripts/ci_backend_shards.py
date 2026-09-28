@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assign every backend test file once, weighted by actual pytest collection count."""
+"""Assign a backend test population once, weighted by actual pytest collection count."""
 
 from __future__ import annotations
 
@@ -54,10 +54,28 @@ def population(weights: dict[str, int], scope: str, root: Path = ROOT) -> dict[s
     return scoped
 
 
-def collected_weights(root: Path = ROOT) -> dict[str, int]:
+def selected(path: Path, root: Path = ROOT) -> list[str]:
+    """Read and validate an explicit selector plan without permitting omissions or extras."""
+    paths = [
+        line.strip().replace("\\", "/")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    discovered = set(discover(root))
+    if not paths or len(paths) != len(set(paths)) or not set(paths) <= discovered:
+        raise ValueError(
+            "Selected test plan must be nonempty, unique, and contain discovered test files"
+        )
+    return sorted(paths)
+
+
+def collected_weights(root: Path = ROOT, paths: list[str] | None = None) -> dict[str, int]:
     """Collect, never execute; errors are fatal rather than a smaller passing suite."""
+    requested = discover(root) if paths is None else sorted(paths)
+    if not requested:
+        raise ValueError("Cannot collect an empty backend test population")
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "--color=no", "tests"],
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "--color=no", *requested],
         cwd=root,
         capture_output=True,
         text=True,
@@ -71,11 +89,10 @@ def collected_weights(root: Path = ROOT) -> dict[str, int]:
     total = re.search(r"(\d+) tests? collected", result.stdout)
     if not total or int(total[1]) != sum(counts.values()) or not counts:
         raise ValueError("Cannot verify complete pytest collection; refusing shard assignment")
-    files = discover(root)
-    if set(counts) - set(files):
-        raise ValueError("Collected tests outside the discovered test-file set")
+    if set(counts) - set(requested):
+        raise ValueError("Collected tests outside the requested test-file set")
     # Empty test files still belong to Full, and receive a minimal scheduling weight.
-    return {path: max(1, counts[path]) for path in files}
+    return {path: max(1, counts[path]) for path in requested}
 
 
 def assign(weights: dict[str, int], count: int) -> list[list[str]]:
@@ -109,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--shard", type=int, help="One-based shard number; omit to validate all")
     parser.add_argument("--count", type=int, default=4)
     parser.add_argument("--out", help="Write one assigned test file per line")
+    parser.add_argument("--input", type=Path, help="Shard this selector-produced test plan")
     parser.add_argument(
         "--scope",
         choices=SCOPES,
@@ -121,19 +139,28 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--shard must be between 1 and --count")
     if args.out and args.shard is None:
         parser.error("--out requires --shard")
+    if args.input and args.scope != "all":
+        parser.error("--input cannot be combined with a narrowed Full scope")
     try:
-        weights = population(collected_weights(), args.scope)
+        paths = selected(args.input) if args.input else None
+        weights = collected_weights(paths=paths)
+        if not args.input:
+            weights = population(weights, args.scope)
         shards = assign(weights, args.count)
         validate(shards, list(weights))
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
-        print(f"Full shard assignment refused: {error}", file=sys.stderr)
+        print(f"Backend shard assignment refused: {error}", file=sys.stderr)
         return 1
     for index, paths in enumerate(shards, 1):
         print(
             f"Shard {index}/{args.count}: {len(paths)} files, "
             f"{sum(weights[p] for p in paths)} collected-test weight"
         )
-    covered = "all" if args.scope == "all" else "every frontend-guarding"
+    covered = (
+        "every selected"
+        if args.input
+        else ("all" if args.scope == "all" else "every frontend-guarding")
+    )
     print(
         f"Coverage: {covered} {len(weights)} test files assigned exactly once. "
         "Counts are not durations."

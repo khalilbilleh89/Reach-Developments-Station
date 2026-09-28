@@ -81,7 +81,7 @@ while retained assumptions exist; ordinary removed-unit history remains preserve
 
 ## Migration and rollback
 
-`0039_marketing` follows `0038_commission_beneficiaries`, adding only three tables
+`0042_marketing` follows `0041_project_agreements`, adding only three tables
 and their constraints/indexes. No existing records are changed or backfilled.
 Empty downgrade is supported; downgrade refuses any retained marketing rows,
 including deleted ones. Prefer rolling back application code while leaving the

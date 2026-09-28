@@ -1,14 +1,4 @@
-"""The test selector's own tests.
-
-A targeted CI run is only worth having if the thing doing the targeting is
-itself proved. An untested selector is a machine that quietly stops running the
-tests that would have caught the bug — the exact failure that makes people give
-up on selective CI and go back to waiting forty minutes.
-
-These are pure: they hand :func:`select` a change and a list of test files and
-read the decision. Nothing here starts a process or touches a database, so the
-whole file runs in well under a second and belongs in the always-run set.
-"""
+"""Risk-based backend selection is explicit, direct, and fail-closed."""
 
 from __future__ import annotations
 
@@ -17,409 +7,132 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-
-# Imported as a module rather than by name: pytest collects any callable in a
-# test module whose name begins with "test", and `selector.tests_for_domain` is one.
 import ci_backend_tests as selector  # noqa: E402
 
-ALWAYS_RUN = selector.ALWAYS_RUN
-select = selector.select
-
-#: A stand-in checkout: enough real file names to exercise the map without
-#: depending on the suite's exact contents on any given day.
-AVAILABLE = [
-    "tests/modules/test_marketing.py",
-    "tests/test_config.py",
-    "tests/test_health.py",
-    "tests/test_migrations.py",
-    "tests/test_static_frontend.py",
-    "tests/test_ux_copy.py",
-    "tests/test_ci_selector.py",
-    "tests/modules/test_construction_calculations.py",
-    "tests/modules/test_prelaunch.py",
-    "tests/modules/test_consultant_engineering.py",
-    "tests/modules/test_commissions.py",
-    "tests/modules/test_project_analysis.py",
-    "tests/modules/test_portfolio.py",
-    "tests/modules/test_management_actions_concurrency.py",
-    "tests/modules/test_management_reporting.py",
-    "tests/modules/test_cashflow_forecast.py",
-    "tests/modules/test_prelaunch.py",
-    "tests/modules/test_audit.py",
-    "tests/modules/test_auth.py",
-    "tests/modules/test_authorization.py",
-    "tests/modules/test_docs_exposure.py",
-    "tests/modules/test_strict_requests.py",
-    "tests/modules/test_settings.py",
-    "tests/modules/test_projects.py",
-    "tests/modules/test_permits.py",
-    "tests/modules/test_parcels.py",
-    "tests/modules/test_units.py",
-    "tests/modules/test_phases.py",
-    "tests/modules/test_inventory_integrity.py",
-    "tests/modules/test_pricing_calculator.py",
-    "tests/modules/test_price_versions.py",
-    "tests/modules/test_sales_legal.py",
-    "tests/modules/test_sale_contracts.py",
-    "tests/modules/test_reservations.py",
-    "tests/modules/test_payment_plans.py",
-    "tests/modules/test_payment_plan_register.py",
-    "tests/modules/test_migration_payment_plans.py",
-    "tests/modules/test_collection_receipts.py",
-    "tests/modules/test_collection_allocations.py",
-    "tests/modules/test_collection_aging.py",
-    "tests/modules/test_collection_status.py",
-    "tests/modules/test_collection_restructures.py",
-    "tests/modules/test_migration_collections.py",
-    "tests/modules/test_unit_economics_calculator.py",
-    "tests/modules/test_unit_economics_allocation.py",
-    "tests/modules/test_unit_economics_profitability.py",
-    "tests/modules/test_unit_economics_security.py",
-    "tests/modules/test_unit_economics_concurrency.py",
-    "tests/modules/test_unit_economics_history.py",
-    "tests/modules/test_migration_unit_economics.py",
-    # The cutover family. Absent until a ``cashflow -> cutover`` edge made some
-    # other domain's closure reach it, at which point every one of those
-    # closures fell back to the whole suite with "no test family exists for
-    # changed domain cutover" — the selector working correctly on a fixture
-    # that had drifted. ``test_every_domain_has_a_representative_here`` below
-    # is what stops that happening again.
-    "tests/modules/test_cutover_cli.py",
-    "tests/modules/test_cutover_manifest.py",
-    "tests/modules/test_cutover_intake_contract.py",
-]
-
-SMOKE = sorted(set(ALWAYS_RUN) & set(AVAILABLE))
+AVAILABLE = selector.available_test_files(ROOT)
 
 
-@pytest.mark.parametrize(
-    "script", ("ci_backend_smoke.py", "ci_backend_shards.py", "ci_development_ui.mjs")
-)
-def test_reviewed_ci_helpers_run_guards_without_serial_full_fallback(script: str) -> None:
-    available = selector.available_test_files(ROOT)
-    result = select([f"scripts/{script}"], available)
-    assert not result.full
-    assert {
-        "tests/test_ci_selector.py",
-        "tests/test_ci_smoke.py",
-        "tests/test_ci_shards.py",
-        "tests/test_ci_workflow.py",
-    } <= set(result.paths)
+def chosen(*paths: str) -> selector.Selection:
+    return selector.select(list(paths), AVAILABLE)
 
 
-def test_every_ci_script_is_registered_as_tooling() -> None:
-    """A new ``scripts/ci_*`` file must be classified, not left to rot.
-
-    ``ci_development_ui.mjs`` was added and never registered, so every change to
-    the scope detector ran the complete backend suite serially on one runner —
-    about an hour, to learn nothing, from a file no backend module imports. The
-    cost was invisible because the fallback is the safe direction. This asserts
-    the decision was made rather than defaulted into.
-    """
-    on_disk = {
-        path.relative_to(ROOT).as_posix()
-        for path in (ROOT / "scripts").glob("ci_*")
-        if path.is_file()
-    }
-    assert on_disk, "No CI scripts discovered; the guard would pass vacuously"
-    unregistered = on_disk - selector.CI_TOOLING
-    assert not unregistered, (
-        "These CI scripts run the entire backend suite on every change to them. "
-        f"Register them in CI_TOOLING or justify the fallback: {sorted(unregistered)}"
-    )
-
-
-def test_ci_tooling_never_claims_an_operational_script() -> None:
-    """The set is narrow on purpose: CI tooling only, never a deploy script."""
-    assert all(name.startswith("scripts/ci_") for name in selector.CI_TOOLING)
-    assert "scripts/render-start.sh" not in selector.CI_TOOLING
-    assert "scripts/render-build.sh" not in selector.CI_TOOLING
-
-
-def test_every_domain_has_a_representative_in_the_available_fixture() -> None:
-    """``AVAILABLE`` models the repository's test files, and it had drifted.
-
-    The cutover family was added in PR-MVP-11 and never listed here. That cost
-    nothing while no other domain's closure reached ``cutover`` — and the moment
-    one did, ``select`` correctly fell back to the whole suite with "no test
-    family exists for changed domain cutover". A hand-maintained fixture that
-    silently turns targeted runs into full ones is worse than no fixture: every
-    test in this file would have gone on passing while the thing they describe
-    quietly stopped happening.
-
-    So every domain has to appear here. The fixture stays hand-written — reading
-    the real directory would make these tests assert the selector against
-    itself — but it may not omit a domain.
-    """
-    missing = sorted(
-        domain
-        for domain in selector.DOMAIN_TEST_PREFIXES
-        if not selector.tests_for_domain(domain, AVAILABLE)
-    )
-    assert not missing, (
-        f"AVAILABLE names no test file for {missing}. Any closure reaching one of those "
-        "falls back to the full suite, and every targeted-selection test here would pass "
-        "while proving nothing."
-    )
-
-
-def test_the_available_fixture_names_only_files_that_exist() -> None:
-    """The other direction: a renamed test file leaves a fixture describing a ghost."""
-    root = Path(__file__).resolve().parents[1]
-    absent = sorted(path for path in AVAILABLE if not (root / path).is_file())
-    assert not absent, f"AVAILABLE names file(s) that do not exist: {absent}"
-
-
-def chosen(*changed: str) -> object:
-    return select(list(changed), AVAILABLE)
-
-
-# --------------------------------------------------------------------------- #
-# Targeted selection
-# --------------------------------------------------------------------------- #
-
-
-def test_a_payment_plan_change_runs_payment_plans_and_not_the_rest() -> None:
-    """The case this exists for: a surgical change and its downstream consumer.
-
-    Payment plans feeds collections, so collections comes with it. Nothing
-    upstream does — sales, pricing, inventory and land are all unreachable
-    from here, which is where the time is saved.
-    """
-    result = chosen("app/modules/payment_plans/service.py")
-
-    assert result.full is False
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-        "unit_economics",
-    ]
-    assert "tests/modules/test_payment_plans.py" in result.paths
-    assert "tests/modules/test_payment_plan_register.py" in result.paths
-    assert "tests/modules/test_migration_payment_plans.py" in result.paths
-    # Land, permits and pricing cannot be reached from here.
-    assert "tests/modules/test_permits.py" not in result.paths
-    assert "tests/modules/test_parcels.py" not in result.paths
-    assert "tests/modules/test_pricing_calculator.py" not in result.paths
-    assert "tests/modules/test_sales_legal.py" not in result.paths
-
-
-def test_the_always_run_set_is_in_every_targeted_selection() -> None:
-    result = chosen("app/modules/payment_plans/service.py")
-    assert set(SMOKE).issubset(set(result.paths))
-
-
-def test_a_sales_change_reaches_payment_plans_but_not_pricing() -> None:
-    """Downstream, never upstream. This asymmetry is the whole saving."""
+def test_sales_change_runs_sales_and_direct_consumers_only() -> None:
     result = chosen("app/modules/sales/service.py")
-
-    assert result.full is False
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-        "sales",
-        "unit_economics",
-    ]
-    assert "tests/modules/test_sales_legal.py" in result.paths
-    assert "tests/modules/test_payment_plans.py" in result.paths
-    assert "tests/modules/test_unit_economics_profitability.py" in result.paths
-    assert "tests/modules/test_pricing_calculator.py" not in result.paths
-    assert "tests/modules/test_units.py" not in result.paths
+    assert result.risk == "module"
+    assert result.changed_domains == ["sales"]
+    assert result.domains == ["payment_plans", "sales", "unit_economics"]
+    assert not result.full and not result.error
+    assert any("test_sales_" in path for path in result.paths)
+    assert any("test_payment_plan" in path for path in result.paths)
+    assert any("test_unit_economics" in path for path in result.paths)
+    assert not any("test_collection_" in path for path in result.paths)
+    assert not any(path.startswith("tests/modules/test_cashflow_") for path in result.paths)
 
 
-def test_a_pricing_change_reaches_sales_and_payment_plans() -> None:
+def test_projects_change_stops_after_the_direct_neighbours() -> None:
+    result = chosen("app/modules/projects/service.py")
+    assert result.domains == ["cutover", "inventory", "management_actions", "projects"]
+    assert "pricing" not in result.domains
+    assert "sales" not in result.domains
+    assert not any("test_project_analysis" in path for path in result.paths)
+    assert not any("test_unit_economics" in path for path in result.paths)
+    assert not result.full
+
+
+def test_projects_consumers_use_their_registered_edge_contracts() -> None:
+    result = chosen("app/modules/projects/service.py")
+    expected = {
+        "tests/modules/test_inventory_hierarchy.py",
+        "tests/modules/test_management_actions_concurrency.py",
+        "tests/modules/test_cutover_batch.py",
+        "tests/modules/test_cutover_target.py",
+    }
+    assert expected <= set(result.paths)
+    assert "tests/modules/test_inventory_workbook.py" not in result.paths
+    assert "tests/modules/test_cutover_manifest.py" not in result.paths
+
+
+def test_missing_edge_contract_falls_back_to_the_complete_consumer_family() -> None:
+    available = [path for path in AVAILABLE if path != "tests/modules/test_inventory_hierarchy.py"]
+    result = selector.select(["app/modules/projects/service.py"], available)
+    assert "tests/modules/test_inventory_workbook.py" in result.paths
+
+
+def test_pricing_change_runs_pricing_and_direct_consumers_only() -> None:
     result = chosen("app/modules/pricing/service.py")
-
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "marketing",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "pricing",
-        "project_analysis",
-        "sales",
-        "unit_economics",
-    ]
-    assert "tests/modules/test_pricing_calculator.py" in result.paths
-    assert "tests/modules/test_sale_contracts.py" in result.paths
-    assert "tests/modules/test_payment_plans.py" in result.paths
-    assert "tests/modules/test_unit_economics_allocation.py" in result.paths
-    assert "tests/modules/test_units.py" not in result.paths
+    assert result.domains == ["marketing", "pricing", "sales"]
+    assert not {"payment_plans", "collections", "cashflow"} & set(result.domains)
 
 
-def test_an_inventory_change_reaches_everything_it_feeds() -> None:
-    result = chosen("app/modules/inventory/models.py")
-
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "inventory",
-        "management_reporting",
-        "marketing",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "pricing",
-        "project_analysis",
-        "sales",
-        "unit_economics",
-    ]
-    assert "tests/modules/test_units.py" in result.paths
-    assert "tests/modules/test_payment_plans.py" in result.paths
-    assert "tests/modules/test_unit_economics_allocation.py" in result.paths
-    # Projects sits above inventory, so it is not re-proved by this change.
-    assert "tests/modules/test_permits.py" not in result.paths
+def test_construction_change_has_the_documented_direct_consumers() -> None:
+    result = chosen("app/modules/construction/service.py")
+    assert result.domains == ["cashflow", "construction", "unit_economics"]
 
 
-def test_two_changed_domains_select_the_union_of_both_closures() -> None:
+def test_two_changed_products_are_cross_domain_without_becoming_full() -> None:
     result = chosen(
-        "app/modules/sales/api.py",
-        "app/modules/inventory/api.py",
+        "app/modules/pricing/service.py",
+        "app/modules/collections/service.py",
     )
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "inventory",
-        "management_reporting",
-        "marketing",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "pricing",
-        "project_analysis",
-        "sales",
-        "unit_economics",
-    ]
+    assert result.risk == "cross-domain"
+    assert result.changed_domains == ["collections", "pricing"]
+    assert result.domains == ["cashflow", "collections", "marketing", "pricing", "sales"]
+    assert not result.full
 
 
-def test_a_unit_economics_change_runs_only_unit_economics() -> None:
-    """The direction is one way, and this is the test that keeps it that way.
-
-    Unit economics reads projects, inventory, pricing and sales. Reading is not
-    a reason to re-prove them: its own tests already exercise its use of their
-    public contracts, and selecting them here would give the module that arrives
-    last the slowest cycle in the repository.
-    """
-    result = chosen("app/modules/unit_economics/calculator.py")
-
-    assert result.full is False
-    assert result.domains == ["unit_economics"]
-    assert "tests/modules/test_unit_economics_calculator.py" in result.paths
-    for upstream in (
-        "tests/modules/test_sale_contracts.py",
-        "tests/modules/test_pricing_calculator.py",
-        "tests/modules/test_units.py",
-        "tests/modules/test_permits.py",
-        "tests/modules/test_collection_receipts.py",
-    ):
-        assert upstream not in result.paths
-
-
-def test_unit_economics_is_not_reached_from_collections() -> None:
-    """Roadmap order is not a dependency.
-
-    Collections reaches cashflow, because cashflow reads its receipts, refunds
-    and unapplied cash. It does not reach unit economics, which came earlier in
-    the roadmap and consumes nothing of it.
-    """
-    result = chosen("app/modules/collections/service.py")
-
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "cutover",
-        "management_reporting",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-    ]
-    assert "tests/modules/test_unit_economics_allocation.py" not in result.paths
-
-
-# --------------------------------------------------------------------------- #
-# Tests themselves
-# --------------------------------------------------------------------------- #
-
-
-def test_a_changed_test_file_always_runs() -> None:
-    """Even when no application change would have selected it."""
-    result = chosen("tests/modules/test_permits.py")
-
-    assert result.full is False
-    assert "tests/modules/test_permits.py" in result.paths
-    assert result.domains == []
-
-
-def test_a_changed_test_runs_alongside_the_domain_that_selected_it() -> None:
+def test_new_domain_migration_adds_migration_and_invariant_packs_not_full() -> None:
     result = chosen(
-        "app/modules/payment_plans/service.py",
-        "tests/modules/test_permits.py",
+        "app/modules/projects/models.py",
+        "app/db/migrations/versions/0039_project_images.py",
     )
-    assert "tests/modules/test_permits.py" in result.paths
-    assert "tests/modules/test_payment_plans.py" in result.paths
+    assert result.risk == "module"
+    assert result.migration
+    assert result.migrations == ["0039_project_images.py"]
+    assert "tests/test_migrations.py" in result.paths
+    assert "tests/modules/test_migration_projects.py" in result.paths
+    assert "tests/modules/test_cutover_intake_contract.py" in result.paths
+    assert "tests/test_deletion_contracts.py" in result.paths
+    assert not result.full
 
 
-def test_a_test_file_that_does_not_exist_yet_is_not_passed_to_pytest() -> None:
-    """A deleted test must not become a path pytest cannot open.
-
-    The change list names it because the pull request touched it; the checkout
-    is the authority on whether it is still there.
-    """
-    result = chosen("tests/modules/test_deleted_thing.py")
-    assert "tests/modules/test_deleted_thing.py" not in result.paths
-    assert result.paths == SMOKE
+def test_unknown_product_module_is_an_actionable_plan_error() -> None:
+    result = chosen("app/modules/foo/service.py")
+    assert result.error
+    assert "CI PLAN ERROR" in result.error
+    assert "app/modules/foo/" in result.error
+    assert "scripts/ci_backend_tests.py" in result.error
+    assert not result.full
 
 
-def test_changing_the_selector_runs_the_selector_tests() -> None:
-    result = chosen("scripts/ci_backend_tests.py")
-    assert result.full is False
-    assert "tests/test_ci_selector.py" in result.paths
-
-
-# --------------------------------------------------------------------------- #
-# Falling back
-# --------------------------------------------------------------------------- #
+def test_unknown_product_module_cli_fails_without_writing_a_plan(tmp_path: Path) -> None:
+    output = tmp_path / "selected.txt"
+    code = selector.main(
+        ["--changed", "app/modules/foo/service.py", "--out", str(output), "--github-output", ""]
+    )
+    assert code == 2
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(
     "path",
     [
-        "tests/conftest.py",
-        "tests/modules/conftest.py",
-        "tests/factories.py",
-        "pyproject.toml",
+        "app/core/database.py",
+        "app/db/base.py",
+        "app/db/migrations/env.py",
+        "app/modules/access/service.py",
         "requirements.txt",
         "requirements-dev.txt",
+        "pyproject.toml",
+        "pytest.ini",
+        "tests/conftest.py",
     ],
 )
-def test_shared_test_and_dependency_files_fall_back_to_the_full_suite(path: str) -> None:
+def test_foundational_change_is_system_risk(path: str) -> None:
     result = chosen(path)
-    assert result.full is True
+    assert result.risk == "system"
+    assert result.full
     assert result.paths == ["tests"]
     assert result.reasons
 
@@ -427,552 +140,137 @@ def test_shared_test_and_dependency_files_fall_back_to_the_full_suite(path: str)
 @pytest.mark.parametrize(
     "path",
     [
-        "app/core/errors.py",
-        "app/core/config.py",
-        "app/modules/access/permissions.py",
-        "app/db/base.py",
-        "app/db/session.py",
-    ],
-)
-def test_cross_cutting_infrastructure_falls_back_to_the_full_suite(path: str) -> None:
-    """Who may call what, and what a session is, cannot be bounded by a domain."""
-    result = chosen(path)
-    assert result.full is True
-
-
-def test_an_unknown_backend_domain_falls_back_and_says_which() -> None:
-    """Fail safe, not fail open: a new module runs everything until it is mapped.
-
-    ``collections`` was the example here, then ``unit_economics``, then
-    ``construction``, then ``cashflow``, and all four are real domains now. The
-    example keeps moving on purpose: the guard applies to whatever module
-    arrives next, not to a name somebody wrote down once, so it uses a module
-    that does not exist yet rather than the newest one that does.
-    """
-    result = chosen("app/modules/whatever_comes_next/service.py")
-
-    assert result.full is True
-    assert any("whatever_comes_next" in reason for reason in result.reasons)
-
-
-def test_a_mapped_domain_with_no_test_family_falls_back() -> None:
-    """A domain that should have tests and has none is a finding, not a pass."""
-    thin = [path for path in AVAILABLE if "payment_plan" not in path]
-    result = select(["app/modules/payment_plans/service.py"], thin)
-
-    assert result.full is True
-    assert any("payment_plans" in reason for reason in result.reasons)
-
-
-def test_application_code_outside_a_domain_falls_back() -> None:
-    result = chosen("app/some_new_layer/thing.py")
-    assert result.full is True
-
-
-# --------------------------------------------------------------------------- #
-# Migrations, and the two files every domain necessarily touches
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.parametrize(
-    ("filename", "expected"),
-    [
-        ("0008_unit_economics.py", "unit_economics"),
-        ("0007_collections.py", "collections"),
-        ("0006_payment_plans.py", "payment_plans"),
-        ("0005_sales_legal.py", "sales"),
-        ("0004_pricing.py", "pricing"),
-        ("0003_inventory.py", "inventory"),
-        ("0002_project_land_permits.py", "projects"),
-        ("0022_land_analytics.py", "projects"),
-        ("0023_inventory_options.py", "inventory"),
-        ("0032_building_units.py", "inventory"),
-        ("0024_merge_permits_inventory.py", None),
-        ("0001_governance_access.py", "access"),
-        ("0010_something_shared.py", None),
-    ],
-)
-def test_a_migration_is_read_for_the_domain_it_names(filename: str, expected: str | None) -> None:
-    assert selector.domain_of_migration(f"app/db/migrations/versions/{filename}") == expected
-
-
-def test_adding_a_domains_own_migration_does_not_force_the_full_suite() -> None:
-    """The ordinary shape of functional work, and the case that must stay fast.
-
-    Every roadmap pull request adds a migration, mounts a router in main.py and
-    imports its models in the migration environment. If any of those forced a
-    full run, no functional pull request would ever get a fast cycle.
-    """
-    result = chosen(
-        "app/modules/unit_economics/models.py",
-        "app/db/migrations/versions/0008_unit_economics.py",
-        "app/db/migrations/env.py",
-        "app/main.py",
-    )
-    assert result.full is False
-    assert result.domains == ["unit_economics"]
-
-
-def test_a_migration_no_domain_claims_falls_back() -> None:
-    result = chosen("app/db/migrations/versions/0010_rework_currencies.py")
-    assert result.full is True
-
-
-# --------------------------------------------------------------------------- #
-# Changes that cannot break a backend test
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "docs/ENGINEERING_RULES.md",
-        "README.md",
-        "frontend/src/components/projects/PaymentPlansTab.tsx",
-        "frontend/package.json",
+        "scripts/ci_backend_tests.py",
+        "scripts/ci_backend_shards.py",
         ".github/workflows/ci.yml",
+        ".github/workflows/full-backend-shadow.yml",
     ],
 )
-def test_documentation_and_frontend_run_only_the_always_run_set(path: str) -> None:
+def test_ci_tooling_runs_ci_guards_without_product_full(path: str) -> None:
     result = chosen(path)
-    assert result.full is False
-    assert result.paths == SMOKE
+    assert result.risk == "module"
+    assert not result.full
+    assert "tests/test_ci_selector.py" in result.paths
+    assert "tests/test_ci_workflow.py" in result.paths
 
 
-def test_an_empty_change_still_runs_the_always_run_set() -> None:
-    """Never zero tests collected under a green tick."""
-    result = select([], AVAILABLE)
-    assert result.full is False
-    assert result.paths == SMOKE
+@pytest.mark.parametrize("path", ["docs/CI_STRATEGY.md", "README.md", "frontend/src/app/page.tsx"])
+def test_docs_and_frontend_only_need_no_backend_runner(path: str) -> None:
+    result = chosen(path)
+    assert result.risk == "none"
+    assert not result.backend_required
+    assert result.paths == []
+    assert not result.full
 
 
-def test_a_checkout_with_no_tests_falls_back_rather_than_passing() -> None:
-    result = select(["docs/README.md"], [])
-    assert result.full is True
+def test_invariant_pack_retains_platform_wide_contracts() -> None:
+    required = {
+        "tests/test_config.py",
+        "tests/test_migrations.py",
+        "tests/modules/test_auth.py",
+        "tests/modules/test_authorization.py",
+        "tests/modules/test_audit.py",
+        "tests/modules/test_strict_requests.py",
+        "tests/test_ci_selector.py",
+        "tests/test_ci_workflow.py",
+        "tests/test_ci_smoke.py",
+        "tests/test_ci_shards.py",
+        "tests/test_test_isolation.py",
+        "tests/test_deletion_contracts.py",
+        "tests/modules/test_cutover_intake_contract.py",
+        "tests/test_agent_guardrails.py",
+        "tests/test_pr_quality.py",
+    }
+    assert required <= set(selector.ALWAYS_RUN)
+    assert required <= set(chosen("app/modules/pricing/service.py").paths)
 
 
-# --------------------------------------------------------------------------- #
-# Shape of the output
-# --------------------------------------------------------------------------- #
+def test_every_product_module_is_registered() -> None:
+    modules = {
+        path.name
+        for path in (ROOT / "app/modules").iterdir()
+        if path.is_dir() and not path.name.startswith("_")
+    }
+    assert modules <= set(selector.DOMAIN_TEST_PREFIXES)
 
 
-def test_selected_paths_are_sorted_and_free_of_duplicates() -> None:
-    result = chosen(
-        "app/modules/sales/service.py",
-        "app/modules/sales/api.py",
-        "tests/modules/test_sales_legal.py",
-    )
-    assert result.paths == sorted(result.paths)
-    assert len(result.paths) == len(set(result.paths))
+def test_every_domain_has_tests_and_every_test_is_claimed() -> None:
+    for domain in selector.DOMAIN_TEST_PREFIXES:
+        assert selector.tests_for_domain(domain, AVAILABLE), domain
+    assert selector.unclaimed_test_files(AVAILABLE) == []
 
 
-def test_every_selected_path_exists_in_the_checkout() -> None:
-    result = chosen("app/modules/payment_plans/service.py")
-    assert set(result.paths).issubset(set(AVAILABLE))
-
-
-def test_the_report_names_the_mode_and_the_reason() -> None:
-    change = ["app/modules/sales/service.py"]
-    targeted = selector.report(chosen(*change), change)
-    assert "CI mode: targeted" in targeted
-    assert "payment_plans" in targeted
-
-    fallback = selector.report(chosen("tests/modules/conftest.py"), ["tests/modules/conftest.py"])
-    assert "CI mode: full-fallback" in fallback
-    assert "shared by every test" in fallback
-
-
-# --------------------------------------------------------------------------- #
-# The map against the real repository
-# --------------------------------------------------------------------------- #
-
-
-def test_every_test_file_in_the_repository_is_claimed_by_something() -> None:
-    """The guard that keeps the map from rotting.
-
-    A test file no domain claims would be absent from every targeted run and
-    nobody would notice, because a passing run looks the same either way. Adding
-    a test family without adding it to the map fails here instead.
-    """
-    unclaimed = selector.unclaimed_test_files(selector.available_test_files(ROOT))
-    assert unclaimed == [], (
-        "these test files belong to no domain — add them to selector.DOMAIN_TEST_PREFIXES "
-        f"or to ALWAYS_RUN: {unclaimed}"
-    )
-
-
-def test_every_domain_in_the_map_has_tests_in_the_repository() -> None:
-    available = selector.available_test_files(ROOT)
-    empty = [
-        name
-        for name in selector.DOMAIN_TEST_PREFIXES
-        if not selector.tests_for_domain(name, available)
-    ]
-    assert empty == [], f"domains mapped but with no test family: {empty}"
-
-
-def test_every_downstream_target_is_a_known_domain() -> None:
-    for domain, targets in selector.DOWNSTREAM.items():
-        for target in targets:
-            assert target in selector.DOMAIN_TEST_PREFIXES, (
-                f"{domain} feeds unknown domain {target}"
-            )
-
-
-def test_the_real_dependency_map_has_no_cycle_of_any_length() -> None:
-    """Downstream must be a direction, not a loop.
-
-    A cycle would make every change inside it select every other, quietly
-    turning targeted mode back into the full suite while still calling itself
-    targeted. Two domains naming each other is the obvious case; three is just
-    as broken and considerably easier to introduce by accident.
-    """
+def test_direct_consumer_registry_is_valid_and_acyclic() -> None:
+    for source, targets in selector.DOWNSTREAM.items():
+        assert source in selector.DOMAIN_TEST_PREFIXES
+        assert set(targets) <= set(selector.DOMAIN_TEST_PREFIXES)
+        assert source not in targets
     assert selector.find_cycle() is None
 
 
-# --------------------------------------------------------------------------- #
-# The dependency graph, on synthetic shapes
-# --------------------------------------------------------------------------- #
-
-CHAIN = {"a": ("b",), "b": ("c",), "c": ()}
-LOOP = {"a": ("b",), "b": ("c",), "c": ("a",)}
-LONG_LOOP = {"a": ("b",), "b": ("c",), "c": ("d",), "d": ("b",)}
-DIAMOND = {"a": ("b", "c"), "b": ("d",), "c": ("d",), "d": ()}
+def test_closure_is_exactly_one_hop_even_for_a_chain() -> None:
+    graph = {"a": ("b",), "b": ("c",), "c": ()}
+    assert selector.closure({"a"}, graph) == ["a", "b"]
+    assert selector.closure({"b"}, graph) == ["b", "c"]
 
 
-def test_closure_follows_the_chain_all_the_way_down() -> None:
-    """Transitive, not one level. This is what stops the map needing every
-    descendant written out by hand."""
-    assert selector.closure({"a"}, CHAIN) == ["a", "b", "c"]
-    assert selector.closure({"b"}, CHAIN) == ["b", "c"]
-    assert selector.closure({"c"}, CHAIN) == ["c"]
+def test_edge_contract_registry_is_ready_for_narrow_contract_packs() -> None:
+    for (producer, consumer), paths in selector.EDGE_CONTRACT_TESTS.items():
+        assert consumer in selector.DOWNSTREAM[producer]
+        assert set(paths) <= set(AVAILABLE)
 
 
-def test_closure_visits_a_shared_descendant_once() -> None:
-    assert selector.closure({"a"}, DIAMOND) == ["a", "b", "c", "d"]
-
-
-def test_closure_terminates_on_a_malformed_graph() -> None:
-    """A cycle is a bug the tests catch, not a reason for CI to hang."""
-    assert selector.closure({"a"}, LOOP) == ["a", "b", "c"]
-
-
-def test_a_three_node_cycle_is_detected() -> None:
-    cycle = selector.find_cycle(LOOP)
-    assert cycle is not None
-    assert cycle[0] == cycle[-1], "a cycle is reported as a closed path"
-    assert set(cycle) == {"a", "b", "c"}
-
-
-def test_a_cycle_that_does_not_include_the_entry_point_is_detected() -> None:
-    """b → c → d → b, reached from a. Depth-first has to notice on the way."""
-    cycle = selector.find_cycle(LONG_LOOP)
-    assert cycle is not None
-    assert set(cycle) == {"b", "c", "d"}
-
-
-def test_an_acyclic_graph_reports_no_cycle() -> None:
-    assert selector.find_cycle(CHAIN) is None
-    assert selector.find_cycle(DIAMOND) is None
-
-
-def test_collections_is_reached_from_pricing_through_the_real_map() -> None:
-    """PR-ENG-01 predicted this shape; PR-MVP-07 and -08 are it, on the real map.
-
-    Adding collections was two lines — one entry in DOMAIN_TEST_PREFIXES and one
-    edge, ``payment_plans -> collections``. Adding unit economics was two more,
-    with its edge from sales. Cashflow took an entry and two edges, from
-    collections and from construction, and payment plans reaches it through
-    collections without a third. Nobody had to widen pricing, inventory,
-    projects or settings any of those times, because the closure is transitive.
-
-    The cutover is the fifth instance and the clearest: its reconciliation
-    orchestrator calls ``cashflow.service.reconciliation``, so one edge —
-    ``cashflow -> cutover`` — is what carries a *pricing* change to it, through
-    four hops nobody had to name.
-    """
-    assert selector.closure({"pricing"}) == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "marketing",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "pricing",
-        "project_analysis",
-        "sales",
-        "unit_economics",
+def test_currency_correction_uses_its_exact_cross_domain_contract_pack() -> None:
+    owned_paths, domains, tests = selector.CROSS_DOMAIN_CONTRACT_PACKS[
+        "project_currency_correction"
     ]
+    result = chosen(*owned_paths, *tests)
 
-    assert selector.closure({"sales"}) == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-        "sales",
-        "unit_economics",
-    ]
-    assert selector.closure({"payment_plans"}) == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-        "unit_economics",
-    ]
-    # Construction reaches unit economics and cashflow, and cashflow reaches
-    # the cutover; nothing is downstream of unit economics or the cutover, so
-    # the chain terminates rather than looping back.
-    assert selector.closure({"construction"}) == [
-        "cashflow",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-        "unit_economics",
-    ]
-    # And still downstream only: no leaf drags sales back in.
-    assert selector.closure({"collections"}) == [
-        "cashflow",
-        "collections",
-        "cutover",
-        "management_reporting",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-    ]
-    assert selector.closure({"unit_economics"}) == ["unit_economics"]
-    # Cashflow is no longer a leaf: it feeds the cutover, and the cutover feeds
-    # nothing. Unit economics still terminates, which is what keeps the two
-    # sinks distinguishable.
-    assert selector.closure({"cashflow"}) == [
-        "cashflow",
-        "cutover",
-        "management_reporting",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-    ]
-    assert selector.closure({"cutover"}) == ["cutover"]
-    assert selector.find_cycle() is None
+    assert result.risk == "cross-domain"
+    assert set(result.changed_domains) == set(domains)
+    assert result.contract_pack == "project_currency_correction"
+    assert set(tests) <= set(result.paths)
+    assert not any(path.startswith("tests/modules/test_cashflow_") for path in result.paths)
+    assert not result.full
 
 
-def test_a_collections_change_runs_collections_and_nothing_upstream() -> None:
-    """The narrowest closure the selector still has, and the shape that matters.
+def test_cross_domain_contract_pack_fails_closed_for_a_partial_change() -> None:
+    owned_paths, _, tests = selector.CROSS_DOMAIN_CONTRACT_PACKS["project_currency_correction"]
+    result = chosen(*sorted(owned_paths)[:-1], *tests)
 
-    Cashflow is downstream of collections and comes with it — it reads receipts,
-    refunds and unapplied cash through named contracts. Nothing *upstream* does:
-    pricing, sales and payment plans are unreachable from here, and their own
-    tests already prove the public contracts collections consumes.
-    """
-    result = chosen("app/modules/collections/service.py")
-
-    assert result.full is False
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "cutover",
-        "management_reporting",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-    ]
-    assert "tests/modules/test_collection_receipts.py" in result.paths
-    assert "tests/modules/test_collection_allocations.py" in result.paths
-    assert "tests/modules/test_collection_restructures.py" in result.paths
-    assert "tests/modules/test_migration_collections.py" in result.paths
-    assert "tests/modules/test_payment_plans.py" not in result.paths
-    assert "tests/modules/test_sales_legal.py" not in result.paths
-    assert "tests/modules/test_pricing_calculator.py" not in result.paths
+    assert result.contract_pack is None
+    assert any(path.startswith("tests/modules/test_cashflow_") for path in result.paths)
 
 
-def test_a_payment_plan_change_now_reaches_collections() -> None:
-    """One new edge, and the schedule's downstream consumer comes with it."""
-    result = chosen("app/modules/payment_plans/service.py")
-
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-        "unit_economics",
-    ]
-    assert "tests/modules/test_collection_restructures.py" in result.paths
-    assert "tests/modules/test_payment_plans.py" in result.paths
-    assert "tests/modules/test_sales_legal.py" not in result.paths
-
-
-def test_a_sales_change_reaches_collections_transitively() -> None:
-    """Two hops, no edge from sales to collections anywhere in the map."""
-    result = chosen("app/modules/sales/service.py")
-
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "project_analysis",
-        "sales",
-        "unit_economics",
-    ]
-    assert "tests/modules/test_collection_status.py" in result.paths
-    assert "tests/modules/test_pricing_calculator.py" not in result.paths
-
-
-def test_a_pricing_change_reaches_collections_through_three_hops() -> None:
+def test_report_explains_risk_domains_migration_and_full_decision() -> None:
     result = chosen("app/modules/pricing/service.py")
-
-    assert result.domains == [
-        "cashflow",
-        "collections",
-        "construction",
-        "cutover",
-        "management_reporting",
-        "marketing",
-        "payment_plans",
-        "portfolio",
-        "prelaunch",
-        "pricing",
-        "project_analysis",
-        "sales",
-        "unit_economics",
-    ]
-    assert "tests/modules/test_collection_aging.py" in result.paths
-    assert "tests/modules/test_units.py" not in result.paths
+    plan = selector.report(result, ["app/modules/pricing/service.py"])
+    assert "CI BACKEND PLAN" in plan
+    assert "Risk: module" in plan
+    assert "Changed domains:\n- pricing" in plan
+    assert "Selected domains (changed + direct consumers):" in plan
+    assert "Full regression:\n- not required" in plan
+    assert "Selected test files:" in plan
 
 
-# --------------------------------------------------------------------------- #
-# Scripts are not all the same kind of thing
-# --------------------------------------------------------------------------- #
+def test_github_outputs_are_machine_readable(tmp_path: Path) -> None:
+    output = tmp_path / "github-output.txt"
+    selector.write_github_output(str(output), chosen("app/modules/pricing/service.py"))
+    values = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
+    assert values["risk"] == "module"
+    assert values["backend_required"] == "true"
+    assert values["full_required"] == "false"
+    assert values["targeted_shards"] == "[1]"
+    assert values["domains"] == '["marketing","pricing","sales"]'
 
 
-def test_changing_the_selector_script_runs_the_selector_tests_only() -> None:
-    result = chosen(selector.SELECTOR_SCRIPT)
-    assert result.full is False
-    assert selector.SELECTOR_TESTS in result.paths
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "scripts/render-start.sh",
-        "scripts/render-build.sh",
-        "scripts/some_future_operational_script.py",
-    ],
-)
-def test_operational_scripts_fall_back_to_the_full_suite(path: str) -> None:
-    """These build and start the deployed application.
-
-    Treating them as harmless CI tooling because of the directory they share
-    with the selector is how a broken start command reaches production behind a
-    green tick.
-    """
-    result = chosen(path)
-    assert result.full is True
-    assert any("operational infrastructure" in reason for reason in result.reasons)
-
-
-# --------------------------------------------------------------------------- #
-# Unknown is not the same as harmless
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "render.yaml",
-        "Dockerfile",
-        "Procfile",
-        "alembic.ini",
-        "deployment.toml",
-        "some_new_tool_config",
-    ],
-)
-def test_unclassified_infrastructure_falls_back_to_the_full_suite(path: str) -> None:
-    """Known harmless is targeted; unknown is everything.
-
-    A file nobody has classified may change how the application is built,
-    migrated or started, and the cost of being wrong in the safe direction is
-    minutes.
-    """
-    result = chosen(path)
-    assert result.full is True
-    assert any("unclassified repository infrastructure" in reason for reason in result.reasons)
-
-
-@pytest.mark.parametrize(
-    "path",
-    [".gitignore", ".gitattributes", "LICENSE", "LICENSE.md"],
-)
-def test_named_inert_files_stay_targeted(path: str) -> None:
-    result = chosen(path)
-    assert result.full is False
-    assert result.paths == SMOKE
-
-
-def test_closure_is_stable_when_applied_twice() -> None:
-    once = selector.closure({"pricing"})
-    twice = selector.closure(set(once))
-    assert once == twice
-
-
-def test_analysis_is_a_read_only_downstream_of_its_sources() -> None:
-    for source in (
-        "projects",
-        "settings",
-        "inventory",
-        "sales",
-        "collections",
-        "construction",
-        "cashflow",
-        "consultant_engineering",
-    ):
-        assert "project_analysis" in selector.closure({source}), source
-    assert selector.closure({"project_analysis"}) == [
-        "management_reporting",
-        "portfolio",
-        "project_analysis",
-    ]
-    assert "project_analysis" in selector.NON_SCHEMA_DOMAINS
-
-
-def test_portfolio_feeds_reporting_from_every_consumed_domain() -> None:
-    for source in (
-        "projects",
-        "inventory",
-        "sales",
-        "collections",
-        "cashflow",
-        "construction",
-        "consultant_engineering",
-        "commissions",
-        "project_analysis",
-    ):
-        assert "portfolio" in selector.closure({source}), source
-        assert "management_reporting" in selector.closure({source}), source
-    assert selector.closure({"portfolio"}) == ["management_reporting", "portfolio"]
-    assert selector.closure({"management_reporting"}) == ["management_reporting"]
-    assert "portfolio" in selector.NON_SCHEMA_DOMAINS
+def test_unusually_large_targeted_plan_uses_three_shards_without_becoming_full() -> None:
+    result = selector.Selection(
+        risk="cross-domain",
+        paths=[f"tests/modules/test_{index}.py" for index in range(81)],
+        domains=["pricing", "sales"],
+        changed_domains=["pricing", "sales"],
+        reasons=[],
+    )
+    assert selector.targeted_shard_count(result) == 3
+    assert not result.full

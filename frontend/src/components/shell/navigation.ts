@@ -1,5 +1,6 @@
 import type { IconName } from "@/components/ui/Icon";
 import {
+  AGREEMENT_READERS,
   AUDIT_READERS,
   MARKETING_READERS,
   CASHFLOW_READERS,
@@ -56,6 +57,7 @@ export type ProjectSection =
   | "agent-buyer"
   | "buyers"
   | "agents"
+  | "agreements"
   | "sales"
   | "payments"
   | "collections"
@@ -65,6 +67,7 @@ export type ProjectSection =
   | "economics"
   | "cashflow"
   | "documents"
+  | "team"
   | "access";
 
 export interface NavItem<Key extends string = string> {
@@ -170,6 +173,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     label: "Commercial",
     items: [
       {
+        key: "agreements", label: "Agreements", icon: "documents",
+        description: "Final agreement drafts clients need to sign to complete their purchase.",
+        visible: (roles) => hasAnyRole(roles, AGREEMENT_READERS),
+      },
+      {
         key: "buyers",
         label: "Buyers",
         icon: "sales",
@@ -265,6 +273,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     label: "Governance",
     items: [
       {
+        key: "team", label: "Team", icon: "user",
+        description: "The people, responsibilities and contacts behind this project.",
+        visible: everyone,
+      },
+      {
         key: "documents",
         label: "Documents",
         icon: "documents",
@@ -284,9 +297,22 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
   },
 ];
 
-export type SettingsSection = "users" | "audit" | "account";
+export type SettingsSection = "currencies" | "users" | "audit" | "account";
 
 export const SETTINGS_NAVIGATION: NavGroup<SettingsSection>[] = [
+  {
+    key: "configuration",
+    label: "Configuration",
+    items: [
+      {
+        key: "currencies",
+        label: "Currency registry",
+        icon: "money",
+        description: "Shared currency codes, names and display symbols.",
+        visible: (roles) => roles.has(ROLE_SYSTEM_ADMIN),
+      },
+    ],
+  },
   {
     key: "people",
     label: "People",

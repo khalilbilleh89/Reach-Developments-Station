@@ -1,7 +1,7 @@
 """Project marketing content and rental projections
 
-Revision ID: 0039_marketing
-Revises: 0038_commission_beneficiaries
+Revision ID: 0042_marketing
+Revises: 0041_project_agreements
 Create Date: 2026-09-27 11:01:32.637274+00:00
 
 """
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0039_marketing"
-down_revision: str | Sequence[str] | None = "0038_commission_beneficiaries"
+revision: str = "0042_marketing"
+down_revision: str | Sequence[str] | None = "0041_project_agreements"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

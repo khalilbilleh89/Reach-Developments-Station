@@ -52,19 +52,19 @@ BACKBONE = (
     "tests/modules/test_audit.py::test_creating_a_user_is_audited",
     "tests/modules/test_audit.py::test_an_audit_event_rolls_back_with_its_transaction",
     "tests/modules/test_strict_requests.py::test_a_refused_request_writes_no_audit_event",
-    "tests/test_ci_selector.py::test_every_test_file_in_the_repository_is_claimed_by_something",
-    "tests/test_ci_selector.py::test_the_real_dependency_map_has_no_cycle_of_any_length",
+    "tests/test_ci_selector.py::test_every_domain_has_tests_and_every_test_is_claimed",
+    "tests/test_ci_selector.py::test_direct_consumer_registry_is_valid_and_acyclic",
+    "tests/test_ci_selector.py::test_unknown_product_module_is_an_actionable_plan_error",
     "tests/test_ci_smoke.py::test_every_registered_contract_resolves_to_real_tests",
-    "tests/test_ci_smoke.py::test_full_risk_refuses_instead_of_downgrading_or_running_full",
+    "tests/test_ci_smoke.py::test_smoke_refuses_system_risk_instead_of_silently_narrowing",
     "tests/test_ci_smoke.py::test_new_domain_refuses_until_registered",
-    "tests/test_ci_smoke.py::test_reviewed_workflow_cli",
-    "tests/test_ci_smoke.py::test_presentation_contract_has_exact_ownership_and_runs_when_changed",
-    "tests/test_ci_smoke.py::test_migrations_need_explicit_ownership_and_integrity_test",
+    "tests/test_ci_smoke.py::test_unclassified_migration_refuses",
+    "tests/test_ci_smoke.py::test_required_ci_no_longer_routes_by_smoke_or_review_readiness",
     "tests/test_ci_shards.py::test_all_collected_files_exactly_once_for_any_count",
-    "tests/test_ci_workflow.py::test_lane_routing",
-    "tests/test_ci_workflow.py::test_actual_aggregator_command_refuses_any_non_success",
-    "tests/test_ci_workflow.py::test_shards_are_independent_complete_and_not_fail_fast",
-    "tests/test_ci_workflow.py::test_real_postgres_and_structural_checks",
+    "tests/test_ci_workflow.py::test_draft_and_ready_events_use_the_same_plan",
+    "tests/test_ci_workflow.py::test_backend_aggregate_always_exists_including_no_backend_changes",
+    "tests/test_ci_workflow.py::test_system_risk_can_still_require_complete_regression",
+    "tests/test_ci_workflow.py::test_targeted_job_keeps_static_migration_and_selected_test_safety",
 )
 
 # Node IDs intentionally name a few existing, real PostgreSQL cases, not whole
@@ -189,7 +189,7 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
 # Exact reviewed ownership: names alone must not certify an arbitrary migration.
 # New revisions register BOTH their owner and their own integrity test(s).
 MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "0039_marketing.py": (
+    "0042_marketing.py": (
         "marketing",
         ("tests/modules/test_marketing.py::test_migration_roundtrip_and_retention",),
     ),

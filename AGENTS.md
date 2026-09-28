@@ -52,6 +52,12 @@ this file or into `CLAUDE.md`.
 
 ## Agent automation
 
+CI scope is determined by code risk, not pull-request size or Draft/Ready state.
+Product changes run their domain, direct consumers and the invariant pack;
+foundational system changes may require complete regression. Never add `ci:full`
+"just to be safe": explain the system-wide or hidden-integration blast radius
+that makes the optional Full Backend Shadow useful. See `docs/CI_STRATEGY.md`.
+
 Reusable safety and preflight checks live under `scripts/`, not inside any one agent's
 configuration. Before declaring implementation work complete, run:
 
@@ -64,5 +70,19 @@ markers, tracked secret files — and reports what it could not run rather than 
 silently. CI remains the authority on correctness. See `docs/AGENT_AUTOMATION.md`.
 
 Do not reimplement these checks in agent-specific instructions.
+
+## Pull requests are engineering deliverables
+
+Every PR must use `.github/pull_request_template.md` and satisfy PR Quality.
+Before opening or updating a PR:
+
+- inspect repository reality; explain root cause, scope and non-goals;
+- declare contract, migration, financial, security and deletion impact;
+- report only validation that actually ran; state unavailable/pending evidence explicitly;
+- explain why broad changes belong together, or split them;
+- keep the PR Draft until its implementation and description are reviewable.
+
+A generated commit summary is not a PR description. Do not replace the template
+with a short AI-generated summary. This applies to every agent, human and device.
 
 The user's explicit instructions take precedence over repository guidance.

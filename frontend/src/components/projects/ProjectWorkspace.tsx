@@ -1,5 +1,7 @@
 "use client";
 
+import { AgreementsTab } from "./AgreementsTab";
+
 import { DevelopmentWorkspace } from "./DevelopmentWorkspace";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -36,10 +38,13 @@ import { ConstructionTab } from "@/components/projects/ConstructionTab";
 import { ProjectStages } from "@/components/projects/construction/StageWorkspace";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { ProjectEdit } from "@/components/projects/ProjectEdit";
+import { ProjectImages } from "@/components/projects/ProjectImages";
+import { ProjectCurrencyCorrection } from "@/components/projects/ProjectCurrencyCorrection";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
 import { MarketingContentTab } from "@/components/projects/marketing/MarketingContentTab";
 import { MarketingEconomicsTab } from "@/components/projects/marketing/MarketingEconomicsTab";
+import { TeamTab } from "@/components/projects/TeamTab";
 import { CompanyTab } from "@/components/projects/CompanyTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
 import { PermitsTab } from "@/components/projects/PermitsTab";
@@ -84,6 +89,7 @@ export function ProjectWorkspace({
   // the Inventory section opens. One record file, reached from wherever the
   // person was.
   const [editing, setEditing] = useState(false);
+  const [correctingCurrency, setCorrectingCurrency] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // Every load takes a ticket, and a response that arrives after a newer
@@ -207,14 +213,24 @@ export function ProjectWorkspace({
           {editing ? (
             <ProjectEdit project={project} onSaved={changed} onClose={() => setEditing(false)} />
           ) : null}
+          {correctingCurrency ? (
+            <ProjectCurrencyCorrection
+              project={project}
+              onSaved={changed}
+              onClose={() => setCorrectingCurrency(false)}
+            />
+          ) : null}
           <ProjectCommandCenter
             project={project}
             roles={roles}
             canEdit={canWriteProject}
             onEdit={() => setEditing((open) => !open)}
+            canCorrectCurrency={isAdmin && project.status !== "setup"}
+            onCorrectCurrency={() => setCorrectingCurrency(true)}
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
+          <ProjectImages projectId={projectId} canEdit={canWriteProject} />
           <Disclosure title={<> Project construction stage configuration </>}>
             <ProjectStages projectId={projectId} roles={roles} />
           </Disclosure>
@@ -262,6 +278,7 @@ export function ProjectWorkspace({
         {section === "agents" ? (
           <AgentBuyerTab mode="agents" projectId={projectId} projectStatus={project.status} roles={roles} />
         ) : null}
+        {section === "agreements" ? <AgreementsTab projectId={projectId} roles={roles} /> : null}
         {section === "sales" ? (
           <SalesTab
             projectId={projectId}
@@ -280,6 +297,7 @@ export function ProjectWorkspace({
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "team" ? <TeamTab key={projectId} projectId={projectId} /> : null}
         {section === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}
       </>
     );

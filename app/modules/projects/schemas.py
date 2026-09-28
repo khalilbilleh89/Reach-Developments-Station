@@ -116,6 +116,20 @@ class ProjectDetail(ProjectSummary):
     planned_duration_days: int | None = None
 
 
+class ProjectImageRead(BaseModel):
+    """Gallery metadata. Binary content has a separate authenticated route."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    category: Literal["interior", "exterior", "render_3d"]
+    filename: str
+    media_type: str
+    created_by_user_id: uuid.UUID
+    created_at: datetime
+
+
 class ProjectCreateRequest(StrictRequest):
     code: ProjectCode
     name: str = Field(min_length=1, max_length=200)
@@ -133,6 +147,13 @@ class ProjectCreateRequest(StrictRequest):
     planned_start: date | None = None
     planned_completion: date | None = None
     project_manager_user_id: uuid.UUID | None = None
+
+
+class ProjectCurrencyCorrectionRequest(StrictRequest):
+    expected_base_currency_id: uuid.UUID
+    target_currency_id: uuid.UUID
+    reason: str = Field(min_length=8, max_length=500)
+    keep_amounts_unchanged: Literal[True]
 
 
 class ProjectUpdateRequest(StrictRequest):
