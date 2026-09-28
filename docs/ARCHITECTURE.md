@@ -1387,6 +1387,12 @@ operations service. Operations reads existing Sales clients, purchases and effec
 buyer signatures; it never writes contract/legal state. Counts are server-derived.
 See [Commercial Operations](COMMERCIAL_OPERATIONS.md) for scope and retention.
 
+### Commercial FAQs
+
+Sales owns project-scoped reusable plain-text questions and answers. Dedicated FAQ
+routes use Sales reader permissions and whole-project FAQ writers, project locks,
+optimistic versions and immutable audit snapshots. See [Commercial FAQs](COMMERCIAL_FAQS.md).
+
 ### Project agreement library
 
 Commercial > Agreements uses the projects domain for final client purchase drafts,

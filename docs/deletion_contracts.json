@@ -704,6 +704,14 @@
     "handler": "sales.save_buyer"
   },
   {
+    "handler": "sales.create_faq",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "DELETE /{faq_id}",
+    "ui_file": "frontend/src/components/projects/FaqTab.tsx",
+    "notes": "Whole-project FAQ writers delete after named reasoned confirmation. Version check and project lock prevent stale edits; full content remains in audit. No dependent records are created."
+  },
+  {
     "handler": "marketing.create_bio",
     "create_route": "PUT /content/bio",
     "status": "implemented",

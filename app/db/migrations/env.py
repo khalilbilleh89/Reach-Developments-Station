@@ -45,8 +45,11 @@ from app.modules.projects import (  # noqa: E402
     team_models,  # noqa: F401
 )
 from app.modules.projects import models as projects_models  # noqa: E402,F401
+from app.modules.sales import (  # noqa: E402
+    faq_models,  # noqa: F401
+    operations_models,  # noqa: F401
+)
 from app.modules.sales import models as sales_models  # noqa: E402,F401
-from app.modules.sales import operations_models  # noqa: E402,F401
 from app.modules.settings import models as settings_models  # noqa: E402,F401
 from app.modules.unit_economics import models as unit_economics_models  # noqa: E402,F401
 

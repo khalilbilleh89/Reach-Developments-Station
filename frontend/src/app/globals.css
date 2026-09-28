@@ -6010,6 +6010,11 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .operations-position { padding: var(--space-4); background: var(--surface-stage); border-radius: var(--radius-card); }
 .operations-lead { font-size: var(--metric-hero); font-variant-numeric: tabular-nums; }
 
+.faq-answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Marketing content and rental comparisons. */
 .marketing-prose { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
 .marketing-bullets { padding-inline-start: var(--space-6); display: grid; gap: var(--space-2); }
