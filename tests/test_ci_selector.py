@@ -36,6 +36,8 @@ def test_projects_change_stops_after_the_direct_neighbours() -> None:
     assert result.domains == ["cutover", "inventory", "management_actions", "projects"]
     assert "pricing" not in result.domains
     assert "sales" not in result.domains
+    assert not any("test_project_analysis" in path for path in result.paths)
+    assert not any("test_unit_economics" in path for path in result.paths)
     assert not result.full
 
 
