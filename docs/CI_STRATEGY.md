@@ -36,6 +36,12 @@ but is still targeted.
 consumer's complete test family with a smaller explicit producer-to-consumer
 contract pack when those contracts are introduced.
 
+Cross-domain plans with more than 80 selected files are deterministically split
+across three targeted runners. Each selected file is assigned exactly once by
+collected-test weight. This preserves the complete risk plan while keeping the
+serial targeted job inside its 20-minute bound; ordinary plans still use one
+PostgreSQL runner.
+
 ### System
 
 Foundational behavior changed: `app/core`, authentication/access core, shared

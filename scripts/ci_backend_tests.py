@@ -339,6 +339,12 @@ CUTOVER_DOCS = "docs/go_live/"
 NON_SCHEMA_DOMAINS = frozenset({CUTOVER_DOMAIN, "project_analysis", "portfolio"})
 SELECTOR_TESTS = "tests/test_ci_selector.py"
 
+# A single targeted runner is the inexpensive default. Exceptionally broad
+# cross-domain plans still keep their exact selected coverage, but distribute
+# it across the small matrix CI V2 allows rather than timing out serially.
+TARGETED_SHARD_THRESHOLD = 80
+TARGETED_SHARD_COUNT = 3
+
 
 class Selection:
     """What to run, and the reasoning, in a form a log can print.
@@ -837,10 +843,18 @@ def report(selection: Selection, changed: list[str]) -> str:
     for reason in selection.reasons:
         lines.append(f"- {reason}")
 
+    lines.extend(["", f"Targeted shards: {targeted_shard_count(selection)}"])
     lines.extend(["", f"Selected test files: {len(selection.paths)}"])
     for path in selection.paths:
         lines.append(f"- {path}")
     return "\n".join(lines)
+
+
+def targeted_shard_count(selection: Selection) -> int:
+    """Use a small matrix only when the selected targeted plan is unusually broad."""
+    if selection.full or not selection.backend_required:
+        return 1
+    return TARGETED_SHARD_COUNT if len(selection.paths) > TARGETED_SHARD_THRESHOLD else 1
 
 
 def write_github_output(path: str, selection: Selection) -> None:
@@ -851,6 +865,8 @@ def write_github_output(path: str, selection: Selection) -> None:
         stream.write(f"backend_required={str(selection.backend_required).lower()}\n")
         stream.write(f"full_required={str(selection.full).lower()}\n")
         stream.write(f"selected_count={len(selection.paths)}\n")
+        count = targeted_shard_count(selection)
+        stream.write("targeted_shards=" + json.dumps(list(range(1, count + 1))) + "\n")
         stream.write("domains=" + json.dumps(selection.domains, separators=(",", ":")) + "\n")
 
 

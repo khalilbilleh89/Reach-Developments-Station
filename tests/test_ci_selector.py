@@ -238,4 +238,17 @@ def test_github_outputs_are_machine_readable(tmp_path: Path) -> None:
     assert values["risk"] == "module"
     assert values["backend_required"] == "true"
     assert values["full_required"] == "false"
+    assert values["targeted_shards"] == "[1]"
     assert values["domains"] == '["pricing","sales"]'
+
+
+def test_unusually_large_targeted_plan_uses_three_shards_without_becoming_full() -> None:
+    result = selector.Selection(
+        risk="cross-domain",
+        paths=[f"tests/modules/test_{index}.py" for index in range(81)],
+        domains=["pricing", "sales"],
+        changed_domains=["pricing", "sales"],
+        reasons=[],
+    )
+    assert selector.targeted_shard_count(result) == 3
+    assert not result.full
