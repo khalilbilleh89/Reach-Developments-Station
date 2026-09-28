@@ -1,30 +1,10 @@
 #!/usr/bin/env python3
-"""Choose which backend tests a pull request actually needs.
+"""Build the backend CI plan from the change's realistic blast radius.
 
-Every push used to run the whole suite. At fifteen hundred tests that turned a
-one-line correction into a long wait, and a wait long enough to walk
-away from is a wait that stops being read. So a draft main pull request runs the
-tests its change can plausibly break, and a pull request marked ready for
-review runs all of them. Fast CI is not weaker CI; it answers a narrower
-question, and the broad one is still asked before a main candidate merges.
-The temporary Gate 0A integration Smoke policy is defined separately in
-ci_backend_smoke.py and docs/MVP2_GATE0A_ROADMAP.md.
-
-Three ideas, and nothing more:
-
-**A domain owns a family of test files.** The map below is explicit and was
-built by reading the actual names in ``tests/``. There is no inference, no
-heuristic and no marker to maintain on fifteen hundred tests.
-
-**A change flows downstream, never up.** Sales sits on pricing, so a pricing
-change runs sales; a sales change does not re-run pricing. Sales' own tests
-already prove its use of pricing's public contract, and the full suite proves
-the rest before merge. This asymmetry is where the time is saved.
-
-**Anything unrecognised runs everything.** A new module, a shared fixture, the
-core, the access layer — all fall back to the full suite and say so in the log.
-The selector fails safe, never open: the cost of a wrong "full" is minutes, and
-the cost of a wrong "targeted" is a regression that reaches main.
+Draft and Ready are review states, not risk signals. Product-domain changes run
+the changed domains plus their direct consumers; only genuinely foundational
+changes require complete regression. New product modules fail quickly until
+their ownership and direct-consumer edges are registered here.
 
 Run it directly to see what a change would select::
 
@@ -34,6 +14,8 @@ Run it directly to see what a change would select::
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -152,22 +134,9 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "cutover": ("cutover",),
 }
 
-#: What each domain feeds **directly**. Read strictly downstream: a change here
-#: can break these, so their tests run too. The reverse does not hold, which is
-#: the whole point — collections leaning on sales does not make a collections
-#: edit a reason to re-prove sales.
-#:
-#: These are edges, not reachability. :func:`closure` walks them, so adding a
-#: domain means adding one edge and nothing else. Spelling out every descendant
-#: here instead would mean that giving payment plans a downstream neighbour
-#: required editing pricing, inventory, projects and settings too — and the
-#: first person to forget one would get a targeted run that silently skipped
-#: the new domain.
-#:
-#: ``projects`` and ``settings`` sit above the business stack rather than in it:
-#: every record is project-scoped and every project is configured from a country
-#: pack, so a change to either does reach the whole chain — by traversal now,
-#: not by being written out.
+#: What each domain feeds **directly**. Selection deliberately does not walk
+#: beyond one edge. A pricing change can break sales' use of pricing; it does not
+#: automatically re-prove payment plans, collections and cashflow.
 DOWNSTREAM: dict[str, tuple[str, ...]] = {
     "settings": ("projects",),
     # ``inventory`` for the obvious reason; ``cutover`` because a batch takes
@@ -214,6 +183,12 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # import lands without its edge.
     "cutover": (),
 }
+
+#: Optional narrow tests for a named producer -> consumer contract. A future
+#: edge can use these instead of the consumer's complete domain family without
+#: changing the plan model. Until an edge is registered here, the consumer's
+#: domain tests are the conservative direct-contract pack.
+EDGE_CONTRACT_TESTS: dict[tuple[str, str], tuple[str, ...]] = {}
 
 #: Paths whose blast radius a targeted selection cannot honestly bound. A shared
 #: fixture rewrites the ground every test stands on; the core defines the errors
@@ -348,20 +323,41 @@ class Selection:
     constructed in one place, and the import would be the larger half of it.
     """
 
-    __slots__ = ("domains", "full", "paths", "reasons")
+    __slots__ = (
+        "backend_required",
+        "changed_domains",
+        "domains",
+        "error",
+        "full",
+        "migration",
+        "migrations",
+        "paths",
+        "reasons",
+        "risk",
+    )
 
     def __init__(
         self,
         *,
-        full: bool,
+        risk: str,
         paths: list[str],
         domains: list[str],
         reasons: list[str],
+        changed_domains: list[str] | None = None,
+        migrations: list[str] | None = None,
+        backend_required: bool = True,
+        error: str | None = None,
     ) -> None:
-        self.full = full
+        self.risk = risk
+        self.full = risk == "system"
         self.paths = paths
         self.domains = domains
         self.reasons = reasons
+        self.changed_domains = changed_domains or []
+        self.migrations = migrations or []
+        self.migration = bool(self.migrations)
+        self.backend_required = backend_required
+        self.error = error
 
 
 # --------------------------------------------------------------------------- #
@@ -430,26 +426,11 @@ def domain_of_migration(path: str) -> str | None:
 
 
 def closure(domains: set[str], graph: dict[str, tuple[str, ...]] | None = None) -> list[str]:
-    """The changed domains plus everything reachable downstream of them.
-
-    Transitive, by walking the edges. A change to pricing reaches sales, and
-    through sales reaches payment plans, and through payment plans will reach
-    collections the moment PR-MVP-07 adds that one edge — without anybody
-    having to remember to widen pricing's own entry.
-
-    The visited set makes this terminate even on a malformed graph. A cycle is
-    still a bug, and :func:`find_cycle` is what fails the build over it; this
-    function's job is to answer, not to hang.
-    """
+    """The changed domains and their direct downstream neighbours only."""
     edges = DOWNSTREAM if graph is None else graph
-    reached: set[str] = set()
-    pending = list(domains)
-    while pending:
-        domain = pending.pop()
-        if domain in reached:
-            continue
-        reached.add(domain)
-        pending.extend(edges.get(domain, ()))
+    reached = set(domains)
+    for domain in domains:
+        reached.update(edges.get(domain, ()))
     return sorted(reached)
 
 
@@ -522,61 +503,78 @@ def unclaimed_test_files(available: list[str]) -> list[str]:
 
 
 def select(changed: list[str], available: list[str]) -> Selection:
-    """Decide what to run for one set of changed paths.
-
-    Pure: it is handed the change and the test files that exist, and returns a
-    decision. Nothing here reads a repository or starts a process, which is why
-    the interesting cases can be tested without running fifteen hundred tests.
-    """
-    reasons: list[str] = []
-    domains: set[str] = set()
+    """Return a deterministic risk plan for one set of changed paths."""
+    system_reasons: list[str] = []
+    errors: list[str] = []
+    changed_domains: set[str] = set()
     direct: set[str] = set()
     available_set = set(available)
+    migrations: list[str] = []
+    backend_required = False
 
-    for path in sorted(set(changed)):
+    for raw_path in sorted(set(changed)):
+        path = raw_path.replace("\\", "/")
         if path in FULL_RISK_PATHS:
-            reasons.append(f"{path} is shared by every test")
+            backend_required = True
+            system_reasons.append(f"{path} changes the shared test/runtime platform")
             continue
         if path.startswith(FULL_RISK_PREFIXES):
-            reasons.append(f"{path} is cross-cutting infrastructure")
+            backend_required = True
+            system_reasons.append(f"{path} is cross-cutting core or access infrastructure")
             continue
 
         if path.startswith(MIGRATION_VERSIONS_PREFIX):
+            backend_required = True
+            migrations.append(Path(path).name)
             domain = domain_of_migration(path)
             if domain is None:
-                reasons.append(f"{path} is a migration no domain claims")
+                system_reasons.append(f"{path} is a migration no product domain claims")
             else:
-                domains.add(domain)
+                changed_domains.add(domain)
             continue
         if path.startswith(MIGRATIONS_PREFIX):
-            # env.py and friends: proved by the migration run itself.
+            backend_required = True
+            system_reasons.append(f"{path} changes migration environment semantics")
             continue
         if path.startswith(DB_INFRA_PREFIX):
-            reasons.append(f"{path} is database infrastructure")
+            backend_required = True
+            system_reasons.append(f"{path} is shared database infrastructure")
             continue
 
         if path.startswith(CUTOVER_DOCS):
-            domains.add(CUTOVER_DOMAIN)
+            backend_required = True
+            changed_domains.add(CUTOVER_DOMAIN)
             continue
         if path.startswith(CUTOVER_FIXTURES):
-            # Named before the tests/ fallback below, and only this one
-            # directory: a fixture anywhere else stays shared support.
-            domains.add(CUTOVER_DOMAIN)
+            backend_required = True
+            changed_domains.add(CUTOVER_DOMAIN)
             continue
         if path.startswith("tests/"):
             if Path(path).name.startswith("test_"):
-                # A changed or new test always runs, whatever else selects.
+                backend_required = True
                 if path in available_set:
                     direct.add(path)
+                owners = {
+                    domain
+                    for domain in DOMAIN_TEST_PREFIXES
+                    if path in tests_for_domain(domain, [path])
+                }
+                changed_domains.update(owners)
                 continue
-            reasons.append(f"{path} is shared test support")
+            backend_required = True
+            system_reasons.append(f"{path} is shared test-harness support")
             continue
 
         if path == PR_QUALITY_SCRIPT:
+            backend_required = True
             if PR_QUALITY_TESTS in available_set:
                 direct.add(PR_QUALITY_TESTS)
             continue
-        if path in CI_TOOLING:
+        if path in CI_TOOLING or path in {
+            ".github/workflows/ci.yml",
+            ".github/workflows/full-backend-shadow.yml",
+        }:
+            backend_required = True
             direct.update(
                 p for p in ALWAYS_RUN if p.startswith("tests/test_ci_") and p in available_set
             )
@@ -584,25 +582,22 @@ def select(changed: list[str], available: list[str]) -> Selection:
                 direct.add(SELECTOR_TESTS)
             continue
         if path in AGENT_TOOLING:
+            backend_required = True
             if AGENT_TESTS in available_set:
                 direct.add(AGENT_TESTS)
             continue
+        if path == ".github/workflows/pr-quality.yml":
+            backend_required = True
+            if PR_QUALITY_TESTS in available_set:
+                direct.add(PR_QUALITY_TESTS)
+            continue
         if path.startswith(CUTOVER_PACKAGE):
-            # One-time cutover tooling. Named rather than left to the fallback
-            # below, whose reasoning is about deployment: render-build.sh and
-            # render-start.sh run the live application, and this package never
-            # does. Nothing in ``app/`` imports it, so a change here cannot
-            # reach a domain — and on the day it imports one, the guard in
-            # ``test_cutover_selector.py`` requires the edge before the fast
-            # run is allowed to stay narrow.
-            domains.add(CUTOVER_DOMAIN)
+            backend_required = True
+            changed_domains.add(CUTOVER_DOMAIN)
             continue
         if path.startswith("scripts/"):
-            # Everything else under scripts/ builds or starts the deployed
-            # application — render-build.sh and render-start.sh today. Treating
-            # those as harmless CI tooling because of where they live is exactly
-            # the kind of shortcut that ships a broken start command.
-            reasons.append(f"{path} is operational infrastructure")
+            backend_required = True
+            system_reasons.append(f"{path} is operational infrastructure")
             continue
 
         if path in INERT_FILES:
@@ -611,57 +606,107 @@ def select(changed: list[str], available: list[str]) -> Selection:
             continue
 
         if path.startswith("app/modules/"):
+            backend_required = True
             domain = domain_of_module_path(path)
             if domain is None or domain not in DOMAIN_TEST_PREFIXES:
-                reasons.append(f'unknown backend domain "{domain or path}"')
+                module_path = f"app/modules/{domain}/" if domain else path
+                errors.append(
+                    "CI PLAN ERROR\n\n"
+                    f"New backend module is not classified:\n\n{module_path}\n\n"
+                    "Register:\n- module path\n- test prefixes\n- direct consumers\n\n"
+                    "in scripts/ci_backend_tests.py"
+                )
             else:
-                domains.add(domain)
+                changed_domains.add(domain)
             continue
 
         if path == "app/main.py":
-            # Every new domain mounts a router here. Compilation and the
-            # always-run smoke set prove it.
+            backend_required = True
             continue
 
         if path.startswith("app/"):
-            reasons.append(f"{path} is application code no domain claims")
+            backend_required = True
+            system_reasons.append(f"{path} is application infrastructure no domain claims")
             continue
 
-        # Anything left is unrecognised. alembic.ini, a Dockerfile, a Procfile,
-        # render.yaml, a tool configuration nobody has classified yet — each can
-        # change how the application is built, migrated or started. The stated
-        # principle is known-harmless targeted, unknown full, so this is where
-        # it is applied rather than quietly excepted.
-        reasons.append(f"{path} is unclassified repository infrastructure")
+        backend_required = True
+        system_reasons.append(f"{path} is unclassified repository infrastructure")
 
-    if reasons:
-        return Selection(full=True, paths=["tests"], domains=[], reasons=reasons)
+    if errors:
+        return Selection(
+            risk="module",
+            paths=[],
+            domains=sorted(changed_domains),
+            changed_domains=sorted(changed_domains),
+            migrations=migrations,
+            reasons=[],
+            backend_required=True,
+            error="\n\n".join(errors),
+        )
 
-    reached = closure(domains)
+    if not backend_required:
+        return Selection(
+            risk="none",
+            paths=[],
+            domains=[],
+            changed_domains=[],
+            migrations=[],
+            reasons=["No backend-affecting files changed"],
+            backend_required=False,
+        )
+
+    if system_reasons:
+        return Selection(
+            risk="system",
+            paths=["tests"],
+            domains=sorted(changed_domains),
+            changed_domains=sorted(changed_domains),
+            migrations=migrations,
+            reasons=system_reasons,
+        )
+
+    reached = closure(changed_domains)
     missing = [domain for domain in reached if not tests_for_domain(domain, available)]
     if missing:
         return Selection(
-            full=True,
-            paths=["tests"],
+            risk="module" if len(changed_domains) <= 1 else "cross-domain",
+            paths=[],
             domains=reached,
-            reasons=[f"no test family exists for changed domain {name}" for name in missing],
+            changed_domains=sorted(changed_domains),
+            migrations=migrations,
+            reasons=[],
+            error=(
+                "CI PLAN ERROR\n\nRegistered backend domain has no test family: "
+                + ", ".join(missing)
+            ),
         )
 
     paths = set(ALWAYS_RUN) & available_set
     paths |= direct
     for domain in reached:
         paths.update(tests_for_domain(domain, available))
+    for producer in changed_domains:
+        for consumer in DOWNSTREAM.get(producer, ()):
+            paths.update(EDGE_CONTRACT_TESTS.get((producer, consumer), ()))
 
     if not paths:
-        # Cannot happen with a healthy checkout; if it does, the honest answer
-        # is everything rather than a green tick over nothing.
         return Selection(
-            full=True,
-            paths=["tests"],
+            risk="module" if len(changed_domains) <= 1 else "cross-domain",
+            paths=[],
             domains=reached,
-            reasons=["no test file could be resolved"],
+            changed_domains=sorted(changed_domains),
+            migrations=migrations,
+            reasons=[],
+            error="CI PLAN ERROR\n\nNo backend test file could be resolved.",
         )
-    return Selection(full=False, paths=sorted(paths), domains=reached, reasons=[])
+    return Selection(
+        risk="module" if len(changed_domains) <= 1 else "cross-domain",
+        paths=sorted(paths),
+        domains=reached,
+        changed_domains=sorted(changed_domains),
+        migrations=migrations,
+        reasons=[],
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -682,7 +727,7 @@ class CannotDiff(Exception):
     """Git could not tell us what changed, so nothing may be ruled out."""
 
 
-def changed_files(base: str) -> list[str]:
+def changed_files(base: str, head: str = "HEAD") -> list[str]:
     """Every path the pull request touches, against its merge base.
 
     The merge base and not the previous commit: a pull request is five commits
@@ -695,13 +740,13 @@ def changed_files(base: str) -> list[str]:
     """
     try:
         merge_base = subprocess.run(
-            ["git", "merge-base", base, "HEAD"],
+            ["git", "merge-base", base, head],
             capture_output=True,
             text=True,
             check=True,
         ).stdout.strip()
         diff = subprocess.run(
-            ["git", "diff", "--name-only", f"{merge_base}...HEAD"],
+            ["git", "diff", "--name-only", f"{merge_base}...{head}"],
             capture_output=True,
             text=True,
             check=True,
@@ -712,45 +757,74 @@ def changed_files(base: str) -> list[str]:
 
 
 def report(selection: Selection, changed: list[str]) -> str:
-    """The decision, in the form somebody reading a failed run needs it."""
-    lines = [f"Changed files: {len(changed)}"]
-    for path in changed[:40]:
-        lines.append(f"  {path}")
-    if len(changed) > 40:
-        lines.append(f"  … and {len(changed) - 40} more")
-    lines.append("")
-    if selection.full:
-        lines.append("CI mode: full-fallback")
-        lines.append("Reason:")
-        for reason in selection.reasons:
-            lines.append(f"  {reason}")
-        lines.append("")
-        lines.append("Running the entire backend suite.")
-        return "\n".join(lines)
+    """Render a plan that explains both the breadth and the reason."""
+    if selection.error:
+        return selection.error
 
-    lines.append("CI mode: targeted")
-    lines.append("")
-    lines.append("Domain closure (changed domains and everything downstream):")
-    for domain in selection.domains or ["(none — always-run set only)"]:
-        lines.append(f"  {domain}")
-    lines.append("")
-    lines.append(f"Selected test files: {len(selection.paths)}")
+    lines = ["CI BACKEND PLAN", "", f"Risk: {selection.risk}", "", "Changed files:"]
+    for path in changed[:40]:
+        lines.append(f"- {path}")
+    if len(changed) > 40:
+        lines.append(f"- … and {len(changed) - 40} more")
+    if not changed:
+        lines.append("- (none)")
+
+    lines.extend(["", "Changed domains:"])
+    lines.extend(f"- {domain}" for domain in selection.changed_domains)
+    if not selection.changed_domains:
+        lines.append("- (none)")
+
+    lines.extend(["", "Selected domains (changed + direct consumers):"])
+    lines.extend(f"- {domain}" for domain in selection.domains)
+    if not selection.domains:
+        lines.append("- (none)")
+
+    invariant_count = len(ALWAYS_RUN) if selection.backend_required else 0
+    lines.extend(["", "Required invariant pack:", f"- {invariant_count} files"])
+    lines.extend(["", "Migration:"])
+    if selection.migrations:
+        lines.extend(f"- {name}" for name in selection.migrations)
+        lines.append("- migration validation enabled")
+    else:
+        lines.append("- not changed")
+
+    lines.extend(["", "Full regression:"])
+    lines.append("- required" if selection.full else "- not required")
+    for reason in selection.reasons:
+        lines.append(f"- {reason}")
+
+    lines.extend(["", f"Selected test files: {len(selection.paths)}"])
     for path in selection.paths:
-        lines.append(f"  {path}")
-    lines.append("")
-    lines.append("The full suite runs when this pull request is marked ready for review.")
+        lines.append(f"- {path}")
     return "\n".join(lines)
+
+
+def write_github_output(path: str, selection: Selection) -> None:
+    """Expose the plan to downstream workflow jobs."""
+    output = Path(path)
+    with output.open("a", encoding="utf-8") as stream:
+        stream.write(f"risk={selection.risk}\n")
+        stream.write(f"backend_required={str(selection.backend_required).lower()}\n")
+        stream.write(f"full_required={str(selection.full).lower()}\n")
+        stream.write(f"selected_count={len(selection.paths)}\n")
+        stream.write("domains=" + json.dumps(selection.domains, separators=(",", ":")) + "\n")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="origin/main", help="branch to diff against")
+    parser.add_argument("--head", default="HEAD", help="commit/ref at the end of the diff")
     parser.add_argument(
         "--changed",
         nargs="*",
         help="classify these paths instead of asking git (for trying it out)",
     )
     parser.add_argument("--out", help="write the pytest arguments here, one per line")
+    parser.add_argument(
+        "--github-output",
+        default=os.environ.get("GITHUB_OUTPUT"),
+        help="append risk outputs for GitHub Actions",
+    )
     args = parser.parse_args(argv)
 
     available = available_test_files(ROOT)
@@ -762,20 +836,34 @@ def main(argv: list[str] | None = None) -> int:
         changed = args.changed
     else:
         try:
-            changed = changed_files(args.base)
+            changed = changed_files(args.base, args.head)
         except CannotDiff as error:
-            print("CI mode: full-fallback")
-            print(f"Reason:\n  {error}")
-            print("\nRunning the entire backend suite.")
+            selection = Selection(
+                risk="system",
+                paths=["tests"],
+                domains=[],
+                reasons=[str(error)],
+            )
+            print(report(selection, []))
             if args.out:
-                Path(args.out).write_text("tests\n")
+                Path(args.out).write_text("tests\n", encoding="utf-8")
+            if args.github_output:
+                write_github_output(args.github_output, selection)
             return 0
 
     selection = select(changed, available)
     print(report(selection, changed))
 
+    if selection.error:
+        return 2
+
     if args.out:
-        Path(args.out).write_text("\n".join(selection.paths) + "\n")
+        Path(args.out).write_text(
+            "\n".join(selection.paths) + ("\n" if selection.paths else ""),
+            encoding="utf-8",
+        )
+    if args.github_output:
+        write_github_output(args.github_output, selection)
     return 0
 
 

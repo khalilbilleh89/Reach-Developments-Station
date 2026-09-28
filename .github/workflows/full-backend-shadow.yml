@@ -1,0 +1,136 @@
+name: Full Backend Shadow
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  full:
+    name: Full Backend Shadow ${{ matrix.shard }}/8
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'ci:full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reach_station_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      TZ: UTC
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/reach_station_test
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Assign complete suite
+        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 8 --out selected-tests.txt
+      - name: Run complete assigned shard
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p shadow-results
+          pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20 --junitxml=shadow-results/junit-${{ matrix.shard }}.xml 2>&1 | tee shadow-results/pytest-${{ matrix.shard }}.log
+      - name: Upload JUnit and pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-backend-shadow-${{ matrix.shard }}
+          path: shadow-results/
+          if-no-files-found: warn
+
+  summary:
+    name: Full Backend Shadow summary
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'ci:full')
+    needs: full
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: full-backend-shadow-*
+          path: shadow-results
+          merge-multiple: true
+      - name: Publish totals, duration, and slowest tests
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FULL_RESULT: ${{ needs.full.result }}
+        run: |
+          python - <<'PY'
+          import os, re, xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          totals = {name: 0 for name in ("tests", "failures", "errors", "skipped")}
+          duration = 0.0
+          for path in Path("shadow-results").glob("junit-*.xml"):
+              root = ET.parse(path).getroot()
+              suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+              for suite in suites:
+                  for name in totals:
+                      totals[name] += int(suite.attrib.get(name, 0))
+                  duration += float(suite.attrib.get("time", 0))
+
+          slow = []
+          pattern = re.compile(r"^(\d+(?:\.\d+)?)s\s+(.+)$")
+          for path in Path("shadow-results").glob("pytest-*.log"):
+              for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                  match = pattern.match(line.strip())
+                  if match:
+                      slow.append((float(match.group(1)), match.group(2)))
+
+          passed = totals["tests"] - totals["failures"] - totals["errors"] - totals["skipped"]
+          lines = [
+              "# Full Backend Shadow",
+              "",
+              f"Head SHA: `{os.environ['HEAD_SHA']}`",
+              f"Total tests: {totals['tests']}",
+              f"Passed: {passed}",
+              f"Failed: {totals['failures']}",
+              f"Errors: {totals['errors']}",
+              f"Skipped: {totals['skipped']}",
+              f"Duration (summed test time): {duration:.1f}s",
+              "",
+              "## Slowest tests",
+          ]
+          lines.extend(f"- {seconds:.2f}s {name}" for seconds, name in sorted(slow, reverse=True)[:20])
+          if not slow:
+              lines.append("- No duration records were produced.")
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+          if os.environ["FULL_RESULT"] != "success":
+              raise SystemExit("One or more Full Backend Shadow shards failed")
+          PY

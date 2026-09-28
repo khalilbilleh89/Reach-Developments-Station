@@ -52,6 +52,12 @@ this file or into `CLAUDE.md`.
 
 ## Agent automation
 
+CI scope is determined by code risk, not pull-request size or Draft/Ready state.
+Product changes run their domain, direct consumers and the invariant pack;
+foundational system changes may require complete regression. Never add `ci:full`
+"just to be safe": explain the system-wide or hidden-integration blast radius
+that makes the optional Full Backend Shadow useful. See `docs/CI_STRATEGY.md`.
+
 Reusable safety and preflight checks live under `scripts/`, not inside any one agent's
 configuration. Before declaring implementation work complete, run:
 

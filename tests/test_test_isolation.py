@@ -17,12 +17,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, inspect, text
 from sqlalchemy.exc import OperationalError
 
 from app.core.database import get_engine
 
-from .conftest import _DATA_TABLES, LOCK_WAIT_BUDGET, empty_data_tables
+from .conftest import LOCK_WAIT_BUDGET, PRESERVED_TABLES, data_tables, empty_data_tables
 
 
 def _rows(table: str) -> int:
@@ -42,8 +42,12 @@ def _add_a_currency() -> None:
 
 
 def test_every_data_table_is_empty_when_a_test_begins() -> None:
-    """The guarantee itself, checked on all fifty-six rather than assumed."""
-    occupied = {table: _rows(table) for table in _DATA_TABLES}
+    """The guarantee itself, checked on every discovered application table."""
+    with get_engine().connect() as connection:
+        discovered = data_tables(connection)
+        public = set(inspect(connection).get_table_names(schema="public"))
+    assert set(discovered) == public - PRESERVED_TABLES
+    occupied = {table: _rows(table) for table in discovered}
     assert not {t: n for t, n in occupied.items() if n}, (
         f"A test began with rows left by another test: { {t: n for t, n in occupied.items() if n} }"
     )
@@ -61,29 +65,60 @@ def test_a_table_holding_rows_is_found_and_emptied() -> None:
 
 def test_a_suite_that_dirtied_nothing_truncates_nothing() -> None:
     """The saving itself. An already-clean database is left alone."""
-    assert empty_data_tables() == [], "tables were truncated although none held a row"
+    statements: list[str] = []
+    engine = get_engine()
+
+    def remember_statement(
+        connection: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", remember_statement)
+    try:
+        assert empty_data_tables() == [], "tables were truncated although none held a row"
+    finally:
+        event.remove(engine, "before_cursor_execute", remember_statement)
+    assert not [
+        statement for statement in statements if statement.lstrip().upper().startswith("TRUNCATE")
+    ]
 
 
-def test_the_seeded_roles_survive_the_clean() -> None:
-    """``roles`` is reference data from a migration, not test state.
+def test_preserved_seed_and_migration_tables_survive_the_clean() -> None:
+    """Seeded roles and Alembic's revision ledger are not test state.
 
     The old statement spared it, and CASCADE reaches no further now: it follows
     references INTO what is named, and naming fewer tables cannot reach more.
     """
-    before = _rows("roles")
-    assert before, "roles are seeded by migration; an empty table means the seed is gone"
+    before = {table: _rows(table) for table in PRESERVED_TABLES}
+    assert before["roles"], "roles are seeded by migration; an empty table means the seed is gone"
+    assert before["alembic_version"] == 1
 
     _add_a_currency()
     empty_data_tables()
 
-    assert _rows("roles") == before
+    assert {table: _rows(table) for table in PRESERVED_TABLES} == before
 
 
-def test_the_clean_covers_every_table_it_claims_to() -> None:
-    """The probe is built from the same list the clean is, and misses none."""
-    for table in _DATA_TABLES:
-        with get_engine().begin() as connection:
-            connection.execute(text(f"SELECT 1 FROM {table} LIMIT 1"))
+def test_a_new_table_needs_no_hand_edited_cleanup_registry() -> None:
+    """A migrated table is discovered from PostgreSQL and cleaned immediately."""
+    table = "isolation_discovery_probe"
+    engine = get_engine()
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(f"CREATE TABLE {table} (id integer PRIMARY KEY)"))
+            connection.execute(text(f"INSERT INTO {table} (id) VALUES (1)"))
+            assert table in data_tables(connection)
+
+        assert table in empty_data_tables()
+        assert _rows(table) == 0
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text(f"DROP TABLE IF EXISTS {table}"))
 
 
 def test_every_connection_carries_the_lock_wait_budget() -> None:

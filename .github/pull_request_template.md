@@ -15,15 +15,16 @@ source changes. Broad Drafts and Ready PRs also require Change cohesion.
 ## CI phase
 
 <!--
-Draft  = iteration. Runs `Backend Fast`. NEVER merge from this state.
-Ready  = merge candidate. Runs the full `Backend` suite on the exact head.
+Draft and Ready run the same risk-based `Backend` plan for the exact code diff.
+Readiness is a review state, not a test-blast-radius signal. System-risk changes
+still require Full; `ci:full` requests an optional non-required confidence sweep.
 
-Any commit pushed after the PR is marked ready re-runs the full suite, so the
-green tick always belongs to the current head. Never merge on an older SHA.
+Any code commit reruns the same risk plan, so the green ticks belong to the
+current head. Never merge on an older SHA.
 -->
 
-- [ ] Draft — focused CI while iterating
-- [ ] Ready for review — full exact-head regression
+- [ ] Draft — iteration state; risk-based CI
+- [ ] Ready for review — merge candidate; same exact-head risk plan
 
 ## Context
 
