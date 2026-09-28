@@ -45,12 +45,14 @@ def test_draft_and_ready_events_use_the_same_plan() -> None:
     assert "draft ==" not in source()
 
 
-def test_ordinary_pr_uses_one_targeted_postgres_runner_not_eight_full_runners() -> None:
+def test_ordinary_pr_uses_one_to_three_targeted_runners_not_eight_full_runners() -> None:
     targeted = block("backend_targeted")
     full = block("backend_system_full")
     assert "image: postgres:16" in targeted
     assert "timeout-minutes: 20" in targeted
     assert "full_required != 'true'" in targeted
+    assert "fromJSON(needs.scope.outputs.targeted_shards)" in targeted
+    assert "fail-fast: false" in targeted
     assert "full_required == 'true'" in full
     assert "matrix:" in full and "shard: [1, 2, 3, 4, 5, 6, 7, 8]" in full
     assert "backend_system_static.result == 'success'" in full
@@ -65,10 +67,12 @@ def test_targeted_job_keeps_static_migration_and_selected_test_safety() -> None:
         "python -m compileall app scripts",
         "alembic upgrade head",
         "alembic check",
+        "ci_backend_shards.py --input selected-tests.txt",
         "pytest -q $(tr",
     ):
         assert command in content
     assert "selected-tests.txt" in content
+    assert "assigned-tests.txt" in content
     assert "--durations=20" in content
     assert "elapsed > 900" in content
     assert "timeout-minutes: 20" in content

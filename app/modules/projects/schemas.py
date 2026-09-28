@@ -149,6 +149,13 @@ class ProjectCreateRequest(StrictRequest):
     project_manager_user_id: uuid.UUID | None = None
 
 
+class ProjectCurrencyCorrectionRequest(StrictRequest):
+    expected_base_currency_id: uuid.UUID
+    target_currency_id: uuid.UUID
+    reason: str = Field(min_length=8, max_length=500)
+    keep_amounts_unchanged: Literal[True]
+
+
 class ProjectUpdateRequest(StrictRequest):
     """Amend project details while preserving its stable UUID and audit history."""
 

@@ -285,6 +285,12 @@ export const projects = {
   imageUrl: (id: string, imageId: string) => `/api/v1/projects/${id}/images/${imageId}/file`,
   removeImage: (id: string, imageId: string) =>
     remove(`/projects/${id}/images/${imageId}`),
+  correctCurrency: (id: string, input: {
+    expected_base_currency_id: string;
+    target_currency_id: string;
+    reason: string;
+    keep_amounts_unchanged: true;
+  }) => post<ProjectDetail>(`/projects/${id}/currency-corrections`, input),
 
   access: (id: string) => get<ProjectAccess[]>(`/projects/${id}/access`),
   grantAccess: (id: string, userId: string) =>

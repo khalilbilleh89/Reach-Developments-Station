@@ -26,6 +26,7 @@ jobs:
       backend_required: ${{ steps.plan.outputs.backend_required }}
       full_required: ${{ steps.plan.outputs.full_required }}
       selected_count: ${{ steps.plan.outputs.selected_count }}
+      targeted_shards: ${{ steps.plan.outputs.targeted_shards }}
     steps:
       - name: Check out exact tested head
         uses: actions/checkout@v4
@@ -46,11 +47,15 @@ jobs:
           if-no-files-found: error
 
   backend_targeted:
-    name: Backend targeted
+    name: Backend targeted ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
     needs: scope
     if: needs.scope.outputs.backend_required == 'true' && needs.scope.outputs.full_required != 'true'
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.scope.outputs.targeted_shards) }}
     services:
       postgres:
         image: postgres:16
@@ -105,11 +110,13 @@ jobs:
         run: alembic upgrade head
       - name: Check for model and schema drift
         run: alembic check
+      - name: Assign selected tests to this targeted shard
+        run: python scripts/ci_backend_shards.py --input selected-tests.txt --shard ${{ matrix.shard }} --count ${{ strategy.job-total }} --out assigned-tests.txt
       - name: Test invariants, domains, and direct consumers
         shell: bash
         run: |
           started=$(date +%s)
-          pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20
+          pytest -q $(tr '\n' ' ' < assigned-tests.txt) --durations=20
           elapsed=$(( $(date +%s) - started ))
           echo "Backend targeted duration: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
           if (( elapsed > 900 )); then

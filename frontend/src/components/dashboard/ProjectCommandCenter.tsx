@@ -44,6 +44,7 @@ import {
   Breakdown,
   BreakdownRow,
   Button,
+  ButtonRow,
   Card,
   Disclosure,
   EmptyState,
@@ -100,6 +101,8 @@ export function ProjectCommandCenter({
   roles,
   canEdit,
   onEdit,
+  canCorrectCurrency,
+  onCorrectCurrency,
   onNavigate,
   refreshKey,
 }: {
@@ -107,6 +110,8 @@ export function ProjectCommandCenter({
   roles: Roles;
   canEdit: boolean;
   onEdit: () => void;
+  canCorrectCurrency: boolean;
+  onCorrectCurrency: () => void;
   onNavigate: (section: ProjectSection) => void;
   /** Bumped by the workspace after a change, so the sections reload. */
   refreshKey: number;
@@ -346,7 +351,12 @@ export function ProjectCommandCenter({
       <ProjectPlate
         project={project}
         unitCount={unitTotals?.total}
-        actions={canEdit ? <Button onClick={onEdit}>Edit project</Button> : undefined}
+        actions={canEdit || canCorrectCurrency ? (
+          <ButtonRow>
+            {canEdit ? <Button onClick={onEdit}>Edit project</Button> : null}
+            {canCorrectCurrency ? <Button variant="danger" onClick={onCorrectCurrency}>Correct base currency</Button> : null}
+          </ButtonRow>
+        ) : undefined}
       />
 
       <div className="stack">
