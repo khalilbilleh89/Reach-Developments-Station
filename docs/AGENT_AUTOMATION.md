@@ -145,8 +145,8 @@ When you do add one:
 2. Test it in `tests/test_agent_guardrails.py`, both the deny case and the
    ordinary-work case it must not block.
 3. Add the adapter entry to `.claude/settings.json`.
-4. Classify the new file in `scripts/ci_backend_tests.py`, or it will run the
-   entire backend suite on every change.
+4. Classify the new file in `scripts/ci_backend_tests.py`. New product modules
+   fail the CI plan until registered; unknown infrastructure is System risk.
 5. Document it in the table above.
 
 ## PR Quality on every device
@@ -192,10 +192,9 @@ python scripts/validate_pr_description.py --body-file /path/to/pr.md --title "De
 python -m pytest -q tests/test_pr_quality.py
 ```
 
-Fast classifies the validator as repository tooling and always runs its tests.
-Smoke keeps its existing strict refusal for governance workflow/infrastructure edits;
-this is deliberately a main engineering PR, not a new integration exception. Full
-continues discovering all tests. The PR Quality workflow itself installs no dependencies.
+Risk-based Backend classifies the validator as repository tooling and runs its
+guards without product Full. The PR Quality workflow itself installs no
+dependencies. Draft/Ready state never changes Backend breadth.
 
 ## Owner action after merge: require the checks
 
