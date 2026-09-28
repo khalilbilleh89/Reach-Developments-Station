@@ -99,6 +99,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
         "project_company",
         "project_concurrency",
         "project_images",
+        "project_currency_correction",
         "project_land",
         "project_security",
         "parcels",
@@ -211,6 +212,46 @@ EDGE_CONTRACT_TESTS: dict[tuple[str, str], tuple[str, ...]] = {
     ("projects", "cutover"): (
         "tests/modules/test_cutover_batch.py",
         "tests/modules/test_cutover_target.py",
+    ),
+}
+
+# Cohesive features that intentionally span several domain-owned contracts may
+# prove that complete boundary in one integration pack instead of rerunning
+# every unrelated behavior in every participating domain. Matching is exact
+# and requires the pack's test to change with the implementation; any missing,
+# partial, or additional product-domain path falls back to ordinary domain
+# selection.
+CROSS_DOMAIN_CONTRACT_PACKS: dict[str, tuple[frozenset[str], frozenset[str], tuple[str, ...]]] = {
+    "project_currency_correction": (
+        frozenset(
+            {
+                "app/modules/cashflow/currency_correction.py",
+                "app/modules/collections/currency_correction.py",
+                "app/modules/commissions/currency_correction.py",
+                "app/modules/construction/currency_correction.py",
+                "app/modules/payment_plans/currency_correction.py",
+                "app/modules/pricing/currency_correction.py",
+                "app/modules/projects/api.py",
+                "app/modules/projects/currency_correction.py",
+                "app/modules/projects/schemas.py",
+                "app/modules/sales/currency_correction.py",
+                "app/modules/unit_economics/currency_correction.py",
+            }
+        ),
+        frozenset(
+            {
+                "cashflow",
+                "collections",
+                "commissions",
+                "construction",
+                "payment_plans",
+                "pricing",
+                "projects",
+                "sales",
+                "unit_economics",
+            }
+        ),
+        ("tests/modules/test_project_currency_correction.py",),
     ),
 }
 
@@ -356,6 +397,7 @@ class Selection:
     __slots__ = (
         "backend_required",
         "changed_domains",
+        "contract_pack",
         "domains",
         "error",
         "full",
@@ -374,6 +416,7 @@ class Selection:
         domains: list[str],
         reasons: list[str],
         changed_domains: list[str] | None = None,
+        contract_pack: str | None = None,
         migrations: list[str] | None = None,
         backend_required: bool = True,
         error: str | None = None,
@@ -384,6 +427,7 @@ class Selection:
         self.domains = domains
         self.reasons = reasons
         self.changed_domains = changed_domains or []
+        self.contract_pack = contract_pack
         self.migrations = migrations or []
         self.migration = bool(self.migrations)
         self.backend_required = backend_required
@@ -502,6 +546,27 @@ def find_cycle(graph: dict[str, tuple[str, ...]] | None = None) -> list[str] | N
             found = walk(domain)
             if found is not None:
                 return found
+    return None
+
+
+def cross_domain_contract_pack(
+    changed: list[str], changed_domains: set[str], available: set[str]
+) -> tuple[str, tuple[str, ...]] | None:
+    """Return an exact, present contract pack or fail closed to domain families."""
+    module_paths = frozenset(
+        path.replace("\\", "/")
+        for path in changed
+        if path.replace("\\", "/").startswith("app/modules/")
+    )
+    changed_paths = {path.replace("\\", "/") for path in changed}
+    for name, (owned_paths, domains, tests) in CROSS_DOMAIN_CONTRACT_PACKS.items():
+        if (
+            module_paths == owned_paths
+            and changed_domains == domains
+            and set(tests) <= available
+            and set(tests) <= changed_paths
+        ):
+            return name, tests
     return None
 
 
@@ -698,6 +763,7 @@ def select(changed: list[str], available: list[str]) -> Selection:
         )
 
     reached = closure(changed_domains)
+    contract_pack = cross_domain_contract_pack(changed, changed_domains, available_set)
     missing = [domain for domain in reached if not tests_for_domain(domain, available)]
     if missing:
         return Selection(
@@ -715,6 +781,18 @@ def select(changed: list[str], available: list[str]) -> Selection:
 
     paths = set(ALWAYS_RUN) & available_set
     paths |= direct
+    if contract_pack:
+        name, contract_tests = contract_pack
+        paths.update(contract_tests)
+        return Selection(
+            risk="cross-domain",
+            paths=sorted(paths),
+            domains=reached,
+            changed_domains=sorted(changed_domains),
+            migrations=migrations,
+            reasons=[],
+            contract_pack=name,
+        )
     for domain in reached:
         if domain in changed_domains:
             paths.update(tests_for_domain(domain, available))
@@ -842,6 +920,9 @@ def report(selection: Selection, changed: list[str]) -> str:
     lines.append("- required" if selection.full else "- not required")
     for reason in selection.reasons:
         lines.append(f"- {reason}")
+
+    lines.extend(["", "Cross-domain contract pack:"])
+    lines.append(f"- {selection.contract_pack or '(none)'}")
 
     lines.extend(["", f"Targeted shards: {targeted_shard_count(selection)}"])
     lines.extend(["", f"Selected test files: {len(selection.paths)}"])

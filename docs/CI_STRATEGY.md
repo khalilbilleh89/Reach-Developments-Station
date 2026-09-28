@@ -36,6 +36,12 @@ but is still targeted.
 consumer's complete test family with a smaller explicit producer-to-consumer
 contract pack when those contracts are introduced.
 
+`CROSS_DOMAIN_CONTRACT_PACKS` is the fail-closed equivalent for one cohesive
+feature that changes several domain-owned adapters together. A pack activates
+only when its exact product path set and its integration test change together;
+partial or additional product changes fall back to the ordinary domain
+families. The risk tier and changed-domain report remain cross-domain.
+
 Cross-domain plans with more than 80 selected files are deterministically split
 across three targeted runners. Each selected file is assigned exactly once by
 collected-test weight. This preserves the complete risk plan while keeping the

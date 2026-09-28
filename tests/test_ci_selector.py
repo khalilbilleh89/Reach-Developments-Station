@@ -220,6 +220,28 @@ def test_edge_contract_registry_is_ready_for_narrow_contract_packs() -> None:
         assert set(paths) <= set(AVAILABLE)
 
 
+def test_currency_correction_uses_its_exact_cross_domain_contract_pack() -> None:
+    owned_paths, domains, tests = selector.CROSS_DOMAIN_CONTRACT_PACKS[
+        "project_currency_correction"
+    ]
+    result = chosen(*owned_paths, *tests)
+
+    assert result.risk == "cross-domain"
+    assert set(result.changed_domains) == set(domains)
+    assert result.contract_pack == "project_currency_correction"
+    assert set(tests) <= set(result.paths)
+    assert not any(path.startswith("tests/modules/test_cashflow_") for path in result.paths)
+    assert not result.full
+
+
+def test_cross_domain_contract_pack_fails_closed_for_a_partial_change() -> None:
+    owned_paths, _, tests = selector.CROSS_DOMAIN_CONTRACT_PACKS["project_currency_correction"]
+    result = chosen(*sorted(owned_paths)[:-1], *tests)
+
+    assert result.contract_pack is None
+    assert any(path.startswith("tests/modules/test_cashflow_") for path in result.paths)
+
+
 def test_report_explains_risk_domains_migration_and_full_decision() -> None:
     result = chosen("app/modules/pricing/service.py")
     plan = selector.report(result, ["app/modules/pricing/service.py"])
