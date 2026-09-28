@@ -190,6 +190,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `land_market_assumptions` | Owner-entered annual estimates; no legacy import or inferred market rates. |
 | `permits` | Live permits are re-entered through the application, where the status machine applies. A migrated permit with no event history is a permit whose SLA clock never started. |
 | `document_references` | Pointers to files the migration does not move. |
+| `project_images` | Project gallery content uploaded through the application; the legacy batch neither moves image bytes nor fabricates gallery history. |
 | `unit_features` | MVP 2 descriptive annotations, entered through the unit workspace; excluded from the legacy batch contract. |
 | `construction_stages` | MVP 2 project checklist configured through the project workspace; excluded from the legacy batch contract. |
 | `unit_stage_events` | MVP 2 physical completion history entered through the unit workspace; excluded from the legacy batch contract. |
