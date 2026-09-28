@@ -36,6 +36,7 @@ import { ConstructionTab } from "@/components/projects/ConstructionTab";
 import { ProjectStages } from "@/components/projects/construction/StageWorkspace";
 import { DocumentsTab } from "@/components/projects/DocumentsTab";
 import { ProjectEdit } from "@/components/projects/ProjectEdit";
+import { ProjectImages } from "@/components/projects/ProjectImages";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
 import { CompanyTab } from "@/components/projects/CompanyTab";
@@ -213,6 +214,7 @@ export function ProjectWorkspace({
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
+          <ProjectImages projectId={projectId} canEdit={canWriteProject} />
           <Disclosure title={<> Project construction stage configuration </>}>
             <ProjectStages projectId={projectId} roles={roles} />
           </Disclosure>

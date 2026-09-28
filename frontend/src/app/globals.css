@@ -5970,6 +5970,16 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 
 .specification-description { white-space: pre-wrap; overflow-wrap: anywhere; }
 
+.project-images-controls { display: grid; grid-template-columns: minmax(10rem, .7fr) minmax(15rem, 1.6fr) auto; align-items: end; gap: var(--space-4); margin-bottom: var(--space-5); }
+.project-images-section { padding: var(--space-5) 0; border-top: 1px solid var(--line-soft); }
+.project-images-section > h3 { margin: 0 0 var(--space-4); font-size: 1rem; }
+.project-images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: var(--space-4); }
+.project-image { min-width: 0; margin: 0; border: 1px solid var(--line-default); border-radius: var(--radius-control); overflow: hidden; background: var(--surface); }
+.project-image img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-secondary); }
+.project-image figcaption { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); }
+.project-image figcaption span { min-width: 0; overflow-wrap: anywhere; font-size: .8rem; }
+@media (max-width: 760px) { .project-images-controls { grid-template-columns: 1fr; align-items: stretch; } }
+
 /* Operations uses server-reported buyer counts. */
 .operations-position { padding: var(--space-4); background: var(--surface-stage); border-radius: var(--radius-card); }
 .operations-lead { font-size: var(--metric-hero); font-variant-numeric: tabular-nums; }

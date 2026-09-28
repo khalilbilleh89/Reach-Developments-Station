@@ -36,7 +36,28 @@ def test_projects_change_stops_after_the_direct_neighbours() -> None:
     assert result.domains == ["cutover", "inventory", "management_actions", "projects"]
     assert "pricing" not in result.domains
     assert "sales" not in result.domains
+    assert not any("test_project_analysis" in path for path in result.paths)
+    assert not any("test_unit_economics" in path for path in result.paths)
     assert not result.full
+
+
+def test_projects_consumers_use_their_registered_edge_contracts() -> None:
+    result = chosen("app/modules/projects/service.py")
+    expected = {
+        "tests/modules/test_inventory_hierarchy.py",
+        "tests/modules/test_management_actions_concurrency.py",
+        "tests/modules/test_cutover_batch.py",
+        "tests/modules/test_cutover_target.py",
+    }
+    assert expected <= set(result.paths)
+    assert "tests/modules/test_inventory_workbook.py" not in result.paths
+    assert "tests/modules/test_cutover_manifest.py" not in result.paths
+
+
+def test_missing_edge_contract_falls_back_to_the_complete_consumer_family() -> None:
+    available = [path for path in AVAILABLE if path != "tests/modules/test_inventory_hierarchy.py"]
+    result = selector.select(["app/modules/projects/service.py"], available)
+    assert "tests/modules/test_inventory_workbook.py" in result.paths
 
 
 def test_pricing_change_runs_pricing_and_sales_not_the_commercial_stack() -> None:
@@ -64,11 +85,11 @@ def test_two_changed_products_are_cross_domain_without_becoming_full() -> None:
 def test_new_domain_migration_adds_migration_and_invariant_packs_not_full() -> None:
     result = chosen(
         "app/modules/projects/models.py",
-        "app/db/migrations/versions/0039_projects.py",
+        "app/db/migrations/versions/0039_project_images.py",
     )
     assert result.risk == "module"
     assert result.migration
-    assert result.migrations == ["0039_projects.py"]
+    assert result.migrations == ["0039_project_images.py"]
     assert "tests/test_migrations.py" in result.paths
     assert "tests/modules/test_migration_projects.py" in result.paths
     assert "tests/modules/test_cutover_intake_contract.py" in result.paths
