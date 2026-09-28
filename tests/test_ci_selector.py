@@ -41,6 +41,25 @@ def test_projects_change_stops_after_the_direct_neighbours() -> None:
     assert not result.full
 
 
+def test_projects_consumers_use_their_registered_edge_contracts() -> None:
+    result = chosen("app/modules/projects/service.py")
+    expected = {
+        "tests/modules/test_inventory_hierarchy.py",
+        "tests/modules/test_management_actions_concurrency.py",
+        "tests/modules/test_cutover_batch.py",
+        "tests/modules/test_cutover_target.py",
+    }
+    assert expected <= set(result.paths)
+    assert "tests/modules/test_inventory_workbook.py" not in result.paths
+    assert "tests/modules/test_cutover_manifest.py" not in result.paths
+
+
+def test_missing_edge_contract_falls_back_to_the_complete_consumer_family() -> None:
+    available = [path for path in AVAILABLE if path != "tests/modules/test_inventory_hierarchy.py"]
+    result = selector.select(["app/modules/projects/service.py"], available)
+    assert "tests/modules/test_inventory_workbook.py" in result.paths
+
+
 def test_pricing_change_runs_pricing_and_sales_not_the_commercial_stack() -> None:
     result = chosen("app/modules/pricing/service.py")
     assert result.domains == ["pricing", "sales"]

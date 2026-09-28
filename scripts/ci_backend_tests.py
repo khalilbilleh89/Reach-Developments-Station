@@ -198,7 +198,21 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
 #: edge can use these instead of the consumer's complete domain family without
 #: changing the plan model. Until an edge is registered here, the consumer's
 #: domain tests are the conservative direct-contract pack.
-EDGE_CONTRACT_TESTS: dict[tuple[str, str], tuple[str, ...]] = {}
+EDGE_CONTRACT_TESTS: dict[tuple[str, str], tuple[str, ...]] = {
+    # Inventory consumes project identity, hierarchy ownership and project-row
+    # locking. Its hierarchy contract exercises that boundary without rerunning
+    # unrelated inventory import, workbook and unit-lifecycle families.
+    ("projects", "inventory"): ("tests/modules/test_inventory_hierarchy.py",),
+    # Management actions joins and locks the owning project. Its complete test
+    # family is already one focused contract file.
+    ("projects", "management_actions"): ("tests/modules/test_management_actions_concurrency.py",),
+    # Cutover resolves a manifest's project and claims its batch through the
+    # shared project lock. These two files prove both sides of that boundary.
+    ("projects", "cutover"): (
+        "tests/modules/test_cutover_batch.py",
+        "tests/modules/test_cutover_target.py",
+    ),
+}
 
 #: Paths whose blast radius a targeted selection cannot honestly bound. A shared
 #: fixture rewrites the ground every test stands on; the core defines the errors
@@ -696,10 +710,28 @@ def select(changed: list[str], available: list[str]) -> Selection:
     paths = set(ALWAYS_RUN) & available_set
     paths |= direct
     for domain in reached:
-        paths.update(tests_for_domain(domain, available))
-    for producer in changed_domains:
-        for consumer in DOWNSTREAM.get(producer, ()):
-            paths.update(EDGE_CONTRACT_TESTS.get((producer, consumer), ()))
+        if domain in changed_domains:
+            paths.update(tests_for_domain(domain, available))
+            continue
+
+        producers = [
+            producer for producer in changed_domains if domain in DOWNSTREAM.get(producer, ())
+        ]
+        contracts = {
+            path
+            for producer in producers
+            for path in EDGE_CONTRACT_TESTS.get((producer, domain), ())
+        }
+        every_edge_has_contracts = producers and all(
+            EDGE_CONTRACT_TESTS.get((producer, domain)) for producer in producers
+        )
+        if every_edge_has_contracts and contracts <= available_set:
+            paths.update(contracts)
+        else:
+            # Missing or incomplete contract registration fails closed to the
+            # consumer's complete family; selection must never become narrower
+            # because a named test was deleted or one producer edge was omitted.
+            paths.update(tests_for_domain(domain, available))
 
     if not paths:
         return Selection(
