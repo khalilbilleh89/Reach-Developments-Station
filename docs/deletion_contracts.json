@@ -713,7 +713,7 @@
   },
   {
     "handler": "projects.create_team_member",
-    "create_route": "POST /projects/{project_id}/team",
+    "create_route": "POST ",
     "status": "implemented",
     "removal_route": "POST /projects/{project_id}/team/{member_id}/delete",
     "ui_file": "frontend/src/components/projects/team/TeamSection.tsx",

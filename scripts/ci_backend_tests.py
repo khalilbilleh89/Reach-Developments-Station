@@ -99,6 +99,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
         "project_company",
         "project_concurrency",
         "project_images",
+        "project_team",
         "project_currency_correction",
         "project_land",
         "project_security",
