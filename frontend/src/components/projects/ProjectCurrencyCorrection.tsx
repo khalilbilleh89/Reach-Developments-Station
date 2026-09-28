@@ -89,7 +89,7 @@ export function ProjectCurrencyCorrection({
               <input className="input" value={project.base_currency_code ?? project.base_currency_id} disabled />
             </Field>
             <Field label="New base currency" hint="Only active currencies are available.">
-              <select className="select" required value={target} onChange={event => setTarget(event.target.value)}>
+              <select className="input" required value={target} onChange={event => setTarget(event.target.value)}>
                 <option value="">Choose currency</option>
                 {available.map(currency => (
                   <option key={currency.id} value={currency.id}>{currency.code} — {currency.name}</option>
@@ -97,7 +97,7 @@ export function ProjectCurrencyCorrection({
               </select>
             </Field>
             <Field label="Reason" hint="At least eight characters. This is retained in audit history.">
-              <textarea className="textarea" required minLength={8} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} />
+              <textarea className="input" required minLength={8} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} />
             </Field>
             <label className="checkbox">
               <input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />
