@@ -42,6 +42,8 @@ import { ProjectImages } from "@/components/projects/ProjectImages";
 import { ProjectCurrencyCorrection } from "@/components/projects/ProjectCurrencyCorrection";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
+import { MarketingContentTab } from "@/components/projects/marketing/MarketingContentTab";
+import { MarketingEconomicsTab } from "@/components/projects/marketing/MarketingEconomicsTab";
 import { TeamTab } from "@/components/projects/TeamTab";
 import { CompanyTab } from "@/components/projects/CompanyTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
@@ -237,6 +239,8 @@ export function ProjectWorkspace({
     }
     return (
       <>
+        {section === "marketing-bio" || section === "marketing-branding" ? <MarketingContentTab key={`${projectId}-${section}`} projectId={projectId} roles={roles} kind={section === "marketing-bio" ? "bio" : "branding"} /> : null}
+        {section === "marketing-economics" ? <MarketingEconomicsTab key={projectId} projectId={projectId} roles={roles} currencyId={project.base_currency_id} /> : null}
         {section === "company" ? <CompanyTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "land" ? (
           <LandTab

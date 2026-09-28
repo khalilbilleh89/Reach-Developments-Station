@@ -6009,3 +6009,21 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 /* Operations uses server-reported buyer counts. */
 .operations-position { padding: var(--space-4); background: var(--surface-stage); border-radius: var(--radius-card); }
 .operations-lead { font-size: var(--metric-hero); font-variant-numeric: tabular-nums; }
+
+/* Marketing content and rental comparisons. */
+.marketing-prose { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.marketing-bullets { padding-inline-start: var(--space-6); display: grid; gap: var(--space-2); }
+.marketing-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); }
+.marketing-entry { border: 1px solid var(--line-default); border-radius: var(--radius-card); padding: var(--space-4); min-width: 0; }
+.marketing-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.marketing-nearby, .marketing-palette { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-4); }
+.marketing-place, .marketing-color { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; }
+.marketing-place { border-top: 1px solid var(--line-default); padding-top: var(--space-4); }
+.marketing-swatch { height: 5rem; border-radius: var(--radius-control); border: 1px solid var(--line-default); }
+.marketing-return { font-size: var(--metric); font-variant-numeric: tabular-nums; }
+.marketing-lead { background: var(--surface-stage); padding: var(--space-4); border-radius: var(--radius-card); display: flex; flex-direction: column; gap: var(--space-2); margin-block: var(--space-4); }
+.marketing-lead strong { font-size: var(--metric-hero); font-variant-numeric: tabular-nums; }
+.marketing-guide { display: grid; gap: var(--space-4); }
+.marketing-guide dt { font-weight: 600; }
+.marketing-guide dd { margin: 0; color: var(--text-secondary); }
+@media (max-width: 64rem) { .marketing-comparison { grid-template-columns: minmax(0, 1fr); } }

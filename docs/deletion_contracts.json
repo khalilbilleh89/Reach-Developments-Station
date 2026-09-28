@@ -704,6 +704,38 @@
     "handler": "sales.save_buyer"
   },
   {
+    "handler": "marketing.create_bio",
+    "create_route": "PUT /content/bio",
+    "status": "implemented",
+    "removal_route": "POST /content/bio/delete",
+    "ui_file": "frontend/src/components/projects/marketing/MarketingContentTab.tsx",
+    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor."
+  },
+  {
+    "handler": "marketing.create_branding",
+    "create_route": "PUT /content/branding",
+    "status": "implemented",
+    "removal_route": "POST /content/branding/delete",
+    "ui_file": "frontend/src/components/projects/marketing/MarketingContentTab.tsx",
+    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor."
+  },
+  {
+    "handler": "marketing.create_scenario",
+    "create_route": "POST /scenarios",
+    "status": "implemented",
+    "removal_route": "POST /scenarios/{record_id}/delete",
+    "ui_file": "frontend/src/components/projects/marketing/MarketingEconomicsTab.tsx",
+    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor."
+  },
+  {
+    "handler": "marketing.create_indicator",
+    "create_route": "POST /indicators",
+    "status": "implemented",
+    "removal_route": "POST /indicators/{record_id}/delete",
+    "ui_file": "frontend/src/components/projects/marketing/MarketIndicators.tsx",
+    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor."
+  },
+  {
     "handler": "projects.add_project_image",
     "create_route": "POST /{project_id}/images",
     "status": "implemented",

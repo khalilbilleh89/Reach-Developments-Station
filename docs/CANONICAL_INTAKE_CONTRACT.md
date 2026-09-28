@@ -185,6 +185,13 @@ That is target-side preflight, and it is why preflight has a target half at all.
 
 <!-- disposition:EXCLUDED -->
 
+| Table | Disposition |
+| --- | --- |
+| `marketing_content` | New marketing content; never legacy-imported. |
+| `marketing_rental_scenarios` | Rental assumptions; excluded from legacy import. |
+| `marketing_indicators` | Market observations; excluded from legacy import. |
+
+
 | Table | Why not |
 |---|---|
 | `land_parcels` | Land acquisition is history the operating system does not need to run. Add it when somebody names a report that requires it. |

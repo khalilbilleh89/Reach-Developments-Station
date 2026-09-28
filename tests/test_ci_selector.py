@@ -60,9 +60,9 @@ def test_missing_edge_contract_falls_back_to_the_complete_consumer_family() -> N
     assert "tests/modules/test_inventory_workbook.py" in result.paths
 
 
-def test_pricing_change_runs_pricing_and_sales_not_the_commercial_stack() -> None:
+def test_pricing_change_runs_pricing_and_direct_consumers_only() -> None:
     result = chosen("app/modules/pricing/service.py")
-    assert result.domains == ["pricing", "sales"]
+    assert result.domains == ["marketing", "pricing", "sales"]
     assert not {"payment_plans", "collections", "cashflow"} & set(result.domains)
 
 
@@ -78,7 +78,7 @@ def test_two_changed_products_are_cross_domain_without_becoming_full() -> None:
     )
     assert result.risk == "cross-domain"
     assert result.changed_domains == ["collections", "pricing"]
-    assert result.domains == ["cashflow", "collections", "pricing", "sales"]
+    assert result.domains == ["cashflow", "collections", "marketing", "pricing", "sales"]
     assert not result.full
 
 
@@ -261,7 +261,7 @@ def test_github_outputs_are_machine_readable(tmp_path: Path) -> None:
     assert values["backend_required"] == "true"
     assert values["full_required"] == "false"
     assert values["targeted_shards"] == "[1]"
-    assert values["domains"] == '["pricing","sales"]'
+    assert values["domains"] == '["marketing","pricing","sales"]'
 
 
 def test_unusually_large_targeted_plan_uses_three_shards_without_becoming_full() -> None:
