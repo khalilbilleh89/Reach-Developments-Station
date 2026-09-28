@@ -193,6 +193,10 @@ export const settings = {
     symbol?: string | null;
     minor_units: number;
   }) => post<Currency>("/settings/currencies", input),
+  updateCurrency: (id: string, input: { symbol: string | null }) =>
+    patch<Currency>(`/settings/currencies/${id}`, input),
+  deleteCurrency: (id: string, reason: string) =>
+    remove(`/settings/currencies/${id}?${new URLSearchParams({ reason }).toString()}`),
 
   countryPacks: () => get<CountryPack[]>("/settings/country-packs"),
   createCountryPack: (input: {

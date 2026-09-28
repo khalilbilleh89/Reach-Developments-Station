@@ -265,9 +265,22 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
   },
 ];
 
-export type SettingsSection = "users" | "audit" | "account";
+export type SettingsSection = "currencies" | "users" | "audit" | "account";
 
 export const SETTINGS_NAVIGATION: NavGroup<SettingsSection>[] = [
+  {
+    key: "configuration",
+    label: "Configuration",
+    items: [
+      {
+        key: "currencies",
+        label: "Currency registry",
+        icon: "money",
+        description: "Shared currency codes, names and display symbols.",
+        visible: (roles) => roles.has(ROLE_SYSTEM_ADMIN),
+      },
+    ],
+  },
   {
     key: "people",
     label: "People",

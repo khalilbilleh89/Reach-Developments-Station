@@ -594,10 +594,10 @@
   {
     "handler": "settings.create_currency",
     "create_route": "POST /currencies",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Deactivation exists; unused configuration Delete is missing; code-based references require protection."
+    "status": "implemented",
+    "removal_route": "DELETE /currencies/{currency_id}",
+    "ui_file": "frontend/src/components/settings/CurrencySection.tsx",
+    "notes": "System Administrators may permanently delete an unused currency with a reason. Database foreign keys reject deletion when any configuration or business record still references it; deactivation remains available for retained currencies."
   },
   {
     "handler": "settings.create_reference_value",
