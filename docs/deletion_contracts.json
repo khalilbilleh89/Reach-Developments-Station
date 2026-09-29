@@ -766,5 +766,13 @@
     "removal_route": "POST /{agreement_id}/delete",
     "ui_file": "frontend/src/components/projects/AgreementsTab.tsx",
     "notes": "Authorized project-wide writers can delete final-draft library entries with reason and stale-version protection; metadata, document and audit retained. These templates have no client-signature or transaction links."
+  },
+  {
+    "handler": "portfolio.create_action",
+    "create_route": "POST ",
+    "status": "missing",
+    "removal_route": null,
+    "ui_file": "frontend/src/components/portfolio/ActionRecord.tsx",
+    "notes": "Management actions are cancelled through POST /{action_id}/transitions, which retains the action, its reason and its audit history. An unused open action has no Delete; recorded as an existing gap found by the operational audit when the guard began scanning *_api.py routers."
   }
 ]
