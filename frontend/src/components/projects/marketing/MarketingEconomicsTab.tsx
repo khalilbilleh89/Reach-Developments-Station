@@ -51,7 +51,7 @@ export function MarketingEconomicsTab({ projectId, roles, currencyId }: { projec
       })}</div> : null}
     </Card>
     <Card><SectionHeader level={2} title="Unit Rental Returns" description="Open a unit to compare both rental modes and its year-by-year projection." />
-      <Field label="Search units"><input type="search" value={search} onChange={e => { setSearch(e.target.value); setOffset(0); setSelectedId(null); }} /></Field>
+      <Field label="Search units"><input className="input" type="search" value={search} onChange={e => { setSearch(e.target.value); setOffset(0); setSelectedId(null); }} /></Field>
       {units.status === "loading" ? <Loading label="Calculating unit projections…" /> : null}
       {units.status === "denied" ? <Notice tone="info">Unit returns are not available to your access level.</Notice> : null}
       {units.status === "failed" ? <Notice tone="error">{units.message} <Button onClick={units.retry}>Retry</Button></Notice> : null}

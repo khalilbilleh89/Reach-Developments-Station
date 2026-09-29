@@ -20,7 +20,7 @@ export function DeleteRecordButton({ label, onDelete, onDeleted, description, re
   return <>
     <Button variant="danger" onClick={() => { setError(null); setOpen(true); }}>Delete {label}</Button>
     {open ? <PromptDialog title={`Delete ${label}${recordName ? ` ${recordName}` : ""}?`} label="Reason for deletion"
-      description={description ?? "This permanently removes this record. Linked financial and legal history is protected. A building or floor must be empty first. The audit trail is retained."}
+      description={description ?? "This permanently removes this record. Linked financial and legal history is protected. The audit trail is retained."}
       confirmLabel={confirmLabel ?? "Delete permanently"} destructive={destructive} error={error} busy={busy}
       onCancel={() => { if (!busy) setOpen(false); }} onSubmit={async reason => {
         if (busy) return;

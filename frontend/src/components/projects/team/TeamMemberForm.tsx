@@ -34,17 +34,17 @@ export function TeamMemberForm({ projectId, initialTeam, member, onSaved, onClos
         <ValidationSummary error={error} />
         <fieldset disabled={busy} className="team-fields">
           <FormSection title="Person & team" description="Choose a team and enter a name. You can complete the other details now or later.">
-            <Field label="Team"><select name="team" value={values.team} onChange={event => change("team", event.target.value)}>
+            <Field label="Team"><select className="input" name="team" value={values.team} onChange={event => change("team", event.target.value)}>
               <option value="operations">Operations Team</option><option value="engineering">Engineering Team</option>
             </select></Field>
             <FieldRow>
-              <Field label="Name"><input name="name" autoComplete="name" required value={values.name} onChange={event => change("name", event.target.value)} /></Field>
-              <Field label="Title" optional><input name="title" autoComplete="organization-title" value={values.title} onChange={event => change("title", event.target.value)} /></Field>
+              <Field label="Name"><input className="input" name="name" autoComplete="name" required value={values.name} onChange={event => change("name", event.target.value)} /></Field>
+              <Field label="Title" optional><input className="input" name="title" autoComplete="organization-title" value={values.title} onChange={event => change("title", event.target.value)} /></Field>
             </FieldRow>
           </FormSection>
           <FormSection title="Responsibilities & contact" description="Describe what this person handles so everyone knows who to contact.">
-            <Field label="Scope of Work" optional><textarea name="scope_of_work" rows={6} value={values.scope_of_work} onChange={event => change("scope_of_work", event.target.value)} /></Field>
-            <Field label="Email Address" optional><input name="email" type="email" autoComplete="email" value={values.email} onChange={event => change("email", event.target.value)} /></Field>
+            <Field label="Scope of Work" optional><textarea className="input" name="scope_of_work" rows={6} value={values.scope_of_work} onChange={event => change("scope_of_work", event.target.value)} /></Field>
+            <Field label="Email Address" optional><input className="input" name="email" type="email" autoComplete="email" value={values.email} onChange={event => change("email", event.target.value)} /></Field>
           </FormSection>
         </fieldset>
         <FormActions>

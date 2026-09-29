@@ -7,6 +7,7 @@ metadata system from a dynamic-schema engine, and both are tested here.
 
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -226,6 +227,37 @@ def test_a_project_manager_defines_only_their_own_projects_fields(
     )
     assert refused.status_code == 403
     assert "their own project only" in refused.json()["detail"]
+
+
+def test_another_projects_definition_answers_as_missing_not_forbidden(
+    admin_client: TestClient,
+    project_id: str,
+    country_pack_id: str,
+    currency_id: str,
+    inventory_reference_data: None,
+    manager: object,
+    db: Session,
+) -> None:
+    """A project manager on A cannot learn that an identifier names B's definition."""
+    from tests.modules.conftest import grant_access, project_payload
+
+    other = admin_client.post(
+        PROJECTS, json=project_payload(country_pack_id, currency_id, code="FOREIGN")
+    ).json()["id"]
+    admin_client.patch(f"{PROJECTS}/{other}", json={"status": "predevelopment"})
+    foreign = admin_client.post(_definitions(other), json=_field(other)).json()["id"]
+    grant_access(admin_client, project_id, manager)
+    client = client_for(manager.email)
+    change = {"display_label": "Probe", "change_reason": "Probe"}
+
+    real = client.patch(f"{_definitions(project_id)}/{foreign}", json=change)
+    missing = client.patch(f"{_definitions(project_id)}/{uuid.uuid4()}", json=change)
+    via_admin = admin_client.patch(f"{_definitions(project_id)}/{foreign}", json=change)
+
+    assert (real.status_code, real.json()) == (missing.status_code, missing.json())
+    assert real.status_code == 404
+    assert via_admin.status_code == 404
+    assert db.get(CustomFieldDefinition, uuid.UUID(foreign)).display_label != "Probe"
 
 
 # --------------------------------------------------------------------------- #

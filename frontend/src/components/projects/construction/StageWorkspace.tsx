@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Disclosure, Badge, Button, Card, Field, FieldRow, FormActions, Loading, Notice, SubPanel } from "@/components/ui";
 import { stages } from "@/lib/api/stages";
 import type { Stage, UnitProgress, UnitStage } from "@/lib/api/stages";
-import { businessDate, todayISO } from "@/lib/format";
+import { businessDate, eventTime, todayISO } from "@/lib/format";
 import { CONSTRUCTION_STAGE_WRITERS, CONSTRUCTION_STAGE_CONFIGURERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 
@@ -161,7 +161,7 @@ function StageRecord({ stage, canWrite, save }: { stage: UnitStage; canWrite: bo
     </Disclosure> : null}
     {stage.history.length ? <Disclosure title={<> Completion history </>}><ol>{stage.history.map((entry) => <li key={entry.sequence}>
       {entry.completed_date ? `Completed ${businessDate(entry.completed_date)}` : "Reopened"} — {entry.reason}
-      <span className="footnote"> · Recorded {entry.recorded_at} · User {entry.actor_user_id}</span>
+      <span className="footnote"> · Recorded {eventTime(entry.recorded_at)} by {entry.actor_display_name ?? "an unnamed user"}</span>
     </li>)}</ol></Disclosure> : null}
   </SubPanel>;
 }

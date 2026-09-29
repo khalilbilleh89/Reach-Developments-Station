@@ -11,8 +11,12 @@ from app.modules.inventory.permissions import visible_phase_ids
 from app.modules.projects.models import Project
 from app.modules.projects.permissions import require_project_access
 
+#: System Administrator reads everything (owner decision B-03,
+#: docs/SYSTEM_OPERATIONAL_AUDIT.md). Reading only: preparing, editing and
+#: releasing stay with the business roles below, as in Sales.
 READER_ROLES = frozenset(
     {
+        "system_admin",
         "project_manager",
         "design_engineering",
         "finance",

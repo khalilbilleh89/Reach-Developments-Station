@@ -346,3 +346,36 @@ def test_partial_base_and_invalid_terms(
     assert partial.json()["commission_total"] == str(
         (base * Decimal("0.1")).quantize(Decimal("0.01"))
     )
+
+
+def test_system_admin_reads_commissions_but_does_not_prepare_or_release(
+    admin_client: TestClient,
+    finance_client: TestClient,
+    advisor_client: TestClient,
+    project_id: str,
+    active_sale: str,
+) -> None:
+    """Owner decision B-03: System Administrator can open Commissions.
+
+    Reading only — preparing and releasing stay with the business roles, and
+    roles outside the module are still refused.
+    """
+    grant = draft(finance_client, project_id, active_sale)
+
+    listed = admin_client.get(root(project_id))
+    assert listed.status_code == 200, listed.text
+    assert [row["id"] for row in listed.json()] == [grant["id"]]
+    assert admin_client.get(f"{root(project_id)}/{grant['id']}").status_code == 200
+    assert admin_client.get(f"{root(project_id)}/eligible-sales").status_code == 200
+
+    prepared = admin_client.post(
+        root(project_id),
+        json={
+            "sale_contract_id": active_sale,
+            "commissionable_base_amount": grant["sold_price_snapshot"],
+            "granted_rate_fraction": "0.100000",
+        },
+    )
+    assert prepared.status_code == 403
+    assert admin_client.post(f"{root(project_id)}/{grant['id']}/release").status_code == 403
+    assert advisor_client.get(root(project_id)).status_code == 403

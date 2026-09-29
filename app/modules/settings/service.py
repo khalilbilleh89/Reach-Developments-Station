@@ -99,7 +99,12 @@ def create_currency(
         code=normalized, name=name.strip(), symbol=symbol, minor_units=minor_units, is_active=True
     )
     session.add(currency)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        # A concurrent create of the same code passed the check above too.
+        session.rollback()
+        raise ConflictError("A currency with this code already exists.") from exc
     record_event(
         session,
         action="currency.created",
@@ -143,7 +148,12 @@ def update_currency(
     correlation_id: uuid.UUID,
     **changes: object,
 ) -> Currency:
-    currency = get_currency(session, currency_id)
+    # Locked for the same reason as ``delete_currency``: deactivation is decided
+    # by reading which active packs default to this currency, and a pack being
+    # created against it concurrently takes this row's lock first.
+    currency = _lock_currency(session, currency_id)
+    if currency is None:
+        raise NotFoundError("Currency not found.")
     updates = resolve_updates(changes, fields=_CURRENCY_UPDATABLE, clearable=_CURRENCY_CLEARABLE)
     if updates.get("is_active") is False:
         _guard_currency_still_needed(session, currency.id)
@@ -253,8 +263,18 @@ def get_country_pack(session: Session, country_pack_id: uuid.UUID) -> CountryPac
     return pack
 
 
+def _lock_currency(session: Session, currency_id: uuid.UUID) -> Currency | None:
+    """The currency row, locked: it owns the "no active pack on an inactive currency" rule."""
+    return session.scalar(
+        select(Currency)
+        .where(Currency.id == currency_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 def _require_active_currency(session: Session, currency_id: uuid.UUID) -> Currency:
-    currency = session.get(Currency, currency_id)
+    currency = _lock_currency(session, currency_id)
     if currency is None:
         raise ValidationError("Default currency does not exist.")
     if not currency.is_active:

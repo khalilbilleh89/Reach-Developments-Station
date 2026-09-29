@@ -7,6 +7,7 @@ import {
   Button,
   ButtonRow,
   Card,
+  ConfirmDialog,
   DataToolbar,
   EmptyState,
   Field,
@@ -55,7 +56,7 @@ import { businessDate, isPositive, money, percent, todayISO } from "@/lib/format
 import { sectionDescription } from "@/components/shell/navigation";
 
 import {
-  ALLOCATION_METHODS,
+  CREATABLE_ALLOCATION_METHODS,
   DIRECT_COST_TYPES,
   POOL_CATEGORIES,
   POOL_SCOPES,
@@ -805,8 +806,23 @@ function VersionFile({
   const reconciliation = detail.reconciliation;
   const draft = version.status === "draft";
   void projectId;
+  const [removingPool, setRemovingPool] = useState<AllocationVersionDetail["pools"][number] | null>(null);
 
   return (
+    <>
+    {removingPool ? (
+      <ConfirmDialog
+        title={`Remove pool ${removingPool.pool_number}?`}
+        body={`${removingPool.name} (${money(removingPool.amount, code)}) is removed from this draft cost basis. Approved and current versions are unchanged, and the audit history remains.`}
+        confirmLabel="Remove pool"
+        busy={busy}
+        onCancel={() => setRemovingPool(null)}
+        onConfirm={() => {
+          onRemovePool(removingPool.id);
+          setRemovingPool(null);
+        }}
+      />
+    ) : null}
     <Card
       title={`Cost basis v${version.version_number}`}
       description={version.change_reason}
@@ -959,7 +975,11 @@ function VersionFile({
                   <td className="num">
                     {money(pool.amount, code)}
                     <span className="cell-secondary">
-                      {pool.source_kind === "project_land" ? "From the land register" : "Forecast input"}
+                      {pool.source_kind === "project_land"
+                        ? "From the land register"
+                        : pool.source_kind === "construction_forecast"
+                          ? "From the construction forecast"
+                          : "Entered manually"}
                     </span>
                   </td>
                   <td className="num">{line ? money(line.allocated_total, code) : "—"}</td>
@@ -974,7 +994,7 @@ function VersionFile({
                   </td>
                   {canWrite && draft ? (
                     <td>
-                      <Button small variant="quiet" disabled={busy} onClick={() => onRemovePool(pool.id)}>
+                      <Button small variant="quiet" disabled={busy} onClick={() => setRemovingPool(pool)}>
                         Remove
                       </Button>
                     </td>
@@ -989,6 +1009,7 @@ function VersionFile({
         <p className="footnote">Allocated and variance per pool appear after Calculate.</p>
       ) : null}
     </Card>
+    </>
   );
 }
 
@@ -1195,7 +1216,7 @@ function NewPoolDialog({
         hint="Weighted and raw area read the approved area schedule; revenue value reads the current approved price."
       >
         <select className="input" value={method} onChange={(event) => setMethod(event.target.value as AllocationMethod)}>
-          {ALLOCATION_METHODS.map((value) => (
+          {CREATABLE_ALLOCATION_METHODS.map((value) => (
             <option key={value} value={value}>
               {methodLabel(value)}
             </option>

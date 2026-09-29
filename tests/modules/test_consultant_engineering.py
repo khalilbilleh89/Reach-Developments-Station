@@ -91,3 +91,32 @@ def test_second_activation_conflicts(manager_member_client: TestClient, project_
 
 def test_commercial_reader_is_refused(advisor_client: TestClient, project_id: str) -> None:
     assert advisor_client.get(root(project_id)).status_code == 403
+
+
+def test_system_admin_reads_the_workspace_but_does_not_edit_it(
+    admin_client: TestClient,
+    manager_member_client: TestClient,
+    legal_client: TestClient,
+    project_id: str,
+) -> None:
+    """Owner decision B-03: System Administrator can open Consultant Engineer.
+
+    Reading only — editing stays with Project Manager and Design Engineering,
+    and roles outside the module are still refused.
+    """
+    created = manager_member_client.post(
+        f"{root(project_id)}/engagements",
+        json={"consultant_name": "Atelier One", "agreement_reference": "CE-ADMIN"},
+    )
+    assert created.status_code == 201, created.text
+
+    workspace = admin_client.get(root(project_id))
+    assert workspace.status_code == 200, workspace.text
+    assert [row["id"] for row in workspace.json()["engagements"]] == [created.json()["id"]]
+
+    refused = admin_client.post(
+        f"{root(project_id)}/engagements",
+        json={"consultant_name": "Atelier Two", "agreement_reference": "CE-ADMIN-2"},
+    )
+    assert refused.status_code == 403
+    assert legal_client.get(root(project_id)).status_code == 403

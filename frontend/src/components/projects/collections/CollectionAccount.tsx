@@ -9,6 +9,7 @@ import {
   RecordPage,
   EmptyState,
   Field,
+  FieldRow,
   Form,
   FormActions,
   KeyValue,
@@ -23,7 +24,7 @@ import {
   TableScroll,
 } from "@/components/ui";
 import type { RecordPageFact } from "@/components/ui";
-import { ApiError, collections } from "@/lib/api";
+import { ApiError, collections, sales } from "@/lib/api";
 import type {
   CollectionAction,
   CollectionDispute,
@@ -32,6 +33,7 @@ import type {
   CollectionSaleSummary,
   CollectionWaiver,
   RestructurePreview,
+  SaleCancellation,
 } from "@/lib/api";
 import { businessDate, isPositive, money, todayISO } from "@/lib/format";
 import { CASHFLOW_RECORDERS, hasAnyRole } from "@/lib/roles";
@@ -480,7 +482,7 @@ function PositionTab({
 
 /* ------------------------------------------------------------------------- */
 
-function ActionsTab({
+export function ActionsTab({
   projectId,
   saleId,
   summary,
@@ -508,11 +510,16 @@ function ActionsTab({
     next_action_date: "",
   });
 
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
       setHistory(await collections.actions(projectId, saleId));
-    } catch {
-      setHistory([]);
+      setHistoryError(null);
+    } catch (caught) {
+      // Never "No follow-up recorded": that is a claim about the account.
+      setHistory(null);
+      setHistoryError(caught instanceof ApiError ? caught.message : "Could not load the follow-up history.");
     }
   }, [projectId, saleId]);
 
@@ -657,6 +664,13 @@ function ActionsTab({
         </SubPanel>
       ) : null}
 
+      {historyError ? (
+        <Notice tone="error">
+          {historyError}
+          <Button onClick={() => void load()}>Retry</Button>
+        </Notice>
+      ) : null}
+
       {history === null ? null : history.length === 0 ? (
         <EmptyState
           title="No follow-up recorded"
@@ -699,7 +713,7 @@ function ActionsTab({
 
 /* ------------------------------------------------------------------------- */
 
-function ExceptionsTab({
+export function ExceptionsTab({
   projectId,
   saleId,
   summary,
@@ -730,13 +744,21 @@ function ExceptionsTab({
     reason: "",
   });
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
-    const [d, w] = await Promise.all([
-      collections.disputes(projectId, saleId).catch(() => []),
-      collections.waivers(projectId, saleId).catch(() => []),
+    const [d, w] = await Promise.allSettled([
+      collections.disputes(projectId, saleId),
+      collections.waivers(projectId, saleId),
     ]);
-    setDisputes(d);
-    setWaivers(w);
+    // A failed read stays unknown (null), never an empty "No disputes" list.
+    setDisputes(d.status === "fulfilled" ? d.value : null);
+    setWaivers(w.status === "fulfilled" ? w.value : null);
+    setLoadError(
+      d.status === "rejected" || w.status === "rejected"
+        ? "Could not load every dispute and waiver for this account."
+        : null,
+    );
   }, [projectId, saleId]);
 
   useEffect(() => {
@@ -757,6 +779,13 @@ function ExceptionsTab({
         Neither a dispute nor a waiver changes what is owed. A contested instalment keeps its
         balance and keeps ageing; an approved waiver pauses collection action and nothing else.
       </Notice>
+
+      {loadError ? (
+        <Notice tone="error">
+          {loadError}
+          <Button onClick={() => void load()}>Retry</Button>
+        </Notice>
+      ) : null}
 
       <SubPanel title="Disputes">
         {canCollect ? (
@@ -1065,7 +1094,7 @@ function ExceptionsTab({
 
 /* ------------------------------------------------------------------------- */
 
-function RestructureTab({
+export function RestructureTab({
   projectId,
   saleId,
   summary,
@@ -1087,13 +1116,31 @@ function RestructureTab({
   const [raising, setRaising] = useState(false);
   const [abandoning, setAbandoning] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
-    const rows = await collections.restructures(projectId, saleId).catch(() => []);
+    let rows: CollectionRestructure[];
+    try {
+      rows = await collections.restructures(projectId, saleId);
+    } catch (caught) {
+      // Unknown history is not "never restructured", and must not offer a
+      // second restructure beside one that may already be open.
+      setHistory(null);
+      setPreview(null);
+      setLoadError(caught instanceof ApiError ? caught.message : "Could not load the restructures.");
+      return;
+    }
     setHistory(rows);
     const open = rows.find((row) => row.status === "open");
-    setPreview(
-      open ? await collections.previewRestructure(projectId, open.id).catch(() => null) : null,
-    );
+    try {
+      setPreview(open ? await collections.previewRestructure(projectId, open.id) : null);
+      setLoadError(null);
+    } catch (caught) {
+      setPreview(null);
+      setLoadError(
+        caught instanceof ApiError ? caught.message : "Could not load what applying the open restructure would do.",
+      );
+    }
   }, [projectId, saleId]);
 
   useEffect(() => {
@@ -1135,7 +1182,14 @@ function RestructureTab({
         />
       </MetricGroup>
 
-      {open === null && canCollect ? (
+      {loadError ? (
+        <Notice tone="error">
+          {loadError}
+          <Button onClick={() => void load()}>Retry</Button>
+        </Notice>
+      ) : null}
+
+      {history !== null && open === null && canCollect ? (
         <SubPanel
           title="Raise a restructure"
           actions={
@@ -1247,9 +1301,13 @@ function RestructureTab({
                 {preview.lines.map((line, index) => (
                   <tr key={`${line.receipt_id}-${line.installment_id}-${index}`}>
                     <th scope="row" className="mono">
-                      {line.receipt_id.slice(0, 8)}
+                      {line.receipt_number ?? "Receipt"}
                     </th>
-                    <td className="mono">{line.installment_id.slice(0, 8)}</td>
+                    <td>
+                      {line.installment_sequence === null
+                        ? "Replacement instalment"
+                        : `${line.installment_sequence}. ${line.installment_label ?? ""}`}
+                    </td>
                     <td className="num">{money(line.amount, currencyCode)}</td>
                   </tr>
                 ))}
@@ -1315,7 +1373,11 @@ function RestructureTab({
 
 /* ------------------------------------------------------------------------- */
 
-function RefundsTab({
+function emptyRefund() {
+  return { amount: "", refund_date: todayISO(), bank_reference: "", notes: "" };
+}
+
+export function RefundsTab({
   projectId,
   saleId,
   summary,
@@ -1339,6 +1401,13 @@ function RefundsTab({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refunds, setRefunds] = useState<CollectionRefund[] | null>(null);
   const [reversing, setReversing] = useState<CollectionRefund | null>(null);
+  // The cancellation a repayment is recorded against. Only a person who can
+  // record one needs it, so only they ask for the deal file.
+  const [cancellation, setCancellation] = useState<SaleCancellation | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [refundForm, setRefundForm] = useState(emptyRefund);
+
+  const [cancellationError, setCancellationError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -1348,6 +1417,41 @@ function RefundsTab({
       setLoadError(caught instanceof ApiError ? caught.message : "Could not load the refunds.");
     }
   }, [projectId, saleId]);
+
+  // Read separately: a failed deal-file read must not hide the refund register,
+  // it only withholds the recording form until it succeeds.
+  const loadCancellation = useCallback(async () => {
+    if (!canCollect) return;
+    try {
+      setCancellation((await sales.contract(projectId, saleId)).cancellation ?? null);
+      setCancellationError(null);
+    } catch (caught) {
+      setCancellation(null);
+      setCancellationError(
+        caught instanceof ApiError ? caught.message : "Could not read the cancellation on the deal file.",
+      );
+    }
+  }, [projectId, saleId, canCollect]);
+
+  useEffect(() => {
+    void (async () => {
+      await loadCancellation();
+    })();
+  }, [loadCancellation]);
+
+  // The server decides again on every request; this only decides whether the
+  // form is worth offering: an approved, live cancellation with money still owed.
+  const approvedTerms =
+    cancellation !== null &&
+    cancellation.status !== "withdrawn" &&
+    cancellation.financial_approval_required &&
+    cancellation.financial_approved_at !== null &&
+    isPositive(summary.refund_outstanding);
+  // Terms can be approved while the case is still running, but the money only
+  // leaves once the cancellation has completed and the unit is back (owner
+  // decision B-01) — the same test the server applies.
+  const unitReturnedOn = cancellation?.status === "completed" ? cancellation.unit_return_date : null;
+  const payable = approvedTerms && unitReturnedOn !== null && unitReturnedOn <= todayISO();
 
   useEffect(() => {
     void (async () => {
@@ -1467,10 +1571,112 @@ function RefundsTab({
         </TableScroll>
       )}
 
-      {canCollect ? (
+      {canCollect && approvedTerms && !payable ? (
+        <Notice tone="info">
+          Refund terms are approved. Repayment can be recorded after the cancellation is completed
+          and the unit has been returned.
+        </Notice>
+      ) : null}
+
+      {canCollect && payable && cancellation ? (
+        <SubPanel
+          title="Record a repayment"
+          actions={
+            <Button data-leaves-editor={recording || undefined} onClick={() => setRecording(!recording)}>
+              {recording ? "Cancel" : "Record a repayment"}
+            </Button>
+          }
+        >
+          {recording ? (
+            <Form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (busy) return;
+                void onAct(
+                  () =>
+                    collections.recordRefund(projectId, saleId, {
+                      cancellation_id: cancellation.id,
+                      amount: refundForm.amount,
+                      refund_date: refundForm.refund_date,
+                      bank_reference: refundForm.bank_reference || null,
+                      notes: refundForm.notes || null,
+                    }),
+                  "Repayment recorded. It counts as paid once Finance confirms it.",
+                ).then((saved) => {
+                  if (!saved) return;
+                  setRecording(false);
+                  setRefundForm(emptyRefund());
+                  void load();
+                  void loadCancellation();
+                });
+              }}
+            >
+              <FieldRow columns={3}>
+                <Field
+                  label="Amount"
+                  hint={`Up to ${money(summary.refund_outstanding, currencyCode)} still to pay, in the contract's currency.`}
+                >
+                  <MoneyInput
+                    code={currencyCode}
+                    value={refundForm.amount}
+                    onChange={(value) => setRefundForm({ ...refundForm, amount: value })}
+                    required
+                  />
+                </Field>
+                <Field
+                  label="Date paid"
+                  hint="The day the money left: not before the unit was returned, and not a future date."
+                >
+                  <input
+                    className="input"
+                    type="date"
+                    value={refundForm.refund_date}
+                    min={unitReturnedOn ?? undefined}
+                    max={todayISO()}
+                    onChange={(event) => setRefundForm({ ...refundForm, refund_date: event.target.value })}
+                    required
+                  />
+                </Field>
+                <Field label="Bank reference" optional>
+                  <input
+                    className="input"
+                    value={refundForm.bank_reference}
+                    maxLength={200}
+                    onChange={(event) => setRefundForm({ ...refundForm, bank_reference: event.target.value })}
+                  />
+                </Field>
+              </FieldRow>
+              <Field label="Notes" optional>
+                <textarea
+                  className="input"
+                  value={refundForm.notes}
+                  rows={2}
+                  maxLength={2000}
+                  onChange={(event) => setRefundForm({ ...refundForm, notes: event.target.value })}
+                />
+              </Field>
+              <FormActions>
+                <Button type="submit" variant="primary" disabled={busy}>
+                  Record repayment
+                </Button>
+              </FormActions>
+            </Form>
+          ) : (
+            <p className="hint">
+              A recorded repayment is a claim that money left. It changes nothing still to pay until
+              Finance confirms it.
+            </p>
+          )}
+        </SubPanel>
+      ) : canCollect && cancellationError && isPositive(summary.refund_outstanding) ? (
+        <Notice tone="error">
+          {cancellationError} Repayments can be recorded once it loads.
+          <Button onClick={() => void loadCancellation()}>Retry</Button>
+        </Notice>
+      ) : canCollect && isPositive(summary.refund_outstanding) ? (
         <p className="hint">
-          Record a repayment from the cancellation on the deal file, where the amount due and its
-          approval live.
+          A repayment can be recorded once the cancellation&apos;s financial terms are approved on
+          the deal file.
         </p>
       ) : null}
 

@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy import select
 
-from app.core.errors import ValidationError
+from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import (
     ActiveActor,
     ActorContext,
@@ -31,6 +31,7 @@ from app.modules.projects.permissions import (
     require_project_writer,
     require_technical_writer,
     visible_projects,
+    whole_project_ids,
 )
 from app.modules.projects.schemas import (
     DocumentReferenceCreateRequest,
@@ -249,6 +250,26 @@ def list_project_images(project: AccessibleProject, session: DbSession) -> list[
     return images.list_images(session, project.id)
 
 
+def _require_gallery_writer(session: DbSession, project: Project, actor: ActorContext) -> None:
+    """Galleries present the whole project, so a selected-phase member cannot change them.
+
+    The same rule as Team, Agreements, Marketing and FAQs: seeing part of a
+    project is not authority over what represents all of it.
+    """
+    require_project_writer(actor)
+    if (
+        session.scalar(
+            select(Project.id).where(
+                Project.id.in_(whole_project_ids(actor)), Project.id == project.id
+            )
+        )
+        is None
+    ):
+        raise PermissionDeniedError(
+            "Only whole-project administrators and project managers can change project images."
+        )
+
+
 @router.post(
     "/{project_id}/images",
     response_model=ProjectImageRead,
@@ -263,7 +284,7 @@ async def add_project_image(
     category: Annotated[str, Query(max_length=24)],
     filename: Annotated[str, Query(min_length=1, max_length=1024)],
 ) -> ProjectImage:
-    require_project_writer(actor)
+    _require_gallery_writer(session, project, actor)
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
@@ -309,7 +330,7 @@ def remove_project_image(
     session: DbSession,
     actor: ActiveActor,
 ) -> Response:
-    require_project_writer(actor)
+    _require_gallery_writer(session, project, actor)
     images.remove_image(
         session,
         project_id=project.id,

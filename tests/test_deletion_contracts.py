@@ -13,14 +13,14 @@ def test_every_record_creator_has_a_reviewed_deletion_contract() -> None:
     indexed = {row["handler"]: row for row in contracts}
     assert len(indexed) == len(contracts), "Duplicate deletion contract"
     creators = {}
-    for path in [
-        *(ROOT / "app/modules").glob("*/api.py"),
-        ROOT / "app/modules/projects/company_api.py",
-        ROOT / "app/modules/projects/team_api.py",
-        ROOT / "app/modules/projects/agreement_api.py",
-        ROOT / "app/modules/sales/operations_api.py",
-        ROOT / "app/modules/sales/faq_api.py",
-    ]:
+    # Every router file, including the ``<name>_api.py`` routers that sit beside
+    # a module's ``api.py``: naming them one by one missed Management Actions.
+    for path in sorted(
+        {
+            *(ROOT / "app/modules").glob("*/api.py"),
+            *(ROOT / "app/modules").glob("*/*_api.py"),
+        }
+    ):
         for function in ast.parse(path.read_text(encoding="utf-8")).body:
             if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue

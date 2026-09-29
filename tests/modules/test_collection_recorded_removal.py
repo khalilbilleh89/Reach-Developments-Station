@@ -2,6 +2,7 @@
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from threading import Barrier
 
 import pytest
@@ -18,10 +19,27 @@ from tests.modules.conftest import (
     collections_url,
     governing_installments,
     grant_access,
+    insert_legacy_refund,
     project_payload,
     record_receipt,
 )
+from tests.modules.test_collection_refunds import UNIT_RETURNED_ON
+from tests.modules.test_collection_refunds import approved_open_case as approved_open_case
 from tests.modules.test_collection_refunds import cancelled_sale as cancelled_sale
+
+
+@pytest.fixture
+def case_for(request: pytest.FixtureRequest) -> tuple[str, str]:
+    """Where each kind of entry is recorded against.
+
+    A receipt is recorded while the case is still running; a repayment only
+    once the cancellation has completed and the unit is back (owner decision
+    B-01).
+    """
+    kind = request.node.callspec.params["kind"]
+    fixture = "approved_open_case" if kind == "receipt" else "cancelled_sale"
+    result: tuple[str, str] = request.getfixturevalue(fixture)
+    return result
 
 
 def record(client: TestClient, project_id: str, sale: tuple[str, str], kind: str) -> dict:
@@ -34,7 +52,7 @@ def record(client: TestClient, project_id: str, sale: tuple[str, str], kind: str
             json={
                 "cancellation_id": cancellation_id,
                 "amount": "100.00",
-                "refund_date": "2026-06-01",
+                "refund_date": UNIT_RETURNED_ON,
             },
         )
     )
@@ -53,16 +71,14 @@ def test_void_enforces_roles_scope_reason_and_retains_audit_without_cash(
     project_id: str,
     country_pack_id: str,
     currency_id: str,
-    cancelled_sale: tuple[str, str],
+    case_for: tuple[str, str],
     db: Session,
 ) -> None:
-    row = record(collections_client, project_id, cancelled_sale, kind)
+    row = record(collections_client, project_id, case_for, kind)
     base = f"{collections_url(project_id)}/{kind}s/{row['id']}"
     body = {"reason": "Duplicate unconfirmed entry"}
-    before = collection_account(collections_client, project_id, cancelled_sale[0])
-    historical = collection_account(
-        collections_client, project_id, cancelled_sale[0], as_of="2026-07-01"
-    )
+    before = collection_account(collections_client, project_id, case_for[0])
+    historical = collection_account(collections_client, project_id, case_for[0], as_of="2026-07-01")
     for denied in (finance_client, admin_client, auditor_client):
         assert denied.post(base + "/void", json=body).status_code == 403
     for blank in ("", " \t\n"):
@@ -99,12 +115,10 @@ def test_void_enforces_roles_scope_reason_and_retains_audit_without_cash(
     assert removed.json()["reversal_reason"] == body["reason"]
     assert collections_client.post(base + "/void", json=body).status_code == 409
     assert finance_client.post(base + "/confirm", json={}).status_code == 409
-    listing = collections_client.get(
-        f"{collections_url(project_id)}/sales/{cancelled_sale[0]}/{kind}s"
-    )
+    listing = collections_client.get(f"{collections_url(project_id)}/sales/{case_for[0]}/{kind}s")
     assert listing.status_code == 200
     assert any(item["id"] == row["id"] and item["status"] == "reversed" for item in listing.json())
-    after = collection_account(collections_client, project_id, cancelled_sale[0])
+    after = collection_account(collections_client, project_id, case_for[0])
     for key in (
         "confirmed_receipts_total",
         "allocated_total",
@@ -116,7 +130,7 @@ def test_void_enforces_roles_scope_reason_and_retains_audit_without_cash(
     ):
         assert after[key] == before[key], key
     assert (
-        collection_account(collections_client, project_id, cancelled_sale[0], as_of="2026-07-01")
+        collection_account(collections_client, project_id, case_for[0], as_of="2026-07-01")
         == historical
     )
     events = db.scalars(
@@ -161,10 +175,10 @@ def test_confirmed_cash_cannot_be_voided_or_reversed_by_collections(
 def test_active_allocations_block_removal_until_explicitly_reversed(
     collections_client: TestClient,
     project_id: str,
-    cancelled_sale: tuple[str, str],
+    approved_open_case: tuple[str, str],
 ) -> None:
-    row = record(collections_client, project_id, cancelled_sale, "receipt")
-    installment = governing_installments(collections_client, project_id, cancelled_sale[0])[0]
+    row = record(collections_client, project_id, approved_open_case, "receipt")
+    installment = governing_installments(collections_client, project_id, approved_open_case[0])[0]
     created = allocate(
         collections_client, project_id, row["id"], installment["installment_id"], "10.00"
     )
@@ -194,10 +208,10 @@ def test_confirmation_racing_void_has_one_winner(
     collections_client: TestClient,
     finance_client: TestClient,
     project_id: str,
-    cancelled_sale: tuple[str, str],
+    case_for: tuple[str, str],
     db: Session,
 ) -> None:
-    row = record(collections_client, project_id, cancelled_sale, kind)
+    row = record(collections_client, project_id, case_for, kind)
     base = f"{collections_url(project_id)}/{kind}s/{row['id']}"
     barrier = Barrier(2)
     db.rollback()
@@ -216,7 +230,7 @@ def test_confirmation_racing_void_has_one_winner(
         outcomes = [removal.result(timeout=30), confirmation.result(timeout=30)]
     assert sorted(outcomes) == [200, 409]
     rows = collections_client.get(
-        f"{collections_url(project_id)}/sales/{cancelled_sale[0]}/{kind}s"
+        f"{collections_url(project_id)}/sales/{case_for[0]}/{kind}s"
     ).json()
     final = next(item for item in rows if item["id"] == row["id"])
     assert final["status"] == ("reversed" if outcomes[0] == 200 else "confirmed")
@@ -226,19 +240,36 @@ def test_confirmation_racing_void_has_one_winner(
 def test_refund_can_be_removed_after_cancellation_is_withdrawn(
     collections_client: TestClient,
     sales_ops_client: TestClient,
+    collections_officer: User,
     project_id: str,
-    cancelled_sale: tuple[str, str],
+    approved_open_case: tuple[str, str],
+    db: Session,
 ) -> None:
-    row = record(collections_client, project_id, cancelled_sale, "refund")
+    """A repayment keyed against a running case before B-01, left behind by withdrawal.
+
+    Only a completed case can be repaid now, and a completed case cannot be
+    withdrawn, so this unconfirmed row is history the rule inherited; it must
+    still be removable.
+    """
+    sale_id, cancellation_id = approved_open_case
+    refund_id = insert_legacy_refund(
+        db,
+        project_id=project_id,
+        sale_id=sale_id,
+        cancellation_id=cancellation_id,
+        amount="100.00",
+        refund_date=date(2026, 6, 1),
+        recorded_by=collections_officer.id,
+    )
     withdrawn = sales_ops_client.post(
-        f"{PROJECTS}/{project_id}/sales/cancellations/{cancelled_sale[1]}/advance",
+        f"{PROJECTS}/{project_id}/sales/cancellations/{cancellation_id}/advance",
         json={"to_status": "withdrawn", "reason": "The parties settled"},
     )
     assert withdrawn.status_code == 200, withdrawn.text
-    account = collection_account(collections_client, project_id, cancelled_sale[0])
+    account = collection_account(collections_client, project_id, sale_id)
     assert account["refund_due_total"] == "0.00"
     removed = collections_client.post(
-        f"{collections_url(project_id)}/refunds/{row['id']}/void",
+        f"{collections_url(project_id)}/refunds/{refund_id}/void",
         json={"reason": "Repayment no longer needed"},
     )
     assert removed.status_code == 200, removed.text

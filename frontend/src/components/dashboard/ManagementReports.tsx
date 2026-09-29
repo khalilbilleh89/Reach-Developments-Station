@@ -10,7 +10,7 @@ const REPORTS: { section: ProjectSection; title: string; purpose: string }[] = [
   { section: "inventory", title: "Inventory & delivery", purpose: "Open a unit to inspect its physical record, commercial standing and construction stages." },
   { section: "sales", title: "Sales & legal register", purpose: "Inspect reservations, signed contracts, registry dates and cancellations." },
   { section: "collections", title: "Collections & buyer statements", purpose: "Review dated balances, overdue accounts, receipts and unapplied cash." },
-  { section: "construction", title: "Construction control", purpose: "Inspect budget, commitments, certified work and payments separately." },
+  { section: "construction", title: "Construction control", purpose: "Inspect signed contracts, commitments, certified work and payments separately." },
   { section: "economics", title: "Project profitability", purpose: "Review the approved cost basis and the server's comparable-unit coverage." },
   { section: "cashflow", title: "Cashflow & management reports", purpose: "Choose an as-of date, inspect funding and reconciliation, and export the dated source rows." },
   { section: "permits", title: "Permit tracker", purpose: "Inspect consent dates, blocking flags and statutory delays." },

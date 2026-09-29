@@ -334,15 +334,27 @@ def test_two_correction_attempts_serialize_and_only_one_commits(
 ) -> None:
     targets = (_currency(admin_client, "USD"), _currency(admin_client, "EUR"))
 
-    def attempt(target: str) -> int:
-        with client_for(admin.email) as client:
+    # Each client is a separate application, and FastAPI builds a route's
+    # dependency model on the first request that walks past it. That build
+    # silences a pydantic warning with ``warnings.catch_warnings``, which swaps
+    # process-global filters and is not thread-safe: two first requests racing
+    # in two threads could restore each other's filters and turn the silenced
+    # warning into this suite's warnings-as-errors 500. Walking every route once
+    # per client, here in the main thread, leaves only the corrections racing.
+    clients = [client_for(admin.email) for _ in targets]
+    for client in clients:
+        assert client.get(f"{PROJECTS}/{project_id}/no-such-route").status_code == 404
+
+    def attempt(pair: tuple[TestClient, str]) -> int:
+        client, target = pair
+        with client:
             return client.post(
                 f"{PROJECTS}/{project_id}/currency-corrections",
                 json=_payload(currency_id, target),
             ).status_code
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        statuses = sorted(executor.map(attempt, targets))
+        statuses = sorted(executor.map(attempt, zip(clients, targets, strict=True)))
 
     assert statuses == [200, 409]
     db.expire_all()

@@ -25,7 +25,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, select
+from sqlalchemy import ColumnElement, Select, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -452,8 +452,23 @@ def list_definitions(
     )
 
 
-def get_definition(session: Session, definition_id: uuid.UUID) -> CustomFieldDefinition:
-    definition = session.get(CustomFieldDefinition, definition_id)
+def get_definition(
+    session: Session, definition_id: uuid.UUID, *, project_id: uuid.UUID
+) -> CustomFieldDefinition:
+    """A definition addressed through ``project_id``: shared ones, or this project's own.
+
+    Another project's definition answers exactly as a missing one does, so the
+    path cannot be used to learn that an identifier names a real record there.
+    """
+    definition = session.scalars(
+        select(CustomFieldDefinition).where(
+            CustomFieldDefinition.id == definition_id,
+            or_(
+                CustomFieldDefinition.project_id.is_(None),
+                CustomFieldDefinition.project_id == project_id,
+            ),
+        )
+    ).first()
     if definition is None:
         raise NotFoundError("Field definition not found.")
     return definition

@@ -40,7 +40,6 @@ from app.core.patching import resolve_updates
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.inventory import custom_fields as inventory_fields
-from app.modules.inventory import models as inventory_models
 from app.modules.inventory import service as inventory
 from app.modules.inventory.configuration import require_option
 from app.modules.inventory.models import (
@@ -54,7 +53,6 @@ from app.modules.inventory.models import (
     CATEGORY_VIEW_CLASS,
     AreaType,
     Building,
-    CustomFieldDefinition,
     CustomFieldOption,
     Floor,
     InventorySubAsset,
@@ -1104,17 +1102,22 @@ def _require_custom_field_source(
     So a decimal, text, integer or date field is refused here rather than
     accepted and silently never matched.
     """
-    definition = session.get(CustomFieldDefinition, definition_id)
-    if definition is None:
-        raise ValidationError("That custom field does not exist.")
-    if definition.entity_type != inventory_models.ENTITY_UNIT:
-        raise ValidationError("A premium can only read a unit custom field.")
     applicable = {
-        item.id for item in inventory_fields.unit_definitions_of_project(session, project=project)
+        item.id: item
+        for item in inventory_fields.unit_definitions_of_project(session, project=project)
     }
-    if definition.id not in applicable:
-        # Covers another project's field, another country pack's field, one
-        # that has been retired, and one whose validity window has closed.
+    definition = applicable.get(definition_id)
+    if definition is None:
+        try:
+            own = inventory_fields.get_definition(session, definition_id, project_id=project.id)
+        except NotFoundError:
+            own = None
+        if own is not None and own.entity_type != "unit":
+            raise ValidationError("A premium can only read a unit custom field.")
+        # One answer for an unknown identifier, another project's field, another
+        # country pack's field, a non-unit field, one that has been retired and
+        # one whose validity window has closed: distinguishing them would tell a
+        # caller that an identifier names a real record somewhere else.
         raise ValidationError("That custom field does not apply to units of this project.")
     if definition.data_type == "boolean":
         if option_code is not None:

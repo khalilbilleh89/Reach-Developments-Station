@@ -77,6 +77,19 @@ export const ALLOCATION_METHODS: AllocationMethod[] = [
   "custom_driver",
 ];
 
+/**
+ * The methods a new pool may be created with from this screen.
+ *
+ * `custom_driver` is left out on purpose: a custom-driver pool cannot be
+ * calculated until every eligible unit has a driver value, and no screen can
+ * enter them yet (docs/SYSTEM_OPERATIONAL_AUDIT.md, follow-up). Offering it
+ * created a pool the operator could never finish. Existing custom-driver pools
+ * are still read, labelled and removable.
+ */
+export const CREATABLE_ALLOCATION_METHODS: AllocationMethod[] = ALLOCATION_METHODS.filter(
+  (method) => method !== "custom_driver",
+);
+
 export function methodLabel(method: AllocationMethod): string {
   return METHOD_LABELS[method] ?? method;
 }

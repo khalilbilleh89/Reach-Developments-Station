@@ -31,6 +31,9 @@ export function ProjectImages({ projectId, canEdit }: { projectId: string; canEd
     setBusy(true);
     setNotice(null);
     const failures: string[] = [];
+    // Only files the server refused stay selected, so pressing the button again
+    // retries those and never uploads an already-stored image a second time.
+    const retry: File[] = [];
     let uploaded = 0;
     for (const file of files) {
       if (file.size === 0 || file.size > MAX_IMAGE_BYTES) {
@@ -42,6 +45,7 @@ export function ProjectImages({ projectId, canEdit }: { projectId: string; canEd
         uploaded += 1;
       } catch (caught) {
         failures.push(`${file.name}: ${errorMessage(caught, "could not upload image.")}`);
+        retry.push(file);
       }
     }
     // Every file is attempted independently. Reload once at the end so a
@@ -50,8 +54,10 @@ export function ProjectImages({ projectId, canEdit }: { projectId: string; canEd
     if (failures.length) {
       setNotice({
         tone: "error",
-        text: `${uploaded} uploaded. ${failures.join(" ")}`,
+        text: `${uploaded} uploaded. ${failures.join(" ")}${retry.length ? ` Press Retry to try the ${retry.length} that failed again.` : ""}`,
       });
+      setFiles(retry);
+      setInputRevision(value => value + 1);
     } else {
       setNotice({ tone: "success", text: `${uploaded} image${uploaded === 1 ? "" : "s"} added.` });
       setFiles([]);
@@ -88,6 +94,7 @@ export function ProjectImages({ projectId, canEdit }: { projectId: string; canEd
             <select
               className="input"
               value={category}
+              disabled={busy}
               onChange={event => setCategory(event.target.value as ProjectImage["category"])}
             >
               {CATEGORIES.map(option => (
@@ -102,11 +109,16 @@ export function ProjectImages({ projectId, canEdit }: { projectId: string; canEd
               type="file"
               accept="image/jpeg,image/png,image/webp"
               multiple
+              disabled={busy}
               onChange={event => setFiles(Array.from(event.target.files ?? []))}
             />
           </Field>
           <Button variant="primary" onClick={() => void upload()} disabled={busy || files.length === 0}>
-            {busy ? "Working…" : `Add ${files.length || ""} image${files.length === 1 ? "" : "s"}`}
+            {busy
+              ? "Working…"
+              : notice?.tone === "error" && files.length
+                ? `Retry ${files.length} image${files.length === 1 ? "" : "s"}`
+                : `Add ${files.length || ""} image${files.length === 1 ? "" : "s"}`}
           </Button>
         </div>
       ) : null}

@@ -190,12 +190,14 @@ export const CASHFLOW_RECORDERS: Roles = new Set(["finance"]);
 /** Narrow Pre-Launch entry authority; never grants generic cash recording. */
 export const PRELAUNCH_RECORDERS: Roles = new Set(["finance", "project_manager"]);
 
+// System Administrator reads Consultant Engineer and Commissions (owner decision
+// B-03); editing, preparing and releasing stay with the business roles below.
 export const CONSULTANT_READERS: Roles = new Set([
-  "project_manager", "design_engineering", "finance", "approver_cfo", "executive_viewer", "auditor",
+  "system_admin", "project_manager", "design_engineering", "finance", "approver_cfo", "executive_viewer", "auditor",
 ]);
 export const CONSULTANT_EDITORS: Roles = new Set(["project_manager", "design_engineering"]);
 export const COMMISSION_READERS: Roles = new Set([
-  "project_manager", "sales_operations", "finance", "approver_cfo", "executive_viewer", "auditor",
+  "system_admin", "project_manager", "sales_operations", "finance", "approver_cfo", "executive_viewer", "auditor",
 ]);
 export const COMMISSION_PREPARERS: Roles = new Set(["project_manager", "sales_operations", "finance"]);
 export const COMMISSION_RELEASERS: Roles = new Set(["finance", "approver_cfo"]);

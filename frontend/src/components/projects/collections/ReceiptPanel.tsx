@@ -82,6 +82,9 @@ export function ReceiptPanel({
   });
   const [applying, setApplying] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<SuggestedAllocation[]>([]);
+  // A failed suggestion read is not "nothing outstanding": that sentence is a
+  // statement about money, so a failure keeps its own state and a Retry.
+  const [suggestionsFailed, setSuggestionsFailed] = useState(false);
   const [allocation, setAllocation] = useState({ installment_id: "", amount: "" });
   const [reversing, setReversing] = useState<{ kind: "receipt" | "allocation"; id: string } | null>(
     null,
@@ -132,10 +135,16 @@ export function ReceiptPanel({
   const openAllocation = async (receipt: Receipt) => {
     setApplying(receipt.id);
     setAllocation({ installment_id: "", amount: "" });
+    await loadSuggestions(receipt.id);
+  };
+
+  const loadSuggestions = async (receiptId: string) => {
     try {
-      setSuggestions(await collections.suggestions(projectId, receipt.id));
+      setSuggestions(await collections.suggestions(projectId, receiptId));
+      setSuggestionsFailed(false);
     } catch {
       setSuggestions([]);
+      setSuggestionsFailed(true);
     }
   };
 
@@ -385,7 +394,12 @@ export function ReceiptPanel({
           title="Apply this receipt"
           actions={<Button onClick={() => setApplying(null)}>Cancel</Button>}
         >
-          {suggestions.length > 0 ? (
+          {suggestionsFailed ? (
+            <Notice tone="error">
+              Suggestions could not be loaded. You can still choose an instalment below.
+              <Button onClick={() => void loadSuggestions(applying)}>Retry suggestions</Button>
+            </Notice>
+          ) : suggestions.length > 0 ? (
             <div className="stack">
               <p className="hint">
                 Suggested, oldest actionable instalment first. Change anything you like — the
@@ -447,7 +461,10 @@ export function ReceiptPanel({
                     amount: allocation.amount,
                   }),
                 "Cash applied.",
-              ).then(() => setAllocation({ installment_id: "", amount: "" }));
+              ).then((saved) => {
+                // A refused allocation keeps what the operator entered beside the error.
+                if (saved) setAllocation({ installment_id: "", amount: "" });
+              });
             }}
           >
             <Field label="Instalment">

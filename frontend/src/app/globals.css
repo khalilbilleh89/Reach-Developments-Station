@@ -4522,11 +4522,25 @@ input[type="file"].input {
   margin-bottom: var(--space-4);
 }
 
+/* The Overview card is narrower than the viewport breakpoint suggests: beside
+ * "Needs attention" at 1024px it is about 28rem. Below 34rem of its own width
+ * the ledger drops under the stage, so a label and its amount never overlap. */
+.currency-block {
+  container-type: inline-size;
+}
+
+@container (max-width: 34rem) {
+  .ledger-position {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .position-stage {
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
+  container-type: inline-size;
   padding: var(--space-5) var(--space-5) var(--space-4);
   border-radius: var(--radius-control);
   background-color: var(--surface-stage);
@@ -4537,11 +4551,14 @@ input[type="file"].input {
 }
 
 /* The stage's figure is large but not the page's largest: a card's answer,
- * not the page's. It wraps rather than escaping its tint. */
+ * not the page's. It stays inside its tint by stepping down with the stage's
+ * width and wrapping only between the currency code and the amount. Breaking
+ * inside the digits is refused: "325,000.0 / 0" reads as two numbers. Only an
+ * amount too long for any size may break, rather than escape the tint. */
 .position-stage .position-value {
-  font-size: var(--metric-hero);
+  font-size: min(var(--metric-hero), 13cqi);
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .position-stage .position-label {

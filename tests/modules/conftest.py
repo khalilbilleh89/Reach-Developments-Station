@@ -8,7 +8,9 @@ tests should fail if that stops being true.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -18,6 +20,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.modules.access.models import User
+from app.modules.collections.models import CollectionRefund
+from app.modules.sales.models import SaleContract
 from tests.factories import client_for, make_user
 
 SETTINGS = "/api/v1/settings"
@@ -2473,6 +2477,59 @@ def pay_construction(
     return payment_id
 
 
+def complete_cancellation(
+    sales_ops: TestClient, project_id: str, cancellation_id: str, **body: object
+) -> dict[str, Any]:
+    """Advance a cancellation to completion: the contract ends and the unit returns."""
+    base = f"{sales_url(project_id)}/cancellations/{cancellation_id}"
+    for status in ("termination_pending_approval", "ready_for_unit_return"):
+        advanced = sales_ops.post(f"{base}/advance", json={"to_status": status})
+        assert advanced.status_code == 200, advanced.text
+    completed = sales_ops.post(f"{base}/complete", json=body)
+    assert completed.status_code == 200, completed.text
+    result: dict[str, Any] = completed.json()
+    return result
+
+
+def insert_legacy_refund(
+    db: Session,
+    *,
+    project_id: str,
+    sale_id: str,
+    cancellation_id: str,
+    amount: str,
+    refund_date: date,
+    recorded_by: uuid.UUID,
+    confirmed_by: uuid.UUID | None = None,
+    confirmed_at: datetime | None = None,
+) -> str:
+    """A refund written before owner decision B-01, when a running case could be repaid.
+
+    The API no longer creates one — repayment now waits for the cancellation to
+    take effect — but such rows may exist, and what the reports, the ledger and
+    the confirmation rule do with them still matters. Written directly, with
+    the attribution a real row would carry.
+    """
+    sale = db.get(SaleContract, uuid.UUID(sale_id))
+    assert sale is not None and str(sale.project_id) == project_id
+    refund = CollectionRefund(
+        project_id=sale.project_id,
+        sale_contract_id=sale.id,
+        cancellation_id=uuid.UUID(cancellation_id),
+        refund_number=f"RFD-L{uuid.uuid4().hex[:6].upper()}",
+        currency_id=sale.currency_id,
+        amount=Decimal(amount),
+        refund_date=refund_date,
+        status="confirmed" if confirmed_by is not None else "recorded",
+        recorded_by_user_id=recorded_by,
+        confirmed_at=(confirmed_at or datetime.now(UTC)) if confirmed_by is not None else None,
+        confirmed_by_user_id=confirmed_by,
+    )
+    db.add(refund)
+    db.commit()
+    return str(refund.id)
+
+
 def refund_buyer(
     sales_ops: TestClient,
     cfo: TestClient,
@@ -2504,6 +2561,9 @@ def refund_buyer(
         },
     )
     assert approved.status_code == 200, approved.text
+    # Money goes back only once the cancellation has taken effect (owner
+    # decision B-01): end the contract and take the unit back first.
+    complete_cancellation(sales_ops, project_id, cancellation_id)
     recorded = collections.post(
         f"{collections_url(project_id)}/sales/{sale_id}/refunds",
         json={

@@ -77,7 +77,7 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
           <th scope="row">{agent.display_name}</th><td>{agent.country ?? "—"}</td><td>{agent.branch ?? "—"}</td><td>{agent.branch_leader ?? "—"}</td>
           <td>{agent.is_active ? "Active" : "Inactive"}</td>
           {canWrite ? <td><div className="buyer-actions"><Button small onClick={() => setEditing(agent)}>Edit Agent</Button>
-            <DeleteRecordButton label={`Agent ${agent.display_name}`} onDelete={reason => sales.deleteAgent(projectId, agent.id, reason)} onDeleted={async () => { setNotice("Unused Agent deleted."); await load(); }} />
+            <DeleteRecordButton label={`Agent ${agent.display_name}`} description="This removes an Agent with no buyer, transaction, commission or attribution history. Otherwise deactivate the Agent instead. The audit trail is retained." onDelete={reason => sales.deleteAgent(projectId, agent.id, reason)} onDeleted={async () => { setNotice("Unused Agent deleted."); await load(); }} />
           </div></td> : null}
         </tr>)}</tbody>
       </TableScroll>}
