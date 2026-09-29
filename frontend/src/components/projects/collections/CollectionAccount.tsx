@@ -9,6 +9,7 @@ import {
   RecordPage,
   EmptyState,
   Field,
+  FieldRow,
   Form,
   FormActions,
   KeyValue,
@@ -23,7 +24,7 @@ import {
   TableScroll,
 } from "@/components/ui";
 import type { RecordPageFact } from "@/components/ui";
-import { ApiError, collections } from "@/lib/api";
+import { ApiError, collections, sales } from "@/lib/api";
 import type {
   CollectionAction,
   CollectionDispute,
@@ -32,6 +33,7 @@ import type {
   CollectionSaleSummary,
   CollectionWaiver,
   RestructurePreview,
+  SaleCancellation,
 } from "@/lib/api";
 import { businessDate, isPositive, money, todayISO } from "@/lib/format";
 import { CASHFLOW_RECORDERS, hasAnyRole } from "@/lib/roles";
@@ -1315,7 +1317,11 @@ function RestructureTab({
 
 /* ------------------------------------------------------------------------- */
 
-function RefundsTab({
+function emptyRefund() {
+  return { amount: "", refund_date: todayISO(), bank_reference: "", notes: "" };
+}
+
+export function RefundsTab({
   projectId,
   saleId,
   summary,
@@ -1339,15 +1345,34 @@ function RefundsTab({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refunds, setRefunds] = useState<CollectionRefund[] | null>(null);
   const [reversing, setReversing] = useState<CollectionRefund | null>(null);
+  // The cancellation a repayment is recorded against. Only a person who can
+  // record one needs it, so only they ask for the deal file.
+  const [cancellation, setCancellation] = useState<SaleCancellation | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [refundForm, setRefundForm] = useState(emptyRefund);
 
   const load = useCallback(async () => {
     try {
-      setRefunds(await collections.refunds(projectId, saleId));
+      const [rows, deal] = await Promise.all([
+        collections.refunds(projectId, saleId),
+        canCollect ? sales.contract(projectId, saleId) : Promise.resolve(null),
+      ]);
+      setRefunds(rows);
+      setCancellation(deal?.cancellation ?? null);
       setLoadError(null);
     } catch (caught) {
       setLoadError(caught instanceof ApiError ? caught.message : "Could not load the refunds.");
     }
-  }, [projectId, saleId]);
+  }, [projectId, saleId, canCollect]);
+
+  // The server decides again on every request; this only decides whether the
+  // form is worth offering: an approved, live cancellation with money still owed.
+  const payable =
+    cancellation !== null &&
+    cancellation.status !== "withdrawn" &&
+    cancellation.financial_approval_required &&
+    cancellation.financial_approved_at !== null &&
+    isPositive(summary.refund_outstanding);
 
   useEffect(() => {
     void (async () => {
@@ -1467,10 +1492,95 @@ function RefundsTab({
         </TableScroll>
       )}
 
-      {canCollect ? (
+      {canCollect && payable && cancellation ? (
+        <SubPanel
+          title="Record a repayment"
+          actions={
+            <Button data-leaves-editor={recording || undefined} onClick={() => setRecording(!recording)}>
+              {recording ? "Cancel" : "Record a repayment"}
+            </Button>
+          }
+        >
+          {recording ? (
+            <Form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (busy) return;
+                void onAct(
+                  () =>
+                    collections.recordRefund(projectId, saleId, {
+                      cancellation_id: cancellation.id,
+                      amount: refundForm.amount,
+                      refund_date: refundForm.refund_date,
+                      bank_reference: refundForm.bank_reference || null,
+                      notes: refundForm.notes || null,
+                    }),
+                  "Repayment recorded. It counts as paid once Finance confirms it.",
+                ).then((saved) => {
+                  if (!saved) return;
+                  setRecording(false);
+                  setRefundForm(emptyRefund());
+                  void load();
+                });
+              }}
+            >
+              <FieldRow columns={3}>
+                <Field
+                  label="Amount"
+                  hint={`Up to ${money(summary.refund_outstanding, currencyCode)} still to pay, in the contract's currency.`}
+                >
+                  <MoneyInput
+                    code={currencyCode}
+                    value={refundForm.amount}
+                    onChange={(value) => setRefundForm({ ...refundForm, amount: value })}
+                    required
+                  />
+                </Field>
+                <Field label="Date paid" hint="The day the money left. Not a future date.">
+                  <input
+                    className="input"
+                    type="date"
+                    value={refundForm.refund_date}
+                    max={todayISO()}
+                    onChange={(event) => setRefundForm({ ...refundForm, refund_date: event.target.value })}
+                    required
+                  />
+                </Field>
+                <Field label="Bank reference" optional>
+                  <input
+                    className="input"
+                    value={refundForm.bank_reference}
+                    maxLength={200}
+                    onChange={(event) => setRefundForm({ ...refundForm, bank_reference: event.target.value })}
+                  />
+                </Field>
+              </FieldRow>
+              <Field label="Notes" optional>
+                <textarea
+                  className="input"
+                  value={refundForm.notes}
+                  rows={2}
+                  maxLength={2000}
+                  onChange={(event) => setRefundForm({ ...refundForm, notes: event.target.value })}
+                />
+              </Field>
+              <FormActions>
+                <Button type="submit" variant="primary" disabled={busy}>
+                  Record repayment
+                </Button>
+              </FormActions>
+            </Form>
+          ) : (
+            <p className="hint">
+              A recorded repayment is a claim that money left. It changes nothing still to pay until
+              Finance confirms it.
+            </p>
+          )}
+        </SubPanel>
+      ) : canCollect && isPositive(summary.refund_outstanding) ? (
         <p className="hint">
-          Record a repayment from the cancellation on the deal file, where the amount due and its
-          approval live.
+          A repayment can be recorded once the cancellation&apos;s financial terms are approved on
+          the deal file.
         </p>
       ) : null}
 
