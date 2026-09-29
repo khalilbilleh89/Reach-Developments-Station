@@ -41,7 +41,8 @@ Mobile workflows:    Team CRUD, FAQ CRUD + copy, Agreement upload/download/delet
                      no horizontal overflow on any of the 32 destinations at 390px
 
 Financial reconciliation: PASS on the seeded project (figures below)
-Permission isolation:     7 isolation/authorization defects fixed; 1 decision (B-02)
+Permission isolation:     6 security, isolation and locking defects fixed (F-01 to
+                          F-06); 1 decision (B-02); selected-phase navigation is S-01
 Migration integrity:      PASS — single head 0043_commercial_faqs; upgrade from empty
                           DB and `alembic check` clean; this PR adds no migration
 Deletion lifecycle:       96 creators inventoried; guard now scans every router;
@@ -52,7 +53,8 @@ Frontend/API contract:    492 client call sites resolved against 529 routes;
 CI V2:                    plan computed locally: System risk (shared test harness
                           file tests/deletion_baseline_gaps.json and app/main.py) →
                           complete Backend regression required
-Full Backend Shadow:      see PR comment; requested once on the stable head
+Full Backend Shadow:      PASS — run 36526245389 on 4ad3c4f, shards 1/8 to 8/8
+                          and summary succeeded (later commits change docs only)
 ```
 
 ## How the audit was run
