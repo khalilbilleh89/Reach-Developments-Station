@@ -70,8 +70,8 @@ export function FaqEditor({projectId, row, onClose, onSaved}: {
         finally { setBusy(false); }
       }}>
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <Field label="Question"><textarea dir="auto" required maxLength={500} rows={2} disabled={busy} value={question} onChange={event => setQuestion(event.target.value)} /></Field>
-        <Field label="Answer"><textarea dir="auto" required maxLength={20000} rows={12} disabled={busy} value={answer} onChange={event => setAnswer(event.target.value)} /></Field>
+        <Field label="Question"><textarea className="input" dir="auto" required maxLength={500} rows={2} disabled={busy} value={question} onChange={event => setQuestion(event.target.value)} /></Field>
+        <Field label="Answer"><textarea className="input" dir="auto" required maxLength={20000} rows={12} disabled={busy} value={answer} onChange={event => setAnswer(event.target.value)} /></Field>
         <FormActions>
           <Button type="submit" variant="primary" disabled={busy || !dirty || !question.trim() || !answer.trim()}>{busy ? "Saving…" : "Save FAQ"}</Button>
           <Button data-leaves-editor disabled={busy} onClick={onClose}>Cancel</Button>

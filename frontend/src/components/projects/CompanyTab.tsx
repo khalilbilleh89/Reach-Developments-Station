@@ -59,8 +59,8 @@ export function CompanyEntryForm({ title, fields, initial, onSave, onClose }: {
         {error ? <Notice tone="error">{error}</Notice> : null}
         <FieldRow>{fields.map(([key, label]) => <Field key={key} label={label} optional>
           {["notes", "registered_address", "bank_address"].includes(key)
-            ? <textarea value={values[key]} maxLength={2000} onChange={event => setValues({ ...values, [key]: event.target.value })} />
-            : <input type="text" value={values[key]} maxLength={320} onChange={event => setValues({ ...values, [key]: event.target.value })} />}
+            ? <textarea className="input" value={values[key]} maxLength={2000} onChange={event => setValues({ ...values, [key]: event.target.value })} />
+            : <input className="input" type="text" value={values[key]} maxLength={320} onChange={event => setValues({ ...values, [key]: event.target.value })} />}
         </Field>)}</FieldRow>
         <FormActions><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
           <Button variant="default" data-leaves-editor onClick={onClose} disabled={busy}>Cancel</Button>
@@ -86,7 +86,7 @@ export function CompanyTab({ projectId, roles }: { projectId: string; roles: Set
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}
     {answer.status === "ready" && !selected ? <Card><EmptyState title="No company recorded" hint="Add a company, then record its bank accounts. All entry fields are optional." /></Card> : null}
     {selected ? <>
-      {rows.length > 1 ? <Field label="Company"><select value={selected.id} onChange={event => setSelectedId(event.target.value)}>
+      {rows.length > 1 ? <Field label="Company"><select className="input" value={selected.id} onChange={event => setSelectedId(event.target.value)}>
         {rows.map(row => <option key={row.id} value={row.id}>{name(row)}</option>)}
       </select></Field> : null}
       <Card>

@@ -34,17 +34,17 @@ export function RentalEditor({ initial, scopeLabel, onSave, onClose }: { initial
         <Notice tone="info">Five-year, unlevered estimates in {code || "the recorded currency"}. Enter annual rent and operating costs per m² for both rental modes. For short-term lets, annual rent means full-occupancy annual potential; vacancy accounts for unoccupied nights. Enter 0 only where you intend a zero assumption.</Notice>
         <fieldset disabled={busy} className="marketing-fieldset stack">
           <FormSection title="Rental Basis"><FieldRow>
-            <Field label="Area basis"><select value={values.area_basis} onChange={e => set("area_basis", e.target.value as ScenarioFields["area_basis"])}><option value="net">Net area (internal + balcony)</option><option value="gross">Gross area (includes recorded outdoor areas)</option></select></Field>
-            <Field label="Currency"><input readOnly value={code || "Currency unavailable"} /></Field>
+            <Field label="Area basis"><select className="input" value={values.area_basis} onChange={e => set("area_basis", e.target.value as ScenarioFields["area_basis"])}><option value="net">Net area (internal + balcony)</option><option value="gross">Gross area (includes recorded outdoor areas)</option></select></Field>
+            <Field label="Currency"><input className="input" readOnly value={code || "Currency unavailable"} /></Field>
             <Field label="Annual rent per m²"><MoneyInput required code={code} value={values.annual_rent_per_sqm} onChange={value => set("annual_rent_per_sqm", value)} /></Field>
             <Field label="Annual operating expenses per m²"><MoneyInput required code={code} value={values.annual_expense_per_sqm} onChange={value => set("annual_expense_per_sqm", value)} /></Field>
           </FieldRow></FormSection>
           <FormSection title="Growth, Costs and Valuation"><FieldRow>{rates.map(([key, label]) => <Field key={key} label={label}><RateInput required value={values[key]} onChange={value => set(key, value)} /></Field>)}</FieldRow>
             <Field label="Initial setup / furnishing cost"><MoneyInput required code={code} value={values.setup_cost} onChange={value => set("setup_cost", value)} /></Field>
-            <Field label="Resale method"><select value={values.exit_method} onChange={e => set("exit_method", e.target.value as ScenarioFields["exit_method"])}><option value="appreciation">Compound capital appreciation</option><option value="cap_rate">Year-six NOI / exit cap rate</option></select></Field>
+            <Field label="Resale method"><select className="input" value={values.exit_method} onChange={e => set("exit_method", e.target.value as ScenarioFields["exit_method"])}><option value="appreciation">Compound capital appreciation</option><option value="cap_rate">Year-six NOI / exit cap rate</option></select></Field>
             {values.unit_id ? <Field label="Assumed purchase price" optional hint="Leave blank to use the unit's current asking price excluding tax. Enter acquisition taxes and fees above."><MoneyInput code={code} value={values.price_override ?? ""} onChange={value => set("price_override", value || null)} /></Field> : null}
           </FormSection>
-          <FormSection title="Assumption Source"><Field label="Source / evidence"><input required maxLength={320} value={values.source} onChange={e => set("source", e.target.value)} /></Field><Field label="As-at date"><input required type="date" value={values.as_of} onChange={e => set("as_of", e.target.value)} /></Field></FormSection>
+          <FormSection title="Assumption Source"><Field label="Source / evidence"><input className="input" required maxLength={320} value={values.source} onChange={e => set("source", e.target.value)} /></Field><Field label="As-at date"><input className="input" required type="date" value={values.as_of} onChange={e => set("as_of", e.target.value)} /></Field></FormSection>
         </fieldset>
         <FormActions><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save assumptions"}</Button><Button variant="default" data-leaves-editor disabled={busy} onClick={onClose}>Cancel</Button></FormActions>
       </form>

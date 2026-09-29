@@ -22,6 +22,7 @@ function harness() {
     if (key === "@/lib/api") return { ApiError };
     if (key === "@/lib/api/agreements") return { agreements: {} };
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
+    if (key === "@/lib/format") return { businessDate: value => value };
     if (key === "@/lib/roles") return { AGREEMENT_READERS: new Set(["finance", "legal"]), AGREEMENT_WRITERS: new Set(["legal"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) };
     if (key === "./DeleteRecordButton") return { DeleteRecordButton: "DeleteRecordButton" };
     if (key === "@/components/ui") return new Proxy({}, { get: (_, name) => name });

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { agreements, type Agreement, type AgreementFields } from "@/lib/api/agreements";
 import { useAnswer } from "@/lib/answer";
+import { businessDate } from "@/lib/format";
 import { AGREEMENT_READERS, AGREEMENT_WRITERS, hasAnyRole, type Roles } from "@/lib/roles";
 import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, PageHeader, RecordPage, TableScroll } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
@@ -59,7 +60,7 @@ export function AgreementsTab({ projectId, roles }: { projectId: string; roles: 
       {answer.data.length === 0 ? <EmptyState title="No agreements added" hint="Upload each final draft, name the signing company, and enter the date the draft was created." /> :
         <TableScroll label="Purchase agreement drafts"><thead><tr><th scope="col">Agreement name</th><th scope="col">Signing company</th><th scope="col">Draft creation date</th><th scope="col">Document</th>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
           <tbody>{answer.data.map(row => <tr key={row.id}>
-            <th scope="row">{row.name}</th><td>{row.signing_company}</td><td><time dateTime={row.draft_created_on}>{row.draft_created_on}</time></td>
+            <th scope="row">{row.name}</th><td>{row.signing_company}</td><td><time dateTime={row.draft_created_on}>{businessDate(row.draft_created_on)}</time></td>
             <td><Button variant="default" disabled={downloading !== null} onClick={async () => {
               setDownloading(row.id); setDownloadError(null);
               try { await agreements.download(projectId, row); }
