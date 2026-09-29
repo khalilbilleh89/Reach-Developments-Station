@@ -318,6 +318,20 @@ def _cancelled_on(as_of: date) -> ColumnElement[bool]:
     )
 
 
+def cancellation_effective_on(cancellation: SaleCancellation, as_of: date) -> bool:
+    """One cancellation, asked the question :func:`_cancelled_on` asks in SQL.
+
+    Completed, with the unit's return taking effect by ``as_of``. Kept beside
+    the SQL form so the two cannot drift apart: the receivable ends, and a
+    refund may be paid, on exactly the same fact.
+    """
+    return (
+        cancellation.status == CANCELLATION_COMPLETED
+        and cancellation.unit_return_date is not None
+        and cancellation.unit_return_date <= as_of
+    )
+
+
 def _action_recorded_on(as_of: date) -> ColumnElement[bool]:
     """A follow-up that had been written down by ``as_of``.
 
@@ -2851,7 +2865,9 @@ def _confirmed_refund_total(session: Session, *, cancellation_id: uuid.UUID) -> 
     return _money(total)
 
 
-def require_refund_authority(cancellation: SaleCancellation) -> None:
+def require_refund_authority(
+    cancellation: SaleCancellation, *, refund_date: date | None = None
+) -> None:
     """The single rule that says a refund may be paid against this cancellation.
 
     Recording a refund and confirming one ask the same question — is this payout
@@ -2861,10 +2877,20 @@ def require_refund_authority(cancellation: SaleCancellation) -> None:
     was dropped in between: a payout keyed in on Monday and signed on Friday
     must not go out on a case that was withdrawn on Wednesday.
 
-    Three things make a payout sanctioned, and none of them is re-decided here:
+    Four things make a payout sanctioned, and none of them is re-decided here:
     the cancellation proposed money changing hands, a financial approver signed
-    it, and the case has not since been withdrawn. *How much* is owed is a
-    different question and stays with :func:`_require_refund_headroom`.
+    it, the case has not since been withdrawn, and the cancellation has taken
+    effect. *How much* is owed is a different question and stays with
+    :func:`_require_refund_headroom`.
+
+    The last is the owner's decision (docs/SYSTEM_OPERATIONAL_AUDIT.md, B-01):
+    terms may be calculated, reviewed and approved while the case runs, but no
+    money is paid back until the cancellation is completed and the unit has
+    been returned. "Taken effect" is :func:`cancellation_effective_on` — the
+    fact that also ends the receivable — so the contract stops being
+    collectible and starts being repayable on the same day, never both at once.
+    A repayment dated before the unit came back would claim exactly the
+    overlap the rule exists to prevent, so ``refund_date`` is held to it too.
     """
     if cancellation.status == CANCELLATION_WITHDRAWN:
         raise ConflictError(
@@ -2879,6 +2905,20 @@ def require_refund_authority(cancellation: SaleCancellation) -> None:
         raise ConflictError(
             "This cancellation's financial terms have not been approved. Money "
             "cannot leave on a refund nobody has signed."
+        )
+    if not cancellation_effective_on(cancellation, business_today()):
+        raise ConflictError(
+            "Refund terms are approved. Repayment can be recorded after the "
+            "cancellation is completed and the unit has been returned."
+        )
+    if (
+        refund_date is not None
+        and cancellation.unit_return_date is not None
+        and refund_date < cancellation.unit_return_date
+    ):
+        raise ValidationError(
+            "A repayment cannot be dated before the unit was returned on "
+            f"{cancellation.unit_return_date.isoformat()}."
         )
 
 
@@ -2952,7 +2992,7 @@ def record_refund(
         )
     if currency_id is not None and currency_id != sale.currency_id:
         raise ValidationError("A refund must be in the contract's currency.")
-    require_refund_authority(cancellation)
+    require_refund_authority(cancellation, refund_date=refund_date)
     _require_refund_headroom(session, cancellation=cancellation, adding=amount)
 
     refund = CollectionRefund(
@@ -3037,7 +3077,7 @@ def confirm_refund(
     if refund.status == REFUND_REVERSED:
         raise ConflictError("This refund has been reversed and cannot be confirmed.")
     permissions.require_different_confirmer(actor, recorded_by_user_id=refund.recorded_by_user_id)
-    require_refund_authority(cancellation)
+    require_refund_authority(cancellation, refund_date=refund.refund_date)
     _require_refund_headroom(session, cancellation=cancellation, adding=refund.amount)
 
     refund.status = REFUND_CONFIRMED

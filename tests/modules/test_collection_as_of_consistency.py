@@ -35,6 +35,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.modules.access.models import User
 from app.modules.portfolio import service as portfolio_service
 from app.modules.portfolio.schemas import ProjectSummary
 from app.modules.projects.models import Project
@@ -44,9 +45,11 @@ from tests.modules.conftest import (
     cancellation_terms_payload,
     collection_account,
     collections_url,
+    complete_cancellation,
     confirm_receipt,
     current_version_id,
     governing_installments,
+    insert_legacy_refund,
     record_receipt,
     sales_url,
 )
@@ -377,13 +380,16 @@ class TestRefundCashOut:
         )
         assert approved.status_code == 200, approved.text
         _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-05-10"))
+        # Repayment waits for the unit to come back (owner decision B-01): the
+        # case completes, then the money leaves. Done today, then moved to July.
+        complete_cancellation(sales_ops_client, project_id, cancellation_id)
 
         recorded = collections_client.post(
             f"{collections_url(project_id)}/sales/{collecting_sale}/refunds",
             json={
                 "cancellation_id": cancellation_id,
                 "amount": "5000.00",
-                "refund_date": "2026-07-05",
+                "refund_date": TODAY.isoformat(),
             },
         )
         assert recorded.status_code == 201, recorded.text
@@ -392,9 +398,11 @@ class TestRefundCashOut:
             f"{collections_url(project_id)}/refunds/{refund_id}/confirm", json={}
         )
         assert confirmed.status_code == 200, confirmed.text
+        for column in ("termination_date", "unit_return_date"):
+            _stamp(db, "sale_cancellations", cancellation_id, column, date(2026, 7, 1))
         db.execute(
-            text("UPDATE collection_refunds SET confirmed_at = :c WHERE id = :r"),
-            {"c": at("2026-07-06"), "r": refund_id},
+            text("UPDATE collection_refunds SET refund_date = :d, confirmed_at = :c WHERE id = :r"),
+            {"d": date(2026, 7, 5), "c": at("2026-07-06"), "r": refund_id},
         )
         db.commit()
         return {"cancellation_id": cancellation_id, "refund_id": refund_id}
@@ -608,6 +616,8 @@ class TestCashPaidBeforeTheCaseWasDropped:
         cfo_client: TestClient,
         collections_client: TestClient,
         finance_client: TestClient,
+        collections_officer: User,
+        finance: User,
         db: Session,
         project_id: str,
         collecting_sale: str,
@@ -635,26 +645,19 @@ class TestCashPaidBeforeTheCaseWasDropped:
         )
         assert approved.status_code == 200, approved.text
         _stamp(db, "sale_cancellations", cancellation_id, "financial_approved_at", at("2026-03-10"))
-
-        recorded = collections_client.post(
-            f"{collections_url(project_id)}/sales/{collecting_sale}/refunds",
-            json={
-                "cancellation_id": cancellation_id,
-                "amount": "5000.00",
-                "refund_date": "2026-04-05",
-            },
+        # Paying a running case is refused since owner decision B-01; this is
+        # the history such a payment left behind before the rule existed.
+        refund_id = insert_legacy_refund(
+            db,
+            project_id=project_id,
+            sale_id=collecting_sale,
+            cancellation_id=cancellation_id,
+            amount="5000.00",
+            refund_date=date(2026, 4, 5),
+            recorded_by=collections_officer.id,
+            confirmed_by=finance.id,
+            confirmed_at=at("2026-04-06"),
         )
-        assert recorded.status_code == 201, recorded.text
-        refund_id = recorded.json()["id"]
-        confirmed = finance_client.post(
-            f"{collections_url(project_id)}/refunds/{refund_id}/confirm", json={}
-        )
-        assert confirmed.status_code == 200, confirmed.text
-        db.execute(
-            text("UPDATE collection_refunds SET confirmed_at = :c WHERE id = :r"),
-            {"c": at("2026-04-06"), "r": refund_id},
-        )
-        db.commit()
 
         dropped = sales_ops_client.post(
             f"{sales_url(project_id)}/cancellations/{cancellation_id}/advance",

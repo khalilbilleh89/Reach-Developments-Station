@@ -46,6 +46,7 @@ from app.modules.collections.models import (
     CollectionReceiptAllocation,
     CollectionRefund,
 )
+from app.modules.inventory.custom_fields import business_today
 from app.modules.payment_plans.models import PaymentPlanInstallment
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
@@ -53,6 +54,7 @@ from app.modules.sales import service as sales_service
 from tests.modules.conftest import (
     cancellation_terms_payload,
     collections_url,
+    complete_cancellation,
     confirm_receipt,
     governing_installments,
     record_receipt,
@@ -614,6 +616,8 @@ class TestRefundRace:
             },
         )
         assert approved.status_code == 200, approved.text
+        # And it is not paid until the cancellation completes (owner decision B-01).
+        complete_cancellation(sales_ops_client, project_id, cancellation_id)
 
         refunds = []
         for _ in range(2):
@@ -622,7 +626,7 @@ class TestRefundRace:
                 json={
                     "cancellation_id": cancellation_id,
                     "amount": "8000.00",
-                    "refund_date": "2026-06-01",
+                    "refund_date": business_today().isoformat(),
                 },
             )
             assert recorded.status_code == 201, recorded.text

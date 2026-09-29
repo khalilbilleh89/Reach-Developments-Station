@@ -23,15 +23,20 @@ Roles reviewed:      11 of the 12 repository roles in the browser — system_adm
                      covered only by the existing PostgreSQL tests.
 Workflows exercised: 30 journeys in the table below (evidence depth stated per row)
 
-Findings:            51 total (28 fixed, 4 decisions, 19 follow-ups)
+Findings:            51 total (30 fixed, 1 resolved and retained, 20 follow-ups)
 P0:                  0
 P1:                  4   (4 fixed)
-P2:                  35  (20 fixed, 3 decisions, 12 follow-ups)
-P3:                  12  (4 fixed, 1 decision, 7 follow-ups)
+P2:                  35  (21 fixed, 1 resolved and retained, 13 follow-ups)
+P3:                  12  (5 fixed, 7 follow-ups)
 
-Fixed in this PR:                    28
-Remaining business-decision blockers: 4
-Remaining structural follow-ups:      19
+Fixed in this PR:                    30  (28 audit fixes + owner decisions B-01, B-03)
+Owner decisions:                     4 resolved, 0 unresolved
+  B-01 refund timing                 resolved — implemented here
+  B-02 audit visibility              resolved — current behaviour retained, no code change
+  B-03 System Administrator access   resolved — implemented here
+  B-04 legacy Construction workflows resolved — retire; separate structural follow-up
+Remaining business-decision blockers: 0
+Remaining structural follow-ups:      20  (S-01…S-19 and B-04)
 
 Desktop workflows:   Team, FAQs, Agreements, Project Images, Sales gates, refund
                      recording, Collections register/account, Marketing editors,
@@ -42,19 +47,24 @@ Mobile workflows:    Team CRUD, FAQ CRUD + copy, Agreement upload/download/delet
 
 Financial reconciliation: PASS on the seeded project (figures below)
 Permission isolation:     6 security, isolation and locking defects fixed (F-01 to
-                          F-06); 1 decision (B-02); selected-phase navigation is S-01
+                          F-06); B-02 resolved (retained); B-03 fixed; selected-phase
+                          navigation is S-01
 Migration integrity:      PASS — single head 0043_commercial_faqs; upgrade from empty
                           DB and `alembic check` clean; this PR adds no migration
 Deletion lifecycle:       96 creators inventoried; guard now scans every router;
                           remaining gaps listed as follow-ups
-Audit logging:            every mutation route audited (scripted scan); B-02 open
+Audit logging:            every mutation route audited (scripted scan); B-02 resolved:
+                          global visibility and full snapshots retained
 Frontend/API contract:    492 client call sites resolved against 529 routes;
                           1 live 422 (fixed), 1 enum gap (fixed)
 CI V2:                    plan computed locally: System risk (shared test harness
                           file tests/deletion_baseline_gaps.json and app/main.py) →
                           complete Backend regression required
 Full Backend Shadow:      PASS — run 36526245389 on 4ad3c4f, shards 1/8 to 8/8
-                          and summary succeeded (later commits change docs only)
+                          and summary succeeded. Historical: the owner-decision
+                          commit changes code, so its evidence is the CI V2 System
+                          plan (complete sharded Backend) on the final head,
+                          reported in the pull request
 ```
 
 ## How the audit was run
@@ -94,7 +104,11 @@ Collections register, read in the browser and against the API:
 The same figures appear on Overview, the register and the account; none is
 computed in the browser. SPA-0002 is in `termination_pending` (notice stage), so
 its receivable is still live by the documented rule in
-`docs/CANCELLED_SALE_RECEIVABLE.md`; see B-01.
+`docs/CANCELLED_SALE_RECEIVABLE.md`. The 5,000.00 repayment was recorded on the
+pre-decision code; under B-01 (below) the same request is now refused until the
+cancellation completes and the unit is returned. The figures themselves are
+unchanged: B-01 changes when a repayment may be recorded, not how any amount is
+calculated.
 
 ## Required end-to-end workflow table
 
@@ -107,7 +121,7 @@ browser inspection.
 | 01 | Project create → configure → confirm | A, R | PASS | UI creation form not browser-driven in this audit |
 | 02 | Currency mistake → governed correction | A, S | PASS | Existing `test_project_currency_correction.py` in the Full run; F-03 hardening |
 | 03 | Land → planning → permit | A, R | FOLLOW-UP | S-08 permit removal carries no operator reason |
-| 04 | Consultant / development | A, R | FOLLOW-UP | S-01 phase-scoped users; B-03 |
+| 04 | Consultant / development | A, R | FOLLOW-UP | S-01 phase-scoped users; B-03 fixed (System Administrator reads) |
 | 05 | Project Team create → edit → remove | B (1440, 390) | FIXED | F-03 NUL 500, F-24 unstyled controls |
 | 06 | Building → floor → unit | A, R | FIXED | F-21 wrong delete-dialog dependency text |
 | 07 | Unit price → release | A, R | FOLLOW-UP | S-03 rules/benchmarks/draft configuration not editable in UI |
@@ -117,10 +131,10 @@ browser inspection.
 | 11 | Contract → payment plan | A, R | FOLLOW-UP | S-10 contract picker lacks unit/buyer |
 | 12 | Receipt → confirmation → allocation | A, S | FIXED | F-12, F-13 |
 | 13 | Collections → ageing/reconciliation | B, A | FIXED | F-09, F-10, F-11, F-14, F-26 |
-| 14 | Sale cancellation → financial approval → refund | A, B (1440, 390) | FIXED | F-08 refunds could not be recorded; B-01 |
+| 14 | Sale cancellation → financial approval → refund | A, B (1440, 390) | FIXED | F-08 refunds could not be recorded; B-01 fixed: repayment waits for completion and unit return (A + component tests; browser run predates B-01) |
 | 15 | Cancellation → unit return → repricing → resale | A | PASS | Existing return-to-market tests in the Full run; not browser-driven |
 | 16 | Commission beneficiary lifecycle | S, R | FIXED | F-19 one-click removal |
-| 17 | Construction budget/cost/progress | A, R, S | BLOCKED — BUSINESS DECISION REQUIRED | F-15, F-17 fixed; B-04 |
+| 17 | Construction budget/cost/progress | A, R, S | FOLLOW-UP — OWNER DECISION: RETIRE | F-15, F-17 fixed; B-04 retirement is a separate PR |
 | 18 | Unit economics reconciliation | A, R | FIXED | F-18 uncompletable custom-driver pools, F-20, F-23; S-02 |
 | 19 | Project cashflow / reporting | A, R | FOLLOW-UP | S-07 version UUIDs in Portfolio/Board Pack |
 | 20 | Project Images upload / view / remove | B | FIXED | F-02, F-22 |
@@ -129,7 +143,7 @@ browser inspection.
 | 23 | Marketing Project Bio | B (editor open 1440/390), A | FIXED | F-24 |
 | 24 | Marketing rental Economics | R, A | FOLLOW-UP | S-14 |
 | 25 | Marketing Branding | B (editor open 1440/390), A | FIXED | F-24 |
-| 26 | Governance / access behaviour | B (11 roles + selected-phase PM), A | FOLLOW-UP | S-01, B-02, B-03 |
+| 26 | Governance / access behaviour | B (11 roles + selected-phase PM), A | FOLLOW-UP | S-01; B-02 retained; B-03 fixed |
 | 27 | Project Overview decision-making | B (1440/1280/1024/390) | FIXED | F-17, F-26 |
 | 28 | Project Analysis | R, A | PASS | Fundamental section read at 1440/390 without errors |
 | 29 | Record deletion / reversal / correction coverage | S, A | FIXED | F-27; S-03…S-06, S-08, S-09, S-11, S-12 |
@@ -144,7 +158,7 @@ or horizontal overflow — except the selected-phase Project Manager (S-01).
 
 | Role | Not available (by design) |
 | --- | --- |
-| system_admin | Consultant Engineer, Commissions (B-03) |
+| system_admin | none since B-03 (crawl showed Consultant Engineer and Commissions unavailable; after B-03 both open read-only — verified by API and navigation tests, not re-crawled) |
 | project_manager | Access |
 | finance, approver_cfo, executive_viewer, auditor | Access |
 | sales_operations | Company, Pre-Launch, Consultant, Unit Economics, Cashflow, Access |
@@ -214,9 +228,10 @@ PUT 200 as System Administrator.
 said "Actual repayment is recorded in Collections"; Collections said "Record a
 repayment from the cancellation on the deal file". Neither offered it, and the
 only creation route had no UI caller, so an approved refund could never be entered.
-Collections now records a repayment against the approved, live cancellation (form
-offered only when approved, not withdrawn and money is still owed; the server rule
-is unchanged). A failed deal-file read hides only the form, never the register.
+Collections now records a repayment against the approved cancellation (form
+offered only when approved, not withdrawn and money is still owed — and, since
+B-01, only once the cancellation has completed and the unit is back). A failed
+deal-file read hides only the form, never the register.
 Regressions: three tests in `operationalAudit.test.mjs`; the existing
 `collectionRemoval.test.mjs` refund tests still pass; browser: POST 201 at 1440/390.
 
@@ -320,32 +335,86 @@ the silenced warning into a warnings-as-errors 500. Pre-existing and independent
 this PR's code. The test now walks every route once per client in the main thread
 before the race, leaving only the two corrections concurrent; 5/5 local passes.
 
-### BLOCKED — BUSINESS DECISION REQUIRED
+### OWNER DECISIONS
 
-**B-01 · Refund before termination · P2.** During the notice stage of a cancellation
-(`termination_pending`, no unit return) the contract's receivable is still live and
-overdue by the documented rule, while the approved refund is already due and can be
-recorded. The seeded account shows JOD 99,000 overdue and JOD 18,000 owed back at the
-same time. Decide whether a refund may be recorded/paid before the unit return takes
-effect, or only after. Affected: collections `require_refund_authority`, deal file,
-Collections account, Portfolio refund facts.
+All four business decisions this audit raised were decided by the owner on PR #378.
 
-**B-02 · Global audit reads · P2.** System Administrator and Auditor read every audit
-event across projects, including company bank-account snapshots (account number,
-IBAN, SWIFT, tax number) and team contact emails, although the project API answers
-404 outside membership. Decide whether audit reads narrow to member projects for
-auditors and/or whether bank identifiers are redacted from snapshots.
+**B-01 · Refund timing · P2 · OWNER DECISION RESOLVED / FIXED.**
+Finding: during the notice stage of a cancellation (`termination_pending`, no unit
+return) the contract's receivable was still live and overdue, while the approved
+refund could already be recorded and confirmed as paid (seeded account: JOD 99,000
+overdue and a JOD 5,000 repayment recorded at the same time).
+Decision: a refund must not be paid while the cancellation is still in progress.
+The sale must first be cancelled and the unit returned.
+Rule as implemented (`require_refund_authority`, used by recording *and* by
+confirmation, so a repayment keyed earlier cannot be confirmed either):
+- Refund terms may still be calculated, reviewed and approved while the case runs;
+  the approved amount is a liability (`refund_due`) from approval, unchanged.
+- A repayment may be recorded or confirmed only when the cancellation is
+  effective: status `completed` and `unit_return_date` on or before the business
+  date — the same predicate that counts a sale as cancelled (`_cancelled_on`) —
+  with approved financial terms and refund still outstanding. No new status.
+- A repayment may not be dated before the unit return date.
+- Refused with 409 "Refund terms are approved. Repayment can be recorded after the
+  cancellation is completed and the unit has been returned." (422 for the date).
+- Collections shows that message instead of "Record a repayment" while approved
+  terms wait on completion; the date field cannot precede the unit return.
+- Unchanged: amounts, headroom, currency, no-future-date, maker-checker, void of a
+  recorded refund, Finance reversal of a confirmed one, and every report figure.
+  Refunds recorded or paid on a running case before this rule remain historical
+  cash-out and report as before (`docs/CANCELLATION_REFUND_REPORTING.md`).
+Regressions: `TestRepaymentWaitsForTheCancellation` in
+`test_collection_refunds.py` (running case refused and nothing moves; completion
+makes the same refund payable; a pre-rule recorded refund on a running case cannot
+be confirmed; a repayment dated before the unit return is refused); existing
+refund, removal, as-of, concurrency, cashflow and portfolio suites re-arranged to
+complete the case first (assertions unchanged); `operationalAudit.test.mjs` (form
+only for a completed case with a returned unit; message otherwise).
 
-**B-03 · System Administrator and two modules · P3.** System Administrator is in every
-module's reader set except Consultant Engineer and Commissions (server and
-navigation agree). Confirm this separation is intended.
+**B-02 · Audit visibility · P2 · OWNER DECISION RESOLVED.**
+Decision: retain current global audit visibility and full audit snapshots.
+Code change: None.
+System Administrator and Auditor continue to read every audit event across
+projects, including company bank-account snapshots and team contact emails,
+unredacted, as observed by this audit.
 
-**B-04 · Construction workflows removed from the UI · P2.** #355 made Construction
-contract-first at the owner's request. Budgets, cost codes (create/edit/retire),
-certificates, invoices, milestones, cost forecasts and delivery start/ready remain
-full API workflows with no screen (`BudgetWorkspace.tsx` is orphaned but still
-mounted by `readRecovery.test.mjs`); Overview still shows budget variance when a
-legacy budget exists. Decide: retire these APIs/components, or restore screens.
+**B-03 · System Administrator access · P3 · OWNER DECISION RESOLVED / FIXED.**
+Decision: System Administrator must have access to everything.
+Implemented in the canonical reader sets, server and client together: Consultant
+Engineer and Commissions `READER_ROLES` and `CONSULTANT_READERS` /
+`COMMISSION_READERS` now include `system_admin`, so navigation shows both and the
+APIs answer. Existing System Administrator write behaviour is preserved: editing
+consultant records and preparing/releasing commissions stay with the business
+roles (as in Sales), so maker-checker is unchanged. No other role gained access.
+Regressions: `test_system_admin_reads_the_workspace_but_does_not_edit_it`,
+`test_system_admin_reads_commissions_but_does_not_prepare_or_release` (both fail on
+the parent), and the `operationalAudit.test.mjs` navigation test (Legal still has
+no Consultant Engineer; Sales Advisor and Collections still have no Commissions).
+
+**B-04 · Legacy Construction workflows · P2 · OWNER DECISION RESOLVED — RETIRE.**
+Finding: #355 made Construction contract-first. Budgets, cost codes
+(create/edit/retire), certificates, invoices, milestones, cost forecasts and
+delivery start/ready remain full API workflows with no screen (`BudgetWorkspace.tsx`
+is orphaned but still mounted by `readRecovery.test.mjs`); Overview still shows
+budget variance when a legacy budget exists.
+Decision: retire the old Construction workflows.
+Follow-up required: Retire the legacy Construction workflows that no longer belong
+to the active UI/product.
+Do not destroy historical evidence.
+Do not drop schema/data blindly.
+Determine read-side reporting dependencies before removing APIs.
+Not in this PR: no destructive retirement is included here.
+Suggested PR: `chore(construction): retire legacy non-product workflows`.
+Acceptance:
+- inventory every B-04 route, service and component;
+- identify every caller;
+- disable or remove obsolete create/update surfaces;
+- remove orphan frontend components;
+- preserve historical records and required reporting reads;
+- remove dead API clients;
+- update navigation, docs and contracts;
+- update deletion and canonical-intake governance;
+- regression proving the retired workflows are no longer entry points.
 
 ### FOLLOW-UP — STRUCTURAL CHANGE REQUIRED
 
@@ -365,7 +434,7 @@ legacy budget exists. Decide: retire these APIs/components, or restore screens.
 | S-12 | P2 | Sales client parties, parcels, project documents, construction stages, consultant disciplines/stages/deliverables and other baseline gaps (`tests/deletion_baseline_gaps.json`, 50 entries). | Per-record removal flows. | per module | Gap list shrinks. |
 | S-13 | P3 | Five places slice UTC timestamps to a calendar date without saying UTC. | `eventTime()`. | `fix(format): timestamps as timestamps` | — |
 | S-14 | P3 | Marketing Economics unit search refetches per keystroke; three `TableScroll`s nest a second `<table>` with duplicate captions. | Debounce; pass rows directly. | `fix(marketing): economics tables` | Valid HTML; one request per settled search. |
-| S-15 | P3 | Orphan components with no importer: `SalesHistory`, `BuyerContact`, `UnitCollections`, `UnitEconomicsSection`, `QuotePreviewPanel`, `PricingTab`, `BudgetWorkspace` (B-04). Some are still mounted by tests. | Remove after B-04. | `chore(frontend): remove orphan screens` | — |
+| S-15 | P3 | Orphan components with no importer: `SalesHistory`, `BuyerContact`, `UnitCollections`, `UnitEconomicsSection`, `QuotePreviewPanel`, `PricingTab`, `BudgetWorkspace` (B-04). Some are still mounted by tests. | Remove; `BudgetWorkspace` goes with the B-04 retirement PR. | `chore(frontend): remove orphan screens` | — |
 | S-16 | P3 | `approveBudget`/`approveForecast` send a reason the routes ignore. | Drop the body or accept it. | — | — |
 | S-17 | P3 | Currency registry has no `denied` rendering (admin-only). | Add branch. | — | — |
 | S-18 | P3 | Unauthenticated pages log a 401 for the session probe in the console. | Treat 401 on `/auth/me` as the anonymous answer silently. | — | — |
@@ -388,5 +457,8 @@ page error, React warning, duplicate POST or 5xx was observed.
   `git diff --check`, `python scripts/agent_preflight.py`: clean.
 - Migrations: `alembic heads` single head; `alembic upgrade head` from empty and
   `alembic check`: clean. No migration added.
+- Owner decisions (B-01, B-03): the refunds, removal, as-of, concurrency, cashflow,
+  portfolio, commissions and consultant suites locally; new regressions shown
+  failing on the parent, then passing.
 - The complete backend suite on the final code head, and CI results, are reported in
   the pull request, not claimed here.

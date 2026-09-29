@@ -53,7 +53,7 @@ test("Sales gates are saved with the six gates only, never the read-only project
 
 function refundsTab(overrides = {}) {
   const calls = [];
-  const cancellation = {id: "c0ffee00-0000-4000-8000-000000000002", status: "approved", financial_approval_required: true, financial_approved_at: "2026-09-20T10:00:00Z"};
+  const cancellation = {id: "c0ffee00-0000-4000-8000-000000000002", status: "completed", unit_return_date: "2026-09-25", financial_approval_required: true, financial_approved_at: "2026-09-20T10:00:00Z"};
   const summary = {refund_due_total: "40000.00", refund_confirmed_total: "0.00", refund_outstanding: "40000.00"};
   const api = {ApiError,
     collections: {refunds: async () => [], recordRefund: async (_, __, body) => {calls.push(body); return {id: "r"};}},
@@ -64,7 +64,7 @@ function refundsTab(overrides = {}) {
   return {view, calls, cancellation};
 }
 
-test("an approved refund can be recorded from Collections, against the cancellation that approved it", async () => {
+test("an approved refund can be recorded from Collections once the cancellation is complete and the unit returned", async () => {
   const {view, calls, cancellation} = refundsTab();
   view.render(); await settle(); await settle();
   const types = nodes(view.render()).map(node => node.type);
@@ -77,9 +77,30 @@ test("an approved refund can be recorded from Collections, against the cancellat
   const bank = nodes(view.render()).find(node => node.type === "input" && node.props.maxLength === 200);
   bank.props.onChange({target: {value: "TRF-991"}});
   const form = nodes(view.render()).find(node => node.type === "Form");
+  assert.equal(nodes(view.render()).find(node => node.type === "input" && node.props.type === "date").props.min, "2026-09-25");
   form.props.onSubmit({preventDefault() {}}); await settle(); await settle();
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{cancellation_id: cancellation.id, amount: "15000.00", refund_date: "2026-09-29", bank_reference: "TRF-991", notes: null}]);
   assert.equal(nodes(view.render()).some(node => node.type === "Form"), false);
+});
+
+test("approved terms on a cancellation still in progress explain that repayment waits for completion (B-01)", async () => {
+  const approved = {id: "c", financial_approval_required: true, financial_approved_at: "2026-09-20T10:00:00Z"};
+  for (const cancellation of [
+    {...approved, status: "approved", unit_return_date: null},
+    {...approved, status: "termination_pending_approval", unit_return_date: null},
+    {...approved, status: "ready_for_unit_return", unit_return_date: null},
+    {...approved, status: "completed", unit_return_date: null},
+  ]) {
+    const {view} = refundsTab({cancellation});
+    view.render(); await settle();
+    const tree = view.render();
+    assert.equal(nodes(tree).some(node => node.type === "Button" && node.props.children === "Record a repayment"), false, cancellation.status);
+    assert.equal(nodes(tree).some(node => node.type === "SubPanel"), false, cancellation.status);
+    assert.match(text(tree), /Refund terms are approved\. Repayment can be recorded after the cancellation is completed\s+and the unit has been returned\./, cancellation.status);
+  }
+  const {view} = refundsTab({canCollect: false, cancellation: {...approved, status: "approved", unit_return_date: null}});
+  view.render(); await settle();
+  assert.doesNotMatch(text(view.render()), /Refund terms are approved/, "a reader is not told about an action they cannot take");
 });
 
 test("no repayment form is offered before approval, after withdrawal or to a reader", async () => {
@@ -137,6 +158,30 @@ test("old Agent & Buyer and Pricing links open the screens that replaced them", 
   assert.equal(exports.resolveProjectSection("team"), "team");
   assert.equal(exports.resolveProjectSection("nonsense"), "overview");
   assert.equal(exports.resolveProjectSection(null), "overview");
+});
+
+function loadModule(path, resolve = () => ({})) {
+  const source = readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
+  const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText;
+  const exports = {};
+  runInNewContext(`(function(require,exports){${code}\n})`, {URLSearchParams, Set})(resolve, exports);
+  return exports;
+}
+
+test("System Administrator sees Consultant Engineer and Commissions; the roles outside them still do not (B-03)", () => {
+  const roles = loadModule("lib/roles.ts");
+  const navigation = loadModule("components/shell/navigation.ts", key => key === "@/lib/roles" ? roles : {});
+  const sections = held => navigation.visibleNavigation(navigation.PROJECT_NAVIGATION, new Set(held)).flatMap(group => group.items.map(item => item.key));
+  const admin = sections(["system_admin"]);
+  assert.ok(admin.includes("consultant"), admin.join(","));
+  assert.ok(admin.includes("commissions"), admin.join(","));
+  // Reading only: editing, preparing and releasing stay with the business roles.
+  for (const writers of [roles.CONSULTANT_EDITORS, roles.COMMISSION_PREPARERS, roles.COMMISSION_RELEASERS]) {
+    assert.equal(writers.has("system_admin"), false);
+  }
+  assert.equal(sections(["legal"]).includes("consultant"), false);
+  assert.equal(sections(["sales_advisor"]).includes("commissions"), false);
+  assert.equal(sections(["collections"]).includes("commissions"), false);
 });
 
 function collectionsTab(component, collectionsApi) {

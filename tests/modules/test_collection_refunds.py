@@ -15,24 +15,32 @@ owed. Finance confirming a refund says only that the money actually went out.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app.modules.access.models import User
+from app.modules.inventory.custom_fields import business_today
 from tests.modules.conftest import (
     cancellation_terms_payload,
     collection_account,
     collections_url,
     confirm_receipt,
+    insert_legacy_refund,
     record_receipt,
     sales_url,
 )
 from tests.modules.test_portfolio import metric
 
+# A refund dated while its case was still running: possible only before B-01.
+LEGACY_REFUND_DATE = date(2026, 6, 1)
+
 
 @pytest.fixture
-def cancelled_sale(
+def approved_open_case(
     sales_ops_client: TestClient,
     cfo_client: TestClient,
     collections_client: TestClient,
@@ -40,7 +48,7 @@ def cancelled_sale(
     project_id: str,
     collecting_sale: str,
 ) -> tuple[str, str]:
-    """A contract unwound with an approved refund due of 12,000.
+    """A cancellation still running, with an approved refund due of 12,000.
 
     Built through the real cancellation routes so the amount due carries its own
     approval, exactly as it would in production.
@@ -77,6 +85,38 @@ def cancelled_sale(
     return collecting_sale, cancellation_id
 
 
+#: The day the fixture's unit comes back: today, because a unit return cannot be
+#: dated before the contract's own latest commercial change. Refunds in this
+#: file are dated on it — money is repaid only once the cancellation has taken
+#: effect (B-01).
+UNIT_RETURNED_ON = business_today().isoformat()
+
+
+def _complete(sales_ops: TestClient, project_id: str, cancellation_id: str) -> None:
+    """Take the case to completion: the contract ends and the unit comes back."""
+    base = f"{sales_url(project_id)}/cancellations/{cancellation_id}"
+    for status in ("termination_pending_approval", "ready_for_unit_return"):
+        advanced = sales_ops.post(f"{base}/advance", json={"to_status": status})
+        assert advanced.status_code == 200, advanced.text
+    completed = sales_ops.post(f"{base}/complete", json={"unit_return_date": UNIT_RETURNED_ON})
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "completed"
+
+
+@pytest.fixture
+def cancelled_sale(
+    sales_ops_client: TestClient, project_id: str, approved_open_case: tuple[str, str]
+) -> tuple[str, str]:
+    """A contract unwound with an approved refund due of 12,000, and the unit returned.
+
+    Completion is what makes the refund payable (owner decision B-01), so the
+    ordinary refund path starts here.
+    """
+    sale_id, cancellation_id = approved_open_case
+    _complete(sales_ops_client, project_id, cancellation_id)
+    return sale_id, cancellation_id
+
+
 def _record_refund(
     client: TestClient,
     project_id: str,
@@ -88,7 +128,7 @@ def _record_refund(
     body: dict[str, object] = {
         "cancellation_id": cancellation_id,
         "amount": amount,
-        "refund_date": "2026-06-01",
+        "refund_date": UNIT_RETURNED_ON,
     }
     body.update(overrides)
     return client.post(f"{collections_url(project_id)}/sales/{sale_id}/refunds", json=body)
@@ -98,11 +138,12 @@ def test_portfolio_consumes_collection_liability_and_cash_without_netting(
     collections_client: TestClient,
     finance_client: TestClient,
     project_id: str,
-    cancelled_sale: tuple[str, str],
+    sales_ops_client: TestClient,
+    approved_open_case: tuple[str, str],
 ) -> None:
-    sale_id, cancellation_id = cancelled_sale
+    sale_id, cancellation_id = approved_open_case
 
-    def check(due: str, paid: str, outstanding: str) -> None:
+    def check(due: str, paid: str, outstanding: str, cancelled: int = 1) -> None:
         account = collection_account(collections_client, project_id, sale_id)
         project = finance_client.get(f"/api/v1/portfolio/projects/{project_id}").json()
         overview = finance_client.get("/api/v1/portfolio/overview").json()
@@ -119,8 +160,11 @@ def test_portfolio_consumes_collection_liability_and_cash_without_netting(
                 Decimal(metric(report, "refund_confirmed")["amount"])
                 + Decimal(metric(report, "refund_outstanding")["amount"])
             )
-            assert report["cancelled_sales"] == 0  # Approved notice is not completion.
+            assert report["cancelled_sales"] == cancelled
 
+    # Approved during notice: the liability is reported, but notice is not completion.
+    check("12000", "0", "12000", cancelled=0)
+    _complete(sales_ops_client, project_id, cancellation_id)
     check("12000", "0", "12000")
     refund = _record_refund(collections_client, project_id, sale_id, cancellation_id, "5000").json()
     check("12000", "0", "12000")  # Recording alone is not cash-out.
@@ -501,10 +545,10 @@ class TestRefundAuthority:
         collections_client: TestClient,
         sales_ops_client: TestClient,
         project_id: str,
-        cancelled_sale: tuple[str, str],
+        approved_open_case: tuple[str, str],
     ) -> None:
         """The case was dropped. There is no cancellation left to repay."""
-        sale_id, cancellation_id = cancelled_sale
+        sale_id, cancellation_id = approved_open_case
         _withdraw(sales_ops_client, project_id, cancellation_id)
         response = _record_refund(
             collections_client, project_id, sale_id, cancellation_id, "5000.00"
@@ -518,21 +562,30 @@ class TestRefundAuthority:
         sales_ops_client: TestClient,
         finance_client: TestClient,
         project_id: str,
-        cancelled_sale: tuple[str, str],
+        approved_open_case: tuple[str, str],
+        collections_officer: User,
+        db: Session,
     ) -> None:
         """The case worth catching: keyed in Monday, dropped Wednesday, signed Friday.
 
         Confirmation re-asks against the locked cancellation rather than
-        trusting the answer recording got, so the money never leaves.
+        trusting the answer recording got, so the money never leaves. Since B-01
+        such a refund can only be one recorded before the rule existed.
         """
-        sale_id, cancellation_id = cancelled_sale
-        refund = _record_refund(
-            collections_client, project_id, sale_id, cancellation_id, "5000.00"
-        ).json()
+        sale_id, cancellation_id = approved_open_case
+        refund_id = insert_legacy_refund(
+            db,
+            project_id=project_id,
+            sale_id=sale_id,
+            cancellation_id=cancellation_id,
+            amount="5000.00",
+            refund_date=LEGACY_REFUND_DATE,
+            recorded_by=collections_officer.id,
+        )
         _withdraw(sales_ops_client, project_id, cancellation_id)
 
         response = finance_client.post(
-            f"{collections_url(project_id)}/refunds/{refund['id']}/confirm", json={}
+            f"{collections_url(project_id)}/refunds/{refund_id}/confirm", json={}
         )
         assert response.status_code == 409
         assert "withdrawn" in response.json()["detail"]
@@ -545,10 +598,10 @@ class TestRefundAuthority:
         collections_client: TestClient,
         sales_ops_client: TestClient,
         project_id: str,
-        cancelled_sale: tuple[str, str],
+        approved_open_case: tuple[str, str],
     ) -> None:
         """Approved and then dropped is not owed. The account says zero, not 12,000."""
-        sale_id, cancellation_id = cancelled_sale
+        sale_id, cancellation_id = approved_open_case
         before = collection_account(collections_client, project_id, sale_id)
         assert before["refund_due_total"] == "12000.00"
 
@@ -581,6 +634,116 @@ class TestRefundAuthority:
         assert account["refund_outstanding"] == "7000.00"
 
 
+class TestRepaymentWaitsForTheCancellation:
+    """Owner decision B-01: approve while the case runs, repay once it has ended.
+
+    Terms may be calculated, reviewed and approved during notice. Money goes
+    back only after the cancellation is completed and the unit returned — the
+    same fact that ends the receivable, so an account is never collectible and
+    repayable at once.
+    """
+
+    def test_an_approved_refund_on_a_running_case_may_not_be_recorded(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        approved_open_case: tuple[str, str],
+    ) -> None:
+        sale_id, cancellation_id = approved_open_case
+        response = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == (
+            "Refund terms are approved. Repayment can be recorded after the "
+            "cancellation is completed and the unit has been returned."
+        )
+        # The approved liability itself is untouched: calculated and reported.
+        account = collection_account(collections_client, project_id, sale_id)
+        assert account["refund_due_total"] == "12000.00"
+        assert account["refund_confirmed_total"] == "0.00"
+        assert account["refund_outstanding"] == "12000.00"
+
+    def test_completion_makes_the_same_refund_payable(
+        self,
+        collections_client: TestClient,
+        sales_ops_client: TestClient,
+        finance_client: TestClient,
+        project_id: str,
+        approved_open_case: tuple[str, str],
+    ) -> None:
+        sale_id, cancellation_id = approved_open_case
+        refused = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        )
+        assert refused.status_code == 409
+
+        _complete(sales_ops_client, project_id, cancellation_id)
+        recorded = _record_refund(
+            collections_client, project_id, sale_id, cancellation_id, "5000.00"
+        )
+        assert recorded.status_code == 201, recorded.text
+        confirmed = finance_client.post(
+            f"{collections_url(project_id)}/refunds/{recorded.json()['id']}/confirm", json={}
+        )
+        assert confirmed.status_code == 200, confirmed.text
+
+        account = collection_account(collections_client, project_id, sale_id)
+        assert account["refund_due_total"] == "12000.00"
+        assert account["refund_confirmed_total"] == "5000.00"
+        assert account["refund_outstanding"] == "7000.00"
+
+    def test_a_refund_recorded_before_the_rule_is_not_confirmed_while_the_case_runs(
+        self,
+        finance_client: TestClient,
+        collections_client: TestClient,
+        project_id: str,
+        approved_open_case: tuple[str, str],
+        collections_officer: User,
+        db: Session,
+    ) -> None:
+        """Confirmation asks the same question, so a pre-rule row cannot slip through."""
+        sale_id, cancellation_id = approved_open_case
+        refund_id = insert_legacy_refund(
+            db,
+            project_id=project_id,
+            sale_id=sale_id,
+            cancellation_id=cancellation_id,
+            amount="5000.00",
+            refund_date=LEGACY_REFUND_DATE,
+            recorded_by=collections_officer.id,
+        )
+
+        response = finance_client.post(
+            f"{collections_url(project_id)}/refunds/{refund_id}/confirm", json={}
+        )
+
+        assert response.status_code == 409
+        assert "after the cancellation is completed" in response.json()["detail"]
+        account = collection_account(collections_client, project_id, sale_id)
+        assert account["refund_confirmed_total"] == "0.00"
+
+    def test_a_repayment_may_not_be_dated_before_the_unit_came_back(
+        self,
+        collections_client: TestClient,
+        project_id: str,
+        cancelled_sale: tuple[str, str],
+    ) -> None:
+        sale_id, cancellation_id = cancelled_sale
+        response = _record_refund(
+            collections_client,
+            project_id,
+            sale_id,
+            cancellation_id,
+            "5000.00",
+            refund_date=(business_today() - timedelta(days=1)).isoformat(),
+        )
+
+        assert response.status_code == 422
+        assert UNIT_RETURNED_ON in response.json()["detail"]
+
+
 class TestCashThatAlreadyLeft:
     """Withdrawing a case ends the debt. It does not un-send the money.
 
@@ -594,22 +757,31 @@ class TestCashThatAlreadyLeft:
     @pytest.fixture
     def paid_then_withdrawn(
         self,
-        collections_client: TestClient,
-        finance_client: TestClient,
         sales_ops_client: TestClient,
         project_id: str,
-        cancelled_sale: tuple[str, str],
+        approved_open_case: tuple[str, str],
+        collections_officer: User,
+        finance: User,
+        db: Session,
     ) -> tuple[str, str]:
-        sale_id, cancellation_id = cancelled_sale
-        refund = _record_refund(
-            collections_client, project_id, sale_id, cancellation_id, "5000.00"
-        ).json()
-        confirmed = finance_client.post(
-            f"{collections_url(project_id)}/refunds/{refund['id']}/confirm", json={}
+        """Paid on a running case before B-01, then the case was dropped.
+
+        The API no longer lets this happen, but such history may exist and must
+        go on reporting truthfully, so the payment is written as that history.
+        """
+        sale_id, cancellation_id = approved_open_case
+        refund_id = insert_legacy_refund(
+            db,
+            project_id=project_id,
+            sale_id=sale_id,
+            cancellation_id=cancellation_id,
+            amount="5000.00",
+            refund_date=LEGACY_REFUND_DATE,
+            recorded_by=collections_officer.id,
+            confirmed_by=finance.id,
         )
-        assert confirmed.status_code == 200, confirmed.text
         _withdraw(sales_ops_client, project_id, cancellation_id)
-        return sale_id, refund["id"]
+        return sale_id, refund_id
 
     def test_the_outstanding_figure_ends_at_zero_and_never_goes_negative(
         self,

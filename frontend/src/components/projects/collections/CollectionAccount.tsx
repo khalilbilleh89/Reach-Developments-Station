@@ -1441,12 +1441,17 @@ export function RefundsTab({
 
   // The server decides again on every request; this only decides whether the
   // form is worth offering: an approved, live cancellation with money still owed.
-  const payable =
+  const approvedTerms =
     cancellation !== null &&
     cancellation.status !== "withdrawn" &&
     cancellation.financial_approval_required &&
     cancellation.financial_approved_at !== null &&
     isPositive(summary.refund_outstanding);
+  // Terms can be approved while the case is still running, but the money only
+  // leaves once the cancellation has completed and the unit is back (owner
+  // decision B-01) — the same test the server applies.
+  const unitReturnedOn = cancellation?.status === "completed" ? cancellation.unit_return_date : null;
+  const payable = approvedTerms && unitReturnedOn !== null && unitReturnedOn <= todayISO();
 
   useEffect(() => {
     void (async () => {
@@ -1566,6 +1571,13 @@ export function RefundsTab({
         </TableScroll>
       )}
 
+      {canCollect && approvedTerms && !payable ? (
+        <Notice tone="info">
+          Refund terms are approved. Repayment can be recorded after the cancellation is completed
+          and the unit has been returned.
+        </Notice>
+      ) : null}
+
       {canCollect && payable && cancellation ? (
         <SubPanel
           title="Record a repayment"
@@ -1611,11 +1623,15 @@ export function RefundsTab({
                     required
                   />
                 </Field>
-                <Field label="Date paid" hint="The day the money left. Not a future date.">
+                <Field
+                  label="Date paid"
+                  hint="The day the money left: not before the unit was returned, and not a future date."
+                >
                   <input
                     className="input"
                     type="date"
                     value={refundForm.refund_date}
+                    min={unitReturnedOn ?? undefined}
                     max={todayISO()}
                     onChange={(event) => setRefundForm({ ...refundForm, refund_date: event.target.value })}
                     required

@@ -946,7 +946,9 @@ inventory's release gate before the next buyer sees it.
 Cancellation refund terms follow the cross-domain contract documented in
 [CANCELLATION_REFUND_CALCULATOR.md](CANCELLATION_REFUND_CALCULATOR.md): Collections
 owns eligible cash, Sales owns the deduction decision and approved liability,
-and actual repayment remains a CollectionRefund.
+and actual repayment remains a CollectionRefund — recorded only once the
+cancellation has completed and the unit is back
+([CANCELLATION_REFUND_REPORTING.md](CANCELLATION_REFUND_REPORTING.md), B-01).
 
 **Handover needs three departments' answers.** Legal clears legal, Collections
 clears collections, and delivery belongs to the people who built the thing;
