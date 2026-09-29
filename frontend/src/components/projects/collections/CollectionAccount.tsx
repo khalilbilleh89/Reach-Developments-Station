@@ -1407,19 +1407,37 @@ export function RefundsTab({
   const [recording, setRecording] = useState(false);
   const [refundForm, setRefundForm] = useState(emptyRefund);
 
+  const [cancellationError, setCancellationError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
-      const [rows, deal] = await Promise.all([
-        collections.refunds(projectId, saleId),
-        canCollect ? sales.contract(projectId, saleId) : Promise.resolve(null),
-      ]);
-      setRefunds(rows);
-      setCancellation(deal?.cancellation ?? null);
+      setRefunds(await collections.refunds(projectId, saleId));
       setLoadError(null);
     } catch (caught) {
       setLoadError(caught instanceof ApiError ? caught.message : "Could not load the refunds.");
     }
+  }, [projectId, saleId]);
+
+  // Read separately: a failed deal-file read must not hide the refund register,
+  // it only withholds the recording form until it succeeds.
+  const loadCancellation = useCallback(async () => {
+    if (!canCollect) return;
+    try {
+      setCancellation((await sales.contract(projectId, saleId)).cancellation ?? null);
+      setCancellationError(null);
+    } catch (caught) {
+      setCancellation(null);
+      setCancellationError(
+        caught instanceof ApiError ? caught.message : "Could not read the cancellation on the deal file.",
+      );
+    }
   }, [projectId, saleId, canCollect]);
+
+  useEffect(() => {
+    void (async () => {
+      await loadCancellation();
+    })();
+  }, [loadCancellation]);
 
   // The server decides again on every request; this only decides whether the
   // form is worth offering: an approved, live cancellation with money still owed.
@@ -1577,6 +1595,7 @@ export function RefundsTab({
                   setRecording(false);
                   setRefundForm(emptyRefund());
                   void load();
+                  void loadCancellation();
                 });
               }}
             >
@@ -1633,6 +1652,11 @@ export function RefundsTab({
             </p>
           )}
         </SubPanel>
+      ) : canCollect && cancellationError && isPositive(summary.refund_outstanding) ? (
+        <Notice tone="error">
+          {cancellationError} Repayments can be recorded once it loads.
+          <Button onClick={() => void loadCancellation()}>Retry</Button>
+        </Notice>
       ) : canCollect && isPositive(summary.refund_outstanding) ? (
         <p className="hint">
           A repayment can be recorded once the cancellation&apos;s financial terms are approved on
