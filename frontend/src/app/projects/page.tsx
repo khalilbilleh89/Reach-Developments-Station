@@ -5,7 +5,7 @@ import { Suspense, useEffect } from "react";
 
 import { useSession } from "@/lib/api/session";
 import { AppShell, PasswordGate, SessionScreen } from "@/components/shell/AppShell";
-import { isProjectSection, projectHref } from "@/components/shell/navigation";
+import { projectHref, resolveProjectSection } from "@/components/shell/navigation";
 import { readRecord, recordModules } from "@/components/shell/recordRoutes";
 import { roleSet } from "@/lib/roles";
 import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
@@ -27,9 +27,11 @@ function ProjectsScreen() {
   const openProjectId = params.get("project");
   const requested = params.get("section");
   // Historical standalone Pricing links now land in Inventory, where Unit 360
-  // owns the selling-price workflow. No pricing authority is weakened.
+  // owns the selling-price workflow. No pricing authority is weakened. The old
+  // Agent & Buyer address lands in Buyers, where registering a purchaser now
+  // lives; neither key is in the rail, so neither passes isProjectSection.
   const record = readRecord(params);
-  const section = record && !record.invalid ? recordModules[record.kind] : requested === "pricing" ? "inventory" : isProjectSection(requested) ? requested : "overview";
+  const section = record && !record.invalid ? recordModules[record.kind] : resolveProjectSection(requested);
 
   useEffect(() => {
     if (state.status === "anonymous") router.replace("/login/");

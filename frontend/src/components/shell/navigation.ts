@@ -400,6 +400,19 @@ export function isSettingsSection(
   return value !== null && value !== undefined && SETTINGS_SECTIONS.has(value);
 }
 
+/**
+ * The section a requested key opens. Two historical keys are deliberately
+ * absent from the rail, so neither passes `isProjectSection`: old standalone
+ * Pricing links land in Inventory, where Unit 360 owns the selling price, and
+ * old Agent & Buyer links land in Buyers, where registering a purchaser lives.
+ * Anything else unknown opens the Overview.
+ */
+export function resolveProjectSection(requested: string | null | undefined): ProjectSection {
+  if (requested === "pricing") return "inventory";
+  if (requested === "agent-buyer") return "buyers";
+  return isProjectSection(requested) ? requested : "overview";
+}
+
 /** The one sentence under a project section's title. Written once, here. */
 export function sectionDescription(key: ProjectSection): string {
   return findNavItem(PROJECT_NAVIGATION, key)?.description ?? "";

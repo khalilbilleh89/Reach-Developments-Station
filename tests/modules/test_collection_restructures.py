@@ -370,6 +370,18 @@ class TestMonetaryConservation:
         assert plan["blockers"] == []
         assert _d(plan["carried_total"]) == expected["allocated"]
         assert _d(plan["unapplied_total"]) == expected["unapplied"]
+        # The operator reads the move by receipt number and instalment, not by id.
+        receipts = {
+            row["id"]: row["receipt_number"]
+            for row in collections_client.get(
+                f"{collections_url(project_id)}/sales/{collecting_sale}/receipts"
+            ).json()
+        }
+        assert plan["lines"]
+        for line in plan["lines"]:
+            assert line["receipt_number"] == receipts[line["receipt_id"]]
+            assert isinstance(line["installment_sequence"], int)
+            assert line["installment_label"]
 
         applied = collections_client.post(
             f"{collections_url(project_id)}/restructures/{restructure['id']}/apply", json={}

@@ -799,8 +799,8 @@ function BuildPosition({ summary }: { summary: ConstructionSummary }) {
       <EmptyState
         compact
         icon="permits"
-        title="No budget in force"
-        hint="Until a construction budget is approved and made current, there is nothing authorised to measure the build against."
+        title="No construction budget in force"
+        hint="Construction is run from signed contracts and recorded payments. Open Construction to register a contract or record a payment; budget variance appears here only for a project that has a governed budget."
       />
     );
   }

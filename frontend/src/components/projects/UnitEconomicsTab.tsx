@@ -55,7 +55,7 @@ import { businessDate, isPositive, money, percent, todayISO } from "@/lib/format
 import { sectionDescription } from "@/components/shell/navigation";
 
 import {
-  ALLOCATION_METHODS,
+  CREATABLE_ALLOCATION_METHODS,
   DIRECT_COST_TYPES,
   POOL_CATEGORIES,
   POOL_SCOPES,
@@ -1195,7 +1195,7 @@ function NewPoolDialog({
         hint="Weighted and raw area read the approved area schedule; revenue value reads the current approved price."
       >
         <select className="input" value={method} onChange={(event) => setMethod(event.target.value as AllocationMethod)}>
-          {ALLOCATION_METHODS.map((value) => (
+          {CREATABLE_ALLOCATION_METHODS.map((value) => (
             <option key={value} value={value}>
               {methodLabel(value)}
             </option>

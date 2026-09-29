@@ -96,3 +96,88 @@ test("no repayment form is offered before approval, after withdrawal or to a rea
     assert.equal(nodes(view.render()).some(node => node.type === "Button" && node.props.children === "Record a repayment"), false, JSON.stringify(overrides));
   }
 });
+
+const formatStub = {businessDate: v => v, isPositive: v => Number(v) > 0, money: (v, c) => `${c} ${v}`, todayISO: () => "2026-09-29", eventTime: v => v};
+
+test("applying cash: a failed suggestion read is an error with retry, and a refused allocation keeps the entry", async () => {
+  const receipt = {id: "rcpt", receipt_number: "RC-0001", status: "confirmed", amount: "10000.00", allocated_amount: "5000.00", unapplied_amount: "5000.00", receipt_date: "2026-01-15", allocations: []};
+  let suggestionCalls = 0;
+  const api = {ApiError, collections: {
+    receipts: async () => [receipt],
+    suggestions: async () => {suggestionCalls += 1; throw new ApiError("Unavailable", 500);},
+    allocate: async () => {throw new ApiError("That instalment is already paid.", 409);},
+  }};
+  const summary = {installments: [{installment_id: "inst-2", sequence: 2, label: "Second", outstanding: "30000.00"}]};
+  const view = mount("components/projects/collections/ReceiptPanel.tsx", "ReceiptPanel", {"@/lib/api": api, "@/lib/format": formatStub, "./labels": new Proxy({}, {get: () => () => "x"})},
+    {projectId: "p", saleId: "s", summary, currencyCode: "JOD", canRecord: true, canConfirm: false, canRestrictCash: false, onChanged() {}});
+  view.render(); await settle(); await settle();
+  const apply = nodes(view.render()).find(node => node.type === "Button" && node.props.children === "Apply");
+  await apply.props.onClick(); await settle();
+  let tree = view.render();
+  assert.doesNotMatch(text(tree), /nothing is outstanding/);
+  const retry = nodes(tree).find(node => node.type === "Button" && node.props.children === "Retry suggestions");
+  assert.ok(retry, "a failed suggestion read offers Retry");
+  retry.props.onClick(); await settle();
+  assert.equal(suggestionCalls, 2);
+  nodes(view.render()).find(node => node.type === "select").props.onChange({target: {value: "inst-2"}});
+  nodes(view.render()).find(node => node.type === "MoneyInput").props.onChange("5000.00");
+  nodes(view.render()).filter(node => node.type === "Form").at(-1).props.onSubmit({preventDefault() {}});
+  await settle(); await settle();
+  tree = view.render();
+  assert.equal(nodes(tree).find(node => node.type === "select").props.value, "inst-2");
+  assert.equal(nodes(tree).find(node => node.type === "MoneyInput").props.value, "5000.00");
+  assert.match(text(tree), /already paid/);
+});
+
+test("old Agent & Buyer and Pricing links open the screens that replaced them", () => {
+  const source = readFileSync(new URL("../src/components/shell/navigation.ts", import.meta.url), "utf8");
+  const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText;
+  const exports = {};
+  runInNewContext(`(function(require,exports){${code}\n})`, {URLSearchParams})(key => key === "@/lib/roles" ? {hasAnyRole: () => true, ROLE_SYSTEM_ADMIN: "system_admin"} : {}, exports);
+  assert.equal(exports.resolveProjectSection("agent-buyer"), "buyers");
+  assert.equal(exports.resolveProjectSection("pricing"), "inventory");
+  assert.equal(exports.resolveProjectSection("team"), "team");
+  assert.equal(exports.resolveProjectSection("nonsense"), "overview");
+  assert.equal(exports.resolveProjectSection(null), "overview");
+});
+
+function collectionsTab(component, collectionsApi) {
+  const api = {ApiError, sales: {}, collections: collectionsApi};
+  const summary = {installments: [], confirmed_receipts_total: "0.00", allocated_total: "0.00", unapplied_cash: "0.00", refund_due_total: "0.00", refund_confirmed_total: "0.00", refund_outstanding: "0.00"};
+  return mount("components/projects/collections/CollectionAccount.tsx", component, {"@/lib/api": api, "@/lib/format": formatStub, "@/lib/roles": {hasAnyRole: () => false, CASHFLOW_RECORDERS: new Set()}, "./labels": new Proxy({}, {get: () => () => "label"})},
+    {projectId: "p", saleId: "s", summary, currencyCode: "JOD", canCollect: true, canApprove: false, canConfirm: false, busy: false, error: null, onAct: async () => true});
+}
+const failing = async () => {throw new ApiError("Service unavailable", 503);};
+
+test("Collections follow-up, disputes, waivers and restructures never turn a failed read into an empty record", async () => {
+  const cases = [
+    ["ActionsTab", {actions: failing}, /No follow-up recorded/],
+    ["ExceptionsTab", {disputes: failing, waivers: async () => []}, /No disputes/],
+    ["ExceptionsTab", {disputes: async () => [], waivers: failing}, /No waivers/],
+    ["RestructureTab", {restructures: failing}, /never been restructured/],
+  ];
+  for (const [component, api, falseClaim] of cases) {
+    const view = collectionsTab(component, api);
+    view.render(); await settle(); await settle();
+    const tree = view.render();
+    assert.doesNotMatch(text(tree), falseClaim, component);
+    assert.ok(nodes(tree).some(node => node.type === "Notice" && node.props.tone === "error"), `${component} shows the failure`);
+    assert.ok(nodes(tree).some(node => node.type === "Button" && node.props.children === "Retry"), `${component} offers Retry`);
+    if (component === "RestructureTab") {
+      assert.equal(nodes(tree).some(node => node.type === "SubPanel" && node.props.title === "Raise a restructure"), false, "no second restructure is offered over unknown history");
+    }
+  }
+});
+
+test("the restructure carry-forward names receipts and instalments, never identifier fragments", async () => {
+  const open = {id: "0b5c7a1e-1111-4000-8000-000000000003", status: "open"};
+  const preview = {ready_to_apply: true, blockers: [], carried_total: "5000.00", unapplied_total: "0.00", confirmed_receipts_total: "5000.00", superseding: 1,
+    lines: [{receipt_id: "9d3f2b10-2222-4000-8000-000000000004", receipt_number: "RC-0007", installment_id: "5e6a8c20-3333-4000-8000-000000000005", installment_sequence: 2, installment_label: "On completion", amount: "5000.00"}]};
+  const view = collectionsTab("RestructureTab", {restructures: async () => [open], previewRestructure: async () => preview});
+  view.render(); await settle(); await settle();
+  const rendered = text(view.render());
+  assert.match(rendered, /RC-0007/);
+  assert.match(rendered, /On completion/);
+  assert.doesNotMatch(rendered, /9d3f2b10|5e6a8c20/);
+  assert.doesNotMatch(rendered, UUID);
+});

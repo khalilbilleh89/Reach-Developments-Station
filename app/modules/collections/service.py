@@ -2464,6 +2464,55 @@ def _carry_targets(session: Session, *, version_id: uuid.UUID) -> list[ledger.Ca
     ]
 
 
+def carry_line_labels(
+    session: Session, *, project_id: uuid.UUID, lines: list[ledger.CarryLine]
+) -> tuple[dict[uuid.UUID, str], dict[uuid.UUID, tuple[int, str]]]:
+    """Receipt numbers and instalment sequence/label for a carry-forward preview.
+
+    The operator deciding whether to apply a restructure reads receipts and
+    instalments by the names they already know, never by identifier. Both reads
+    are scoped by project; every line came from rows already scoped the same way.
+    """
+    receipt_ids = {line.receipt_id for line in lines}
+    installment_ids = {line.installment_id for line in lines}
+    receipts = (
+        dict(
+            session.execute(
+                select(CollectionReceipt.id, CollectionReceipt.receipt_number).where(
+                    CollectionReceipt.project_id == project_id,
+                    CollectionReceipt.id.in_(receipt_ids),
+                )
+            ).all()
+        )
+        if receipt_ids
+        else {}
+    )
+    installments = (
+        {
+            row.id: (row.sequence, row.label)
+            for row in session.execute(
+                select(
+                    PaymentPlanInstallment.id,
+                    PaymentPlanInstallment.sequence,
+                    PaymentPlanInstallment.label,
+                )
+                .join(
+                    PaymentPlanVersion,
+                    PaymentPlanVersion.id == PaymentPlanInstallment.payment_plan_version_id,
+                )
+                .join(PaymentPlan, PaymentPlan.id == PaymentPlanVersion.payment_plan_id)
+                .where(
+                    PaymentPlan.project_id == project_id,
+                    PaymentPlanInstallment.id.in_(installment_ids),
+                )
+            ).all()
+        }
+        if installment_ids
+        else {}
+    )
+    return receipts, installments
+
+
 def preview_restructure(
     session: Session,
     *,

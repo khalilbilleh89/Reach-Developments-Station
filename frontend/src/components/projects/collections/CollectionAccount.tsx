@@ -482,7 +482,7 @@ function PositionTab({
 
 /* ------------------------------------------------------------------------- */
 
-function ActionsTab({
+export function ActionsTab({
   projectId,
   saleId,
   summary,
@@ -510,11 +510,16 @@ function ActionsTab({
     next_action_date: "",
   });
 
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
       setHistory(await collections.actions(projectId, saleId));
-    } catch {
-      setHistory([]);
+      setHistoryError(null);
+    } catch (caught) {
+      // Never "No follow-up recorded": that is a claim about the account.
+      setHistory(null);
+      setHistoryError(caught instanceof ApiError ? caught.message : "Could not load the follow-up history.");
     }
   }, [projectId, saleId]);
 
@@ -659,6 +664,13 @@ function ActionsTab({
         </SubPanel>
       ) : null}
 
+      {historyError ? (
+        <Notice tone="error">
+          {historyError}
+          <Button onClick={() => void load()}>Retry</Button>
+        </Notice>
+      ) : null}
+
       {history === null ? null : history.length === 0 ? (
         <EmptyState
           title="No follow-up recorded"
@@ -701,7 +713,7 @@ function ActionsTab({
 
 /* ------------------------------------------------------------------------- */
 
-function ExceptionsTab({
+export function ExceptionsTab({
   projectId,
   saleId,
   summary,
@@ -732,13 +744,21 @@ function ExceptionsTab({
     reason: "",
   });
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
-    const [d, w] = await Promise.all([
-      collections.disputes(projectId, saleId).catch(() => []),
-      collections.waivers(projectId, saleId).catch(() => []),
+    const [d, w] = await Promise.allSettled([
+      collections.disputes(projectId, saleId),
+      collections.waivers(projectId, saleId),
     ]);
-    setDisputes(d);
-    setWaivers(w);
+    // A failed read stays unknown (null), never an empty "No disputes" list.
+    setDisputes(d.status === "fulfilled" ? d.value : null);
+    setWaivers(w.status === "fulfilled" ? w.value : null);
+    setLoadError(
+      d.status === "rejected" || w.status === "rejected"
+        ? "Could not load every dispute and waiver for this account."
+        : null,
+    );
   }, [projectId, saleId]);
 
   useEffect(() => {
@@ -759,6 +779,13 @@ function ExceptionsTab({
         Neither a dispute nor a waiver changes what is owed. A contested instalment keeps its
         balance and keeps ageing; an approved waiver pauses collection action and nothing else.
       </Notice>
+
+      {loadError ? (
+        <Notice tone="error">
+          {loadError}
+          <Button onClick={() => void load()}>Retry</Button>
+        </Notice>
+      ) : null}
 
       <SubPanel title="Disputes">
         {canCollect ? (
@@ -1067,7 +1094,7 @@ function ExceptionsTab({
 
 /* ------------------------------------------------------------------------- */
 
-function RestructureTab({
+export function RestructureTab({
   projectId,
   saleId,
   summary,
@@ -1089,13 +1116,31 @@ function RestructureTab({
   const [raising, setRaising] = useState(false);
   const [abandoning, setAbandoning] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
-    const rows = await collections.restructures(projectId, saleId).catch(() => []);
+    let rows: CollectionRestructure[];
+    try {
+      rows = await collections.restructures(projectId, saleId);
+    } catch (caught) {
+      // Unknown history is not "never restructured", and must not offer a
+      // second restructure beside one that may already be open.
+      setHistory(null);
+      setPreview(null);
+      setLoadError(caught instanceof ApiError ? caught.message : "Could not load the restructures.");
+      return;
+    }
     setHistory(rows);
     const open = rows.find((row) => row.status === "open");
-    setPreview(
-      open ? await collections.previewRestructure(projectId, open.id).catch(() => null) : null,
-    );
+    try {
+      setPreview(open ? await collections.previewRestructure(projectId, open.id) : null);
+      setLoadError(null);
+    } catch (caught) {
+      setPreview(null);
+      setLoadError(
+        caught instanceof ApiError ? caught.message : "Could not load what applying the open restructure would do.",
+      );
+    }
   }, [projectId, saleId]);
 
   useEffect(() => {
@@ -1137,7 +1182,14 @@ function RestructureTab({
         />
       </MetricGroup>
 
-      {open === null && canCollect ? (
+      {loadError ? (
+        <Notice tone="error">
+          {loadError}
+          <Button onClick={() => void load()}>Retry</Button>
+        </Notice>
+      ) : null}
+
+      {history !== null && open === null && canCollect ? (
         <SubPanel
           title="Raise a restructure"
           actions={
@@ -1249,9 +1301,13 @@ function RestructureTab({
                 {preview.lines.map((line, index) => (
                   <tr key={`${line.receipt_id}-${line.installment_id}-${index}`}>
                     <th scope="row" className="mono">
-                      {line.receipt_id.slice(0, 8)}
+                      {line.receipt_number ?? "Receipt"}
                     </th>
-                    <td className="mono">{line.installment_id.slice(0, 8)}</td>
+                    <td>
+                      {line.installment_sequence === null
+                        ? "Replacement instalment"
+                        : `${line.installment_sequence}. ${line.installment_label ?? ""}`}
+                    </td>
                     <td className="num">{money(line.amount, currencyCode)}</td>
                   </tr>
                 ))}

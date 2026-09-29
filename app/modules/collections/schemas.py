@@ -424,7 +424,12 @@ class CarryLineRead(BaseModel):
     """One receipt's cash landing on one instalment of the replacement schedule."""
 
     receipt_id: uuid.UUID
+    #: How the operator knows the receipt and the instalment. Identifiers stay
+    #: for keys; these are what the screen prints.
+    receipt_number: str | None = None
     installment_id: uuid.UUID
+    installment_sequence: int | None = None
+    installment_label: str | None = None
     amount: Money
 
 

@@ -857,6 +857,9 @@ def preview_restructure(
     preview = service.preview_restructure(
         session, project=project, actor=actor, restructure_id=restructure_id
     )
+    receipt_numbers, installments = service.carry_line_labels(
+        session, project_id=project.id, lines=preview.lines
+    )
     return RestructureApplyPreview(
         restructure_id=preview.restructure_id,
         source_version_id=preview.source_version_id,
@@ -871,7 +874,10 @@ def preview_restructure(
         lines=[
             CarryLineRead(
                 receipt_id=line.receipt_id,
+                receipt_number=receipt_numbers.get(line.receipt_id),
                 installment_id=line.installment_id,
+                installment_sequence=installments.get(line.installment_id, (None, None))[0],
+                installment_label=installments.get(line.installment_id, (None, None))[1],
                 amount=line.amount,
             )
             for line in preview.lines

@@ -1890,7 +1890,10 @@ export interface CollectionRestructure {
 
 export interface CarryLine {
   receipt_id: string;
+  receipt_number: string | null;
   installment_id: string;
+  installment_sequence: number | null;
+  installment_label: string | null;
   amount: string;
 }
 
