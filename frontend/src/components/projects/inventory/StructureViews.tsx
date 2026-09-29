@@ -188,7 +188,7 @@ export function PhasesView({
         >
           <KeyValueGrid>
             <KeyValue label="Planned start" value={businessDate(selected.planned_start)} />
-            {canAdmin ? <DeleteRecordButton label="phase" onDelete={reason => inventory.deleteRecord(projectId, "phases", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
+            {canAdmin ? <DeleteRecordButton label="phase" recordName={selected.code} description="This permanently removes this phase. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "phases", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
             <KeyValue
               label="Planned completion"
               value={businessDate(selected.planned_completion)}
@@ -511,7 +511,7 @@ export function BuildingsView({
         >
           <KeyValueGrid>
             <KeyValue label="Zone" value={selected.zone ?? "Not stated"} />
-            {canAdmin ? <DeleteRecordButton label="building" onDelete={reason => inventory.deleteRecord(projectId, "buildings", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
+            {canAdmin ? <DeleteRecordButton label="building" recordName={selected.code} description="This permanently removes this building. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "buildings", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
             <KeyValue label="Block" value={selected.block ?? "Not stated"} />
             <KeyValue label="Entrance / wing" value={selected.entrance_wing ?? "Not stated"} />
           </KeyValueGrid>
@@ -880,7 +880,7 @@ export function FloorsView({
         >
           <KeyValueGrid>
             <KeyValue label="Sequence" value={String(selected.sequence)} />
-            {canAdmin ? <DeleteRecordButton label="floor" onDelete={reason => inventory.deleteRecord(projectId, "floors", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
+            {canAdmin ? <DeleteRecordButton label="floor" recordName={selected.code} description="This permanently removes this floor. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "floors", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
             <KeyValue
               label="Level number"
               value={selected.level_number === null ? "Not stated" : String(selected.level_number)}

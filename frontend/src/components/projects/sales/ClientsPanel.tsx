@@ -284,7 +284,7 @@ export function ClientsPanel({
                   </Button>
                   {canWrite && client.is_active && onConnect ? <Button small data-leaves-editor onClick={() => onConnect(client)}>Connect unit</Button> : null}
                   {canWrite ? <Button small data-leaves-editor onClick={() => setEditing(client)}>Edit buyer</Button> : null}
-                  {canAdmin ? <DeleteRecordButton label="buyer" onDelete={reason => sales.deleteClient(projectId, client.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : null}
+                  {canAdmin ? <DeleteRecordButton label="buyer" recordName={client.display_name} description="This removes a buyer with no transaction history. A buyer with contracts or payments cannot be deleted; deactivate them instead. The audit trail is retained." onDelete={reason => sales.deleteClient(projectId, client.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : null}
                 </div></td>
               </tr>
             ))}

@@ -9,13 +9,13 @@ import { money, percent, percentInput, fractionFromPercent } from "@/lib/format"
 import { COMMISSION_PREPARERS, COMMISSION_RELEASERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { sectionDescription } from "@/components/shell/navigation";
-import { Badge, Button, ButtonRow, Card, RecordPage, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, SectionHeader, TableScroll } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, RecordPage, EmptyState, Field, FieldRow, ConfirmDialog, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, SectionHeader, TableScroll } from "@/components/ui";
 
 export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
   const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const params = useSearchParams(); const router = useRouter();
   const selectedId = params.get("commission");
   const selected = rows.find(row => row.id === selectedId) ?? null;
-  const commissionHref = (id: string | null) => { const next = new URLSearchParams(params); if (id) next.set("commission", id); else next.delete("commission"); return `/projects/?${next}`; }; const [dialog, setDialog] = useState<"grant" | "edit" | "allocation" | "reverse" | null>(null); const [allocation, setAllocation] = useState<CommissionAllocation | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const commissionHref = (id: string | null) => { const next = new URLSearchParams(params); if (id) next.set("commission", id); else next.delete("commission"); return `/projects/?${next}`; }; const [dialog, setDialog] = useState<"grant" | "edit" | "allocation" | "remove-allocation" | "reverse" | null>(null); const [allocation, setAllocation] = useState<CommissionAllocation | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const canPrepare = hasAnyRole(roles, COMMISSION_PREPARERS); const canRelease = hasAnyRole(roles, COMMISSION_RELEASERS);
   const [agents, setAgents] = useState<SalesAgent[]>([]);
@@ -96,12 +96,16 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
             <td className="num">{money(a.calculated_amount, currencyCodes[selected.currency_id])}</td>
             <td>{canPrepare && selected.status === "draft" ? <ButtonRow>
               <Button small variant="quiet" disabled={busy} onClick={() => { setAllocation(a); setDialog("allocation"); }}>Edit Beneficiary</Button>
-              <Button small variant="danger" disabled={busy} onClick={() => void run(() => commissions.removeAllocation(projectId, selected.id, a.id))}>Remove Beneficiary</Button>
+              <Button small variant="danger" disabled={busy} onClick={() => { setError(null); setAllocation(a); setDialog("remove-allocation"); }}>Remove Beneficiary</Button>
             </ButtonRow> : "Read only"}</td>
           </tr>)}</tbody>
         </TableScroll> : <EmptyState compact title="No beneficiaries assigned" hint="The distribution records each beneficiary's percentage against the base." />}
       </section>
     </RecordPage> : null}
+    {dialog === "remove-allocation" && allocation && selected ? <ConfirmDialog title={`Remove ${allocation.beneficiary_name ?? "this beneficiary"}?`}
+      body={`${allocation.beneficiary_name ?? "This beneficiary"} (${percent(allocation.rate_fraction)} against the base) is removed from this draft distribution. The draft and its audit history remain; the beneficiary can be added again before release.${error ? ` ${error}` : ""}`}
+      confirmLabel="Remove beneficiary" busy={busy} onCancel={() => { if (!busy) { setDialog(null); setAllocation(null); } }}
+      onConfirm={() => void run(() => commissions.removeAllocation(projectId, selected.id, allocation.id))} /> : null}
     {dialog === "grant" ? <GrantDialog busy={busy} error={error} sales={eligible} codes={currencyCodes} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => commissions.create(projectId, body))} /> : null}
     {dialog === "edit" && selected ? <EditCommissionDialog grant={selected} code={currencyCodes[selected.currency_id]} busy={busy} error={error} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => commissions.update(projectId, selected.id, body))} /> : null}
     {dialog === "allocation" && selected ? <AllocationDialog allocation={allocation} sale={selected} agents={agents} agentError={agentError} busy={busy} error={error} onCancel={() => setDialog(null)} onSubmit={(body) => void run(() => allocation ? commissions.updateAllocation(projectId, selected.id, allocation.id, { ...body, expected_updated_at: allocation.updated_at }) : commissions.addAllocation(projectId, selected.id, body))} /> : null}

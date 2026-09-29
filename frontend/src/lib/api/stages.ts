@@ -5,7 +5,7 @@ export interface Stage {
 }
 export interface UnitStage extends Stage {
   completed_date: string | null; revision: number; status: "complete" | "pending";
-  history: { completed_date: string | null; reason: string; actor_user_id: string;
+  history: { completed_date: string | null; reason: string; actor_user_id: string; actor_display_name: string | null;
     recorded_at: string; sequence: number }[];
 }
 export interface UnitProgress {

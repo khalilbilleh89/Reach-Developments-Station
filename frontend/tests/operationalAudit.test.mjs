@@ -3,11 +3,9 @@
 // behaviour the operator saw, not on a source string.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
 import ts from "typescript";
-const require = createRequire(import.meta.url);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 

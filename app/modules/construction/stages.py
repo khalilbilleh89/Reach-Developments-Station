@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.access.dependencies import ActorContext
+from app.modules.access.models import User
 from app.modules.audit.service import record_event
 from app.modules.construction.models import ConstructionStage, UnitStageEvent
 from app.modules.construction.permissions import (
@@ -171,10 +172,30 @@ def unit_progress(
             .order_by(UnitStageEvent.sequence.desc())
         )
     )
+    # Who recorded each entry, by the name people know them by, not an identifier.
+    actor_ids = {event.actor_user_id for event in events}
+    names = (
+        dict(
+            session.execute(select(User.id, User.display_name).where(User.id.in_(actor_ids))).all()
+        )
+        if actor_ids
+        else {}
+    )
     rows = []
     for stage in list_stages(session, project):
-        history = [event for event in events if event.stage_id == stage.id]
-        completed = history[0].completed_date if history else None
+        history = [
+            {
+                "completed_date": event.completed_date,
+                "reason": event.reason,
+                "actor_user_id": event.actor_user_id,
+                "actor_display_name": names.get(event.actor_user_id),
+                "recorded_at": event.recorded_at,
+                "sequence": event.sequence,
+            }
+            for event in events
+            if event.stage_id == stage.id
+        ]
+        completed = history[0]["completed_date"] if history else None
         rows.append(
             {
                 "id": stage.id,
@@ -182,7 +203,7 @@ def unit_progress(
                 "sequence": stage.sequence,
                 "planned_date": stage.planned_date,
                 "completed_date": completed,
-                "revision": history[0].sequence if history else 0,
+                "revision": history[0]["sequence"] if history else 0,
                 "status": "complete" if completed else "pending",
                 "history": history,
             }

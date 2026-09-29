@@ -98,6 +98,9 @@ def test_edit_move_clear_and_preserve_history(
         == 204
     )
     history = client.get(progress).json()["stages"][0]["history"]
+    # The entry names who recorded it; the screen never has to print an identifier.
+    manager_name = client.get("/api/v1/auth/me").json()["display_name"]
+    assert [entry["actor_display_name"] for entry in history] == [manager_name]
     saved = client.patch(path, json=snapshot(stage, name=" Structure ", planned_date="2026-09-01"))
     assert saved.status_code == 200, saved.text
     assert saved.json()["name"] == "Structure"

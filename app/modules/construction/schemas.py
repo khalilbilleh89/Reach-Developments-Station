@@ -87,6 +87,7 @@ class StageEventOut(BaseModel):
     completed_date: date | None
     reason: str
     actor_user_id: uuid.UUID
+    actor_display_name: str | None = None
     recorded_at: datetime
     sequence: int
 

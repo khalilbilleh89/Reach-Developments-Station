@@ -106,6 +106,26 @@ test("writers can select multiple files; all are attempted and server truth refr
   assert.match(notice.props.children, /signature rejected/);
 });
 
+test("retrying after a partial failure uploads only the refused files, never a stored one twice", async () => {
+  const h = harness(images);
+  let view = nodes(h.render({ canEdit: true }));
+  const files = [
+    { name: "one.png", type: "image/png", size: 20, arrayBuffer: async () => new ArrayBuffer(1) },
+    { name: "broken.png", type: "image/png", size: 20, arrayBuffer: async () => new ArrayBuffer(1) },
+  ];
+  view.find(node => node.type === "input").props.onChange({ target: { files } });
+  view = nodes(h.render({ canEdit: true }));
+  view.find(node => node.type === "Button" && String(node.props.children).includes("Add 2")).props.onClick();
+  await settle();
+
+  view = nodes(h.render({ canEdit: true }));
+  const retry = view.find(node => node.type === "Button" && String(node.props.children).startsWith("Retry 1"));
+  assert.ok(retry, "the button offers to retry only the one refused file");
+  retry.props.onClick();
+  await settle();
+  assert.deepEqual(h.calls.map(call => call[2].name), ["one.png", "broken.png", "broken.png"]);
+});
+
 test("removal confirmation names the image and explains retained history", () => {
   const h = harness(images);
   let view = nodes(h.render({ canEdit: true }));
