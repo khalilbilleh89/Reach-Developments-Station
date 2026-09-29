@@ -23,13 +23,13 @@ Roles reviewed:      11 of the 12 repository roles in the browser — system_adm
                      covered only by the existing PostgreSQL tests.
 Workflows exercised: 30 journeys in the table below (evidence depth stated per row)
 
-Findings:            50 total (27 fixed, 4 decisions, 19 follow-ups)
+Findings:            51 total (28 fixed, 4 decisions, 19 follow-ups)
 P0:                  0
 P1:                  4   (4 fixed)
 P2:                  35  (20 fixed, 3 decisions, 12 follow-ups)
-P3:                  11  (3 fixed, 1 decision, 7 follow-ups)
+P3:                  12  (4 fixed, 1 decision, 7 follow-ups)
 
-Fixed in this PR:                    27
+Fixed in this PR:                    28
 Remaining business-decision blockers: 4
 Remaining structural follow-ups:      19
 
@@ -306,6 +306,17 @@ files by hand and never scanned Management Actions' create route; six baseline g
 entries were already implemented, so those handlers could have regressed to
 "missing" silently. The guard now scans every router; the newly visible handler is
 recorded as the existing gap it is; the stale entries are removed.
+
+**F-28 · Test harness · concurrency regression · P3 · FIXED.** The complete suite
+on the final code failed once in
+`test_two_correction_attempts_serialize_and_only_one_commits` (3,808 passed, 1
+failed) and passed in isolation. Root cause: each thread built a fresh application,
+and FastAPI's lazy route build silences a pydantic warning with
+`warnings.catch_warnings`, which swaps process-global filters and is not
+thread-safe; two first requests racing could restore each other's filters and turn
+the silenced warning into a warnings-as-errors 500. Pre-existing and independent of
+this PR's code. The test now walks every route once per client in the main thread
+before the race, leaving only the two corrections concurrent; 5/5 local passes.
 
 ### BLOCKED — BUSINESS DECISION REQUIRED
 
