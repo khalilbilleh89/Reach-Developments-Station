@@ -1282,7 +1282,7 @@ def update_field_definition(
     actor: ActiveActor,
     project: AccessibleProject,
 ) -> CustomFieldRead:
-    definition = fields_service.get_definition(session, definition_id)
+    definition = fields_service.get_definition(session, definition_id, project_id=project.id)
     _require_definition_authority(
         actor,
         scope_type=definition.scope_type,

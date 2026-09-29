@@ -115,6 +115,21 @@ def test_validation_on_create_and_patch(
     )
 
 
+def test_nul_character_is_a_validation_error_and_writes_nothing(
+    admin_client: TestClient, project_id: str
+) -> None:
+    row = create(admin_client, project_id)
+    created = admin_client.post(url(project_id), json={"team": "operations", "name": "A\x00B"})
+    assert created.status_code == 422, created.text
+    assert created.json() == {"detail": "Text cannot contain the NUL (0x00) character."}
+    changed = admin_client.patch(
+        f"{url(project_id)}/{row['id']}", json={"version": 1, "scope_of_work": "x\x00"}
+    )
+    assert changed.status_code == 422
+    members = admin_client.get(url(project_id)).json()["members"]
+    assert [(m["name"], m["version"]) for m in members] == [(row["name"], 1)]
+
+
 def test_delete_retains_details_reason_actor_and_audit(
     admin_client: TestClient, project_id: str, db: Session
 ) -> None:

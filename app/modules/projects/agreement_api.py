@@ -5,6 +5,7 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from starlette.concurrency import run_in_threadpool
 
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.projects import agreement_service as service
@@ -35,13 +36,19 @@ async def create_agreement(
     session: DbSession,
     actor: ActiveActor,
 ) -> AgreementRead:
-    service.scope(session, project_id, actor, write=True)
+    # Authorize before accepting any bytes, but without the project row lock:
+    # the client decides how slowly the body arrives, and holding the lock that
+    # every project write takes for that long would stall the whole project.
+    # The read transaction ends before streaming; the lock is taken, and
+    # authorization repeated, only once the document is in memory.
+    await run_in_threadpool(service.authorize_upload, session, project_id, actor)
     document = bytearray()
     async for chunk in request.stream():
         if len(document) + len(chunk) > service.MAX_DOCUMENT_BYTES:
             raise HTTPException(status_code=413, detail="Documents must be no larger than 10 MB.")
         document.extend(chunk)
-    row = service.create(
+    row = await run_in_threadpool(
+        service.create_locked,
         session,
         project_id,
         actor,

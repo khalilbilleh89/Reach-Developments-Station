@@ -3,6 +3,7 @@
 import io
 import uuid
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,10 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from httpx2 import Response
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.core.database import get_engine
 from app.modules.audit.models import AuditEvent
 from app.modules.projects.agreement_models import ProjectAgreement
 from app.modules.projects.models import UserProjectAccess
@@ -243,3 +246,44 @@ def test_migration_roundtrip_and_retained_document_refusal(
         command.downgrade(config, "0040_project_team")
     command.upgrade(config, "head")
     assert db.get(ProjectAgreement, uuid.UUID(row["id"])).document == PDF
+
+
+def test_upload_does_not_hold_the_project_lock_while_the_body_arrives(
+    admin_client: TestClient, project_id: str
+) -> None:
+    """A slow upload must not stall every other write to the project.
+
+    The client decides how quickly the document arrives. While it is arriving,
+    another transaction must still be able to take the project row lock that
+    every project write takes; the upload takes it only once the bytes are in.
+    """
+    lock_attempts: list[bool] = []
+
+    def try_project_lock() -> bool:
+        engine = get_engine()
+        with engine.connect() as connection:
+            try:
+                connection.execute(
+                    text("SELECT id FROM projects WHERE id = :id FOR UPDATE NOWAIT"),
+                    {"id": project_id},
+                )
+                return True
+            except OperationalError:
+                return False
+            finally:
+                connection.rollback()
+
+    def slow_body() -> Iterator[bytes]:
+        yield PDF[:8]
+        lock_attempts.append(try_project_lock())
+        yield PDF[8:]
+
+    response = admin_client.post(
+        url(project_id),
+        params={**FIELDS, "filename": "agreement.pdf"},
+        content=slow_body(),
+        headers={"Content-Type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert lock_attempts == [True]

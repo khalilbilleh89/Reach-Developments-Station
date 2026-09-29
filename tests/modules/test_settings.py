@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 
@@ -14,7 +15,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_engine, get_session_factory
-from app.core.errors import ConflictError
+from app.core.errors import ConflictError, ValidationError
 from app.modules.access.models import User
 from app.modules.audit.models import AuditEvent
 from app.modules.settings import service
@@ -943,3 +944,108 @@ def test_reading_unconfigured_thresholds_reports_not_found(
     response = client.get(f"{PACKS}/{pack_id}/approval-thresholds")
 
     assert response.status_code == 404
+
+
+def _race(
+    holder_work: Callable[[Session], None], writer: Callable[[Session], object]
+) -> tuple[bool, list[object]]:
+    """Hold ``holder_work`` uncommitted, start ``writer``, then commit the holder."""
+    factory = get_session_factory()
+    holder = factory()
+    holder_work(holder)
+    outcome: list[object] = []
+
+    def second_writer() -> None:
+        session = factory()
+        try:
+            outcome.append(writer(session))
+        # Deliberately broad: whatever the writer raises has to reach the
+        # asserting thread, which cannot see this thread's traceback.
+        except BaseException as exc:
+            outcome.append(exc)
+        finally:
+            session.rollback()
+            session.close()
+
+    thread = threading.Thread(target=second_writer, name="second-currency-writer")
+    thread.start()
+    try:
+        blocked = _wait_until_a_backend_blocks(timeout=5.0)
+        holder.commit()
+    finally:
+        holder.close()
+        thread.join(timeout=30)
+    return blocked, outcome
+
+
+def test_a_pack_cannot_be_created_on_a_currency_being_retired(
+    admin: User, currency_id: str
+) -> None:
+    """Given a currency retired concurrently, the new pack decides against the committed state.
+
+    Without the currency lock the pack creation reads the currency as still
+    active, and an active pack ends up defaulting to an inactive currency — the
+    state both writers were individually forbidden to create.
+    """
+    currency = uuid.UUID(currency_id)
+
+    def retire(session: Session) -> None:
+        session.execute(
+            text("UPDATE currencies SET is_active = false WHERE id = :id"), {"id": currency}
+        )
+
+    def create_pack(session: Session) -> object:
+        return service.create_country_pack(
+            session,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            country_code="JO",
+            name="Jordan",
+            locale="en-JO",
+            timezone="Asia/Amman",
+            default_currency_id=currency,
+            area_unit="sqm",
+            fiscal_year_start_month=1,
+        )
+
+    blocked, outcome = _race(retire, create_pack)
+
+    assert blocked
+    assert len(outcome) == 1 and isinstance(outcome[0], ValidationError)
+    assert "must be active" in outcome[0].detail
+
+
+def test_a_currency_cannot_be_retired_under_a_pack_being_created(
+    admin: User, currency_id: str
+) -> None:
+    """Given a pack created concurrently on a currency, retiring it sees that pack."""
+    currency = uuid.UUID(currency_id)
+
+    def add_pack(session: Session) -> None:
+        session.add(
+            CountryPack(
+                country_code="JO",
+                name="Jordan",
+                locale="en-JO",
+                timezone="Asia/Amman",
+                default_currency_id=currency,
+                area_unit="sqm",
+                fiscal_year_start_month=1,
+                is_active=True,
+            )
+        )
+        session.flush()
+
+    def retire(session: Session) -> object:
+        return service.update_currency(
+            session,
+            currency_id=currency,
+            actor_user_id=admin.id,
+            correlation_id=uuid.uuid4(),
+            is_active=False,
+        )
+
+    blocked, outcome = _race(add_pack, retire)
+
+    assert blocked
+    assert len(outcome) == 1 and isinstance(outcome[0], ConflictError)

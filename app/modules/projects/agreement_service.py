@@ -159,6 +159,29 @@ def create(
     return row
 
 
+def authorize_upload(session: Session, project_id: uuid.UUID, actor: ActorContext) -> None:
+    """Refuse an upload before its body is read, holding no lock afterwards."""
+    try:
+        scope(session, project_id, actor, write=False)
+        if not actor.is_system_admin and not actor.role_keys.intersection(AGREEMENT_WRITERS):
+            raise PermissionDeniedError("You do not have permission to access agreements.")
+    finally:
+        session.rollback()
+
+
+def create_locked(
+    session: Session,
+    project_id: uuid.UUID,
+    actor: ActorContext,
+    fields: AgreementFields,
+    filename: str,
+    document: bytes,
+) -> ProjectAgreement:
+    """Take the project lock, re-check authority, then store the received document."""
+    scope(session, project_id, actor, write=True)
+    return create(session, project_id, actor, fields, filename, document)
+
+
 def check_version(row: ProjectAgreement, expected_version: int) -> None:
     if row.version != expected_version:
         raise ConflictError("This agreement changed. Reload the register before trying again.")

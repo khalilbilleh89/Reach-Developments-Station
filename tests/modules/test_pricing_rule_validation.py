@@ -12,6 +12,7 @@ no rules engine here, and these tests are partly about proving that stayed true.
 
 from __future__ import annotations
 
+import uuid
 from datetime import timedelta
 
 import pytest
@@ -469,6 +470,22 @@ def test_a_retired_definition_is_refused(
 
     assert response.status_code == 422
     assert "does not apply to units of this project" in response.json()["detail"]
+
+
+def test_an_unknown_definition_reads_the_same_as_one_that_does_not_apply(
+    finance_client: TestClient, project_id: str, draft_configuration: str
+) -> None:
+    """The refusal never tells a caller whether an identifier names a real field elsewhere."""
+    response = _premium(
+        finance_client,
+        project_id,
+        draft_configuration,
+        source_kind="custom_field",
+        custom_field_definition_id=str(uuid.uuid4()),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "That custom field does not apply to units of this project."
 
 
 def test_no_expression_path_reaches_the_matcher(

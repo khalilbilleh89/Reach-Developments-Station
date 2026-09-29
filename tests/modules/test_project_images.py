@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit.models import AuditEvent
 from app.modules.projects import images
-from app.modules.projects.models import ProjectImage
+from app.modules.projects.models import ProjectImage, UserProjectAccess
 from tests.factories import client_for, make_user
 from tests.modules.conftest import PROJECTS, grant_access, project_payload
 
@@ -143,6 +143,40 @@ def test_reader_can_view_but_cannot_mutate_project_images(
     assert reader_client.get(f"{PROJECTS}/{project_id}/images/{image_id}/file").content == PNG
     assert _upload(reader_client, project_id).status_code == 403
     assert reader_client.delete(f"{PROJECTS}/{project_id}/images/{image_id}").status_code == 403
+
+
+def test_selected_phase_project_manager_cannot_change_the_whole_project_gallery(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    manager = make_user(db, email="phase-pm@example.com", roles=("project_manager",))
+    grant_access(admin_client, project_id, manager)
+    manager_client = client_for(manager.email)
+    kept = _upload(admin_client, project_id, filename="kept.png").json()["id"]
+    assert _upload(manager_client, project_id, filename="whole.png").status_code == 201
+
+    access = db.scalar(
+        select(UserProjectAccess).where(
+            UserProjectAccess.user_id == manager.id,
+            UserProjectAccess.project_id == uuid.UUID(project_id),
+        )
+    )
+    access.phase_scope = "selected"
+    db.commit()
+
+    assert manager_client.get(f"{PROJECTS}/{project_id}/images").status_code == 200
+    assert _upload(manager_client, project_id, filename="partial.png").status_code == 403
+    assert manager_client.delete(f"{PROJECTS}/{project_id}/images/{kept}").status_code == 403
+    names = [row["filename"] for row in admin_client.get(f"{PROJECTS}/{project_id}/images").json()]
+    assert sorted(names) == ["kept.png", "whole.png"]
+
+
+def test_nul_character_in_a_filename_is_refused_not_a_server_fault(
+    admin_client: TestClient, project_id: str
+) -> None:
+    response = _upload(admin_client, project_id, filename="lobby\x00.png")
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Text cannot contain the NUL (0x00) character."}
+    assert admin_client.get(f"{PROJECTS}/{project_id}/images").json() == []
 
 
 def test_inaccessible_and_cross_project_image_ids_return_not_found(

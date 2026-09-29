@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import DataError
 
 from app import __version__
 from app.api import health
@@ -70,6 +71,9 @@ _GUARDED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
 #: Returned for any unhandled server error. Raw exception strings never reach a client.
 _INTERNAL_ERROR_DETAIL = "Internal server error."
+
+#: psycopg's refusal of a NUL character in text; the only data error that is the client's.
+_NUL_TEXT_MARKER = "cannot contain NUL (0x00) bytes"
 
 #: Service errors map to exactly one status each, in one place, so that no
 #: route handler has to translate them itself.
@@ -224,6 +228,21 @@ def create_app() -> FastAPI:
         """Translate a domain error into its status code and safe body."""
         status_code = _SERVICE_ERROR_STATUS.get(type(exc), status.HTTP_400_BAD_REQUEST)
         return JSONResponse(status_code=status_code, content={"detail": exc.detail})
+
+    @app.exception_handler(DataError)
+    async def handle_data_error(request: Request, exc: DataError) -> JSONResponse:
+        """Refuse text PostgreSQL cannot store as a validation error, not a fault.
+
+        A NUL character is valid JSON and valid in a query string, and no schema
+        in the system refuses it, so without this every free-text field turned
+        it into a 500. Any other data error is still an unexpected fault.
+        """
+        if _NUL_TEXT_MARKER in str(exc.orig):
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                content={"detail": "Text cannot contain the NUL (0x00) character."},
+            )
+        return await handle_unexpected_error(request, exc)
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
