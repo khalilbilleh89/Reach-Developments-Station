@@ -55,3 +55,30 @@ Feature tests cover both teams, nullable PATCH, stale versions, invalid fields, 
 audit retention, no user/access creation, and migration roundtrip with retained refusal.
 Frontend interaction tests cover search, editing, paging, deletion wiring and failed saves.
 Exact executed results and browser evidence belong in the PR review package.
+
+
+## Optional Job Description attachment
+
+After saving a person, choose **Attach job description** on their card. The full-page
+attachment editor accepts one current PDF or Word file (.pdf, .doc, .docx), up to 10 MiB.
+The member remains valid without a file. All Team readers can download an attached file;
+only existing Team writers can upload, replace or delete it. Failed uploads retain the
+selection and show an error; navigation warns about an unsaved file selection.
+
+The existing Agreements document validator checks file name, size and file signature.
+This is format checking, not malware scanning. Downloads force attachment disposition,
+private/no-store caching and nosniff. Directory reads return only file ID/name, never bytes.
+
+POST `/{member_id}/job-description` receives raw bytes with filename/version query fields;
+GET on that path downloads the current file. POST `/{member_id}/job-description/delete`
+requires the member version and a reason. Uploads authorize before reading the bounded
+body, then lock the project and re-check member scope/version before writing. Every file
+change increments the member version, so stale edits cannot race an attachment change.
+
+Migration `0044_team_job_description` adds `team_job_descriptions`, with a partial unique
+index for one current attachment per member. Replacement/removal retains previous bytes,
+identity and hash; Audit records the actor and metadata, never document bytes. Removing a
+member retains their files but makes them inaccessible through ordinary download routes.
+No existing member is backfilled or made dependent on a file. Downgrade is allowed only
+while the new table is empty; once history exists, retain it and roll forward or revert
+application code without dropping the additive table.
