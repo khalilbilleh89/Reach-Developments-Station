@@ -134,7 +134,7 @@ def test_buyers_keep_contacts_agent_and_sole_or_joint_ownership(
     joint = next(row for row in buyers if row["display_name"] == "Joint Buyers")
     assert sole["phone"] == "0012345"
     assert sole["agent_id"] == agent["id"]
-    assert sole["agent_country"] == "Jordan"
+    assert sales_ops_client.get(f"{base}/agents/{agent['id']}").json()["country"] == "Jordan"
     assert sole["owner_advisor_user_id"] is not None
     parties = advisor_client.get(f"{base}/clients/{sole['id']}/parties").json()
     assert len(parties) == 1 and parties[0]["share_fraction"] == "1.000000"
@@ -164,7 +164,17 @@ def test_buyers_keep_contacts_agent_and_sole_or_joint_ownership(
 def test_one_invalid_row_rolls_back_the_entire_batch(
     sales_ops_client: TestClient, operational_project: str, db: Session, kind: str
 ) -> None:
-    records = [{"display_name": "Valid first"}, {"display_name": " "}]
+    records = [
+        {"display_name": "Valid first"},
+        {
+            "display_name": " ",
+            **(
+                {"email": "missing-name@example.test"}
+                if kind == "buyers"
+                else {"country": "Jordan"}
+            ),
+        },
+    ]
     body = workbook(sales_ops_client, operational_project, kind, records)
     for operation in ("validate", "apply"):
         response = upload(sales_ops_client, operational_project, kind, body, operation)
