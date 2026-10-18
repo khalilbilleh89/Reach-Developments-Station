@@ -5,9 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
   Button,
+  ButtonRow,
+  Disclosure,
   RecordPage,
   EmptyState,
-  IdentityCell,
   KeyValue,
   KeyValueGrid,
   Loading,
@@ -19,12 +20,12 @@ import {
   SectionHeader,
   TableScroll,
 } from "@/components/ui";
+import { ContractDocuments } from "./ContractDocuments";
 import { ContractTransactions } from "./ContractTransactions";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 import { hasAnyRole } from "@/lib/roles";
 import { ContractWorkflow } from "./ContractWorkflow";
 import { useRegisterFields } from "@/components/shell/registerState";
-import { useAnswer } from "@/lib/answer";
 import { ApiError, construction } from "@/lib/api";
 import type {
   Certificate,
@@ -36,14 +37,8 @@ import type {
 import { businessDate, money, percent } from "@/lib/format";
 
 import {
-  certificateLabel,
-  certificateTone,
   contractLabel,
   contractTone,
-  invoiceLabel,
-  invoiceTone,
-  paymentLabel,
-  paymentTone,
   variationLabel,
   variationTone,
 } from "./labels";
@@ -51,7 +46,6 @@ import {
 const TABS = [
   { key: "position", label: "Contract & payments" },
   { key: "manage", label: "Contract details" },
-  { key: "lines", label: "Lines" },
   { key: "variations", label: "Variations" },
   { key: "certificates", label: "Certificates" },
   { key: "cash", label: "Invoices & payments" },
@@ -91,7 +85,6 @@ export function ContractFile({
   const setTab = (contractTab: string) => setView({ contractTab });
   const [reading, setReading] = useState(false);
   const [supportError, setSupportError] = useState<string | null>(null);
-  const codes = useAnswer(true, () => construction.costCodes(projectId), [projectId]);
   const [contract, setContract] = useState<ContractDetail | null>(null);
   const [variations, setVariations] = useState<Variation[] | null>(null);
   const [certificates, setCertificates] = useState<Certificate[] | null>(null);
@@ -173,11 +166,10 @@ export function ContractFile({
     >
       {error ? <Notice tone="error">The last displayed record could not be refreshed: {error}</Notice> : null}
       {supportError ? <Notice tone="warning">{supportError}</Notice> : null}
-      <Button small disabled={reading} onClick={() => void load()}>{reading ? "Refreshing…" : "Refresh contract and related records"}</Button>
-      {codes.status === "failed" ? <><Notice tone="error">Cost codes could not be loaded. Line editing is unavailable until they recover.</Notice><Button onClick={codes.retry}>Retry contract cost codes</Button></> : null}
-      {hasAnyRole(roles, new Set(["finance", "project_manager"])) && ["draft", "submitted", "active"].includes(contract.status) ? <DeleteRecordButton label="unused contract" recordName={contract.contract_number} description="Unused drafts are removed. Signed entries are cancelled with their history retained. Any linked variation, certificate, invoice or payment blocks removal." confirmLabel="Remove unused contract" onDelete={reason => construction.deleteUnusedContract(projectId, contract.id, reason)} onDeleted={async () => { onClose(); await onChanged(); }} /> : null}
-      {tab === "manage" ? <ContractWorkflow projectId={projectId} detail={contract} codes={codes.status === "ready" ? codes.data : []} codesReady={codes.status === "ready"} reading={reading} unavailable={!!error} onRefresh={load} onChanged={async () => { await load(); await onChanged(); }} /> : null}
-      {uncommitted && tab !== "manage" ? <Notice tone="info">Draft values do not commit funds. If the agreement is already signed, open Contract details and choose Activate signed contract. Cancelled agreements remain as history.</Notice> : null}
+      <ButtonRow><Button small disabled={reading} onClick={() => void load()}>{reading ? "Refreshing…" : "Refresh contract and related records"}</Button></ButtonRow>
+      {tab === "manage" && hasAnyRole(roles, new Set(["finance", "project_manager"])) && ["draft", "submitted", "active"].includes(contract.status) ? <DeleteRecordButton label="unused contract" recordName={contract.contract_number} description="Unused drafts are removed. Signed entries are cancelled with their history retained. Any linked variation, certificate, invoice or payment blocks removal." confirmLabel="Remove unused contract" onDelete={reason => construction.deleteUnusedContract(projectId, contract.id, reason)} onDeleted={async () => { onClose(); await onChanged(); }} /> : null}
+      {tab === "manage" || (uncommitted && tab === "position") ? <ContractWorkflow projectId={projectId} detail={contract} reading={reading} unavailable={!!error} onRefresh={load} onChanged={async () => { await load(); await onChanged(); }} /> : null}
+      {uncommitted && tab !== "manage" && tab !== "position" ? <Notice tone="info">Draft values do not commit funds. If the agreement is already signed, open Contract details and choose Activate signed contract. Cancelled agreements remain as history.</Notice> : null}
       {tab === "position" ? (
         <div className="stack">
           <Position compact layout="split">
@@ -185,7 +177,10 @@ export function ContractFile({
             <PositionFigure label="Revised contract including tax" value={money(contract.revised_contract_value_inc_tax, code)} />
             <PositionFigure label="Paid to date" value={money(contract.confirmed_paid, code)} />
           </Position>
-          <ContractTransactions projectId={projectId} contract={contract} roles={roles} variations={variations} payments={payments} unavailable={!!error || reading} onChanged={async () => { await load(); await onChanged(); }} />
+          <KeyValueGrid><KeyValue label="Invoices outstanding" value={money(contract.invoice_outstanding, code)} /><KeyValue label="Retention held" value={money(contract.retention_outstanding, code)} /><KeyValue label="Advance still to recover" value={money(contract.advance_outstanding, code)} /></KeyValueGrid>
+          <ButtonRow><Button onClick={() => setTab("certificates")}>Completion certificates</Button><Button onClick={() => setTab("cash")}>Invoices and outstanding amounts</Button></ButtonRow>
+          {reading ? <Loading label="Refreshing transactions" /> : <ContractTransactions projectId={projectId} contract={contract} roles={roles} invoices={invoices} variations={variations} payments={payments} unavailable={!!error || reading} onChanged={async () => { await load(); await onChanged(); }} />}
+          <Disclosure title="Contract reconciliation and terms">
           <section className="stack stack-tight">
             <SectionHeader
               title={uncommitted ? "Proposed contract" : "Commitment"}
@@ -333,111 +328,7 @@ export function ContractFile({
               value={contract.vendor_tax_reference ?? "—"}
             />
           </KeyValueGrid>
-        </div>
-      ) : null}
-
-      {tab === "lines" ? (
-        <div className="stack">
-          <section className="stack stack-tight">
-            <SectionHeader
-              title="What was signed"
-              description="Excluding tax. Each line carries only its own original value."
-            />
-            {contract.lines.length === 0 ? (
-              <EmptyState
-                title="No lines"
-                hint="This contract has not been broken down yet."
-              />
-            ) : (
-              <TableScroll label="Contract lines">
-                <thead>
-                  <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">Description</th>
-                    <th scope="col">Cost code</th>
-                    <th scope="col" className="num">
-                      Original
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contract.lines.map((line) => (
-                    <tr key={line.id}>
-                      <td>{line.sequence}</td>
-                      <td>{line.description}</td>
-                      <td>{line.cost_code}</td>
-                      <td className="num">
-                        {money(line.original_amount_ex_tax, code)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableScroll>
-            )}
-          </section>
-
-          <section className="stack stack-tight">
-            <SectionHeader
-              title="Where it now stands"
-              description="Excluding tax, by cost code — the grain variations and certificates are governed at."
-            />
-            {contract.cost_code_position.length === 0 ? (
-              <EmptyState
-                title="Nothing committed"
-                hint="This contract commits nothing against a cost code yet."
-              />
-            ) : (
-              <TableScroll label="Contract position by cost code">
-                <thead>
-                  <tr>
-                    <th scope="col">Cost code</th>
-                    <th scope="col" className="num">
-                      Original
-                    </th>
-                    <th scope="col" className="num">
-                      Approved variations
-                    </th>
-                    <th scope="col" className="num">
-                      Revised commitment
-                    </th>
-                    <th scope="col" className="num">
-                      Certified
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contract.cost_code_position.map((row) => (
-                    <tr key={row.cost_code_id}>
-                      <td>
-                        <IdentityCell
-                          name={row.cost_code}
-                          meta={row.cost_code_name}
-                        />
-                      </td>
-                      <td className="num">
-                        {money(row.original_amount_ex_tax, code)}
-                      </td>
-                      <td className="num">
-                        {money(row.approved_variation_delta, code)}
-                      </td>
-                      <td className="num">
-                        {money(row.revised_commitment, code)}
-                      </td>
-                      <td className="num">
-                        {money(row.certified_to_date, code)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableScroll>
-            )}
-            <p className="footnote">
-              Two lines may name one cost code, and nothing allocates a
-              variation or a certificate back to one of them. Revised and
-              certified figures therefore belong to the cost code, not to the
-              line that first mentioned it.
-            </p>
-          </section>
+          </Disclosure>
         </div>
       ) : null}
 
@@ -481,148 +372,7 @@ export function ContractFile({
         )
       ) : null}
 
-      {tab === "certificates" && certificates ? (
-        !certificates || certificates.length === 0 ? (
-          <EmptyState
-            title="No certificates"
-            hint="No work has been valued against this contract."
-          />
-        ) : (
-          <TableScroll label="Certificates on this contract">
-            <thead>
-              <tr>
-                <th scope="col">Number</th>
-                <th scope="col">Period</th>
-                <th scope="col" className="num">
-                  Work
-                </th>
-                <th scope="col" className="num">
-                  Net due
-                </th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {certificates.map((certificate) => (
-                <tr key={certificate.id}>
-                  <td>{certificate.certificate_number}</td>
-                  <td>
-                    {businessDate(certificate.period_start)} to{" "}
-                    {businessDate(certificate.period_end)}
-                  </td>
-                  <td className="num">
-                    {money(certificate.current_work_value_ex_tax, code)}
-                  </td>
-                  <td className="num">
-                    {money(certificate.net_due, code)}
-                  </td>
-                  <td>
-                    <Badge tone={certificateTone(certificate.status)}>
-                      {certificateLabel(certificate.status)}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </TableScroll>
-        )
-      ) : null}
-
-      {tab === "cash" && invoices && payments ? (
-        <div className="stack">
-          <section className="stack stack-tight">
-            <SectionHeader title="Invoices" description="Including tax." />
-            {!invoices || invoices.length === 0 ? (
-              <EmptyState
-                title="No invoices"
-                hint="Nothing has been claimed."
-              />
-            ) : (
-              <TableScroll label="Invoices on this contract">
-                <thead>
-                  <tr>
-                    <th scope="col">Number</th>
-                    <th scope="col">Type</th>
-                    <th scope="col">Dated</th>
-                    <th scope="col" className="num">
-                      Payable
-                    </th>
-                    <th scope="col" className="num">
-                      Outstanding
-                    </th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((invoice) => (
-                    <tr key={invoice.id}>
-                      <td>{invoice.invoice_number}</td>
-                      <td>{invoice.invoice_type}</td>
-                      <td>{businessDate(invoice.invoice_date)}</td>
-                      <td className="num">
-                        {money(invoice.net_payable, code)}
-                      </td>
-                      <td className="num">
-                        {money(invoice.outstanding, code)}
-                      </td>
-                      <td>
-                        <Badge tone={invoiceTone(invoice.status)}>
-                          {invoiceLabel(invoice.status)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableScroll>
-            )}
-          </section>
-
-          <section className="stack stack-tight">
-            <SectionHeader
-              title="Payments"
-              description="Including tax. Cash out."
-            />
-            {!payments || payments.length === 0 ? (
-              <EmptyState title="No payments" hint="Nothing has been paid." />
-            ) : (
-              <TableScroll label="Payments on this contract">
-                <thead>
-                  <tr>
-                    <th scope="col">Reference</th>
-                    <th scope="col">Dated</th>
-                    <th scope="col" className="num">
-                      Amount
-                    </th>
-                    <th scope="col" className="num">
-                      Unallocated
-                    </th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((payment) => (
-                    <tr key={payment.id}>
-                      <td>{payment.payment_reference}</td>
-                      <td>{businessDate(payment.payment_date)}</td>
-                      <td className="num">
-                        {money(payment.amount, payment.currency_code)}
-                      </td>
-                      <td className="num">
-                        {money(payment.unallocated, payment.currency_code)}
-                      </td>
-                      <td>
-                        <Badge tone={paymentTone(payment.status)}>
-                          {paymentLabel(payment.status)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableScroll>
-            )}
-          </section>
-        </div>
-      ) : null}
+      {tab === "certificates" || tab === "cash" ? <ContractDocuments projectId={projectId} contract={contract} roles={roles} certificates={certificates} invoices={invoices} mode={tab === "certificates" ? "certificates" : "invoices"} unavailable={!!error || reading} onChanged={async () => { await load(); await onChanged(); }} /> : null}
     </RecordPage>
   );
 }

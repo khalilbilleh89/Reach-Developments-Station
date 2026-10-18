@@ -146,10 +146,10 @@
   {
     "handler": "construction.create_certificate",
     "create_route": "POST /contracts/{contract_id}/certificates",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+    "status": "implemented",
+    "removal_route": "DELETE /certificates/{certificate_id}?reason=...",
+    "ui_file": "frontend/src/components/projects/construction/ContractDocuments.tsx",
+    "notes": "Unused drafts are deleted with their lines and audit before-image; submitted/certified evidence uses rejection/reversal."
   },
   {
     "handler": "construction.create_contract",
@@ -210,10 +210,10 @@
   {
     "handler": "construction.record_invoice",
     "create_route": "POST /contracts/{contract_id}/invoices",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+    "status": "implemented",
+    "removal_route": "POST /invoices/{invoice_id}/void",
+    "ui_file": "frontend/src/components/projects/construction/ContractDocuments.tsx",
+    "notes": "Visible Delete voids the retained invoice with a reason; confirmed allocations block until reversed."
   },
   {
     "handler": "construction.record_payment",

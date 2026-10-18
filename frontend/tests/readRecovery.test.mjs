@@ -492,12 +492,11 @@ test("Signed contract entry preserves exact amounts, percentage conversion and u
   assert.equal(payload.tax_rate_fraction, "0");
 });
 
-test("Contract line edits retain sequence and send explicit zero without deleting history", () => {
-  let payload;
-  const render = mount("projects/construction/ContractWorkflow", "ContractLineEditor", {}, { detail: { currency_code: "JOD", lines: [] }, line: { sequence: 7, cost_code_id: "code", description: "Retained line", original_amount_ex_tax: "50.00" }, codes: [{ id: "code", is_active: true }], failure: null, busy: false, onSubmit: body => { payload = body; }, onCancel() {} });
-  const field = nodes(render()).find(node => node.type === "Field" && node.props.label === "Line value excluding tax");
-  field.props.children.props.onChange("0.00"); render().props.onSubmit();
-  assert.equal(payload.sequence, 7); assert.equal(payload.original_amount_ex_tax, "0.00");
+test("Contract workflow uses the total and exposes no line entry", () => {
+  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, { projectId: "p", detail: {status: "draft", workflow: {editing_blocker: null, signed_registration_blocker: null}, lines: []}, reading: false, unavailable: false });
+  const tree = nodes(render());
+  assert.ok(tree.some(n => n.type === "Button" && n.props.children === "Activate signed contract"));
+  assert.ok(!tree.some(n => n.type === "Button" && n.props.children === "Add contract line"));
 });
 
 test("Contract cancellation keeps the reason after a failed request and remains cancelable on failed refresh", () => {
@@ -511,18 +510,18 @@ test("Contract cancellation keeps the reason after a failed request and remains 
 });
 
 test("Contract workspace renders server activation blockers and offers no draft edits after submission", () => {
-  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", activation_blocker: "Budget has no room", cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} });
+  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", signed_registration_blocker: "Currency must match project", cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} });
   const tree = nodes(render());
-  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Authorize and activate").props.disabled, true);
+  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Activate signed contract").props.disabled, true);
   assert.ok(!tree.some(node => node.type === "Button" && node.props.children === "Edit draft terms"));
-  assert.ok(tree.some(node => node.props.children === "Budget has no room"));
+  assert.ok(tree.some(node => node.props.children === "Currency must match project"));
 });
 
 test("Contract confirmation disables itself when refreshed eligibility changes", () => {
-  const props = { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", activation_blocker: null, cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} };
+  const props = { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", signed_registration_blocker: null, cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} };
   const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, props);
-  nodes(render()).find(node => node.type === "Button" && node.props.children === "Authorize and activate").props.onClick();
-  props.detail.workflow.activation_blocker = "Already activated by another operator";
+  nodes(render()).find(node => node.type === "Button" && node.props.children === "Activate signed contract").props.onClick();
+  props.detail.workflow.signed_registration_blocker = "Already activated by another operator";
   const dialog = nodes(render()).find(node => typeof node.type === "function" && node.type.name === "ContractDecision");
   assert.equal(dialog.props.unavailable, true);
   assert.equal(dialog.props.failure.message, "Already activated by another operator");
@@ -585,7 +584,7 @@ for (const kind of ["payment", "reduction"]) test(`${kind} entry sends exact val
   assert.equal(closed, 0);
   assert.ok(nodes(render()).some(node => node.type === "Notice" && node.props.children.includes("Could not save")));
   assert.equal(payload[kind === "payment" ? "amount" : "adjustment_amount"], "123456789.12");
-  if (kind === "payment") { assert.equal(payload.direct_contract_payment, true); assert.equal(payload.proof_reference, "Receipt 1"); assert.ok(!("invoice_id" in payload)); }
+  if (kind === "payment") { assert.equal(payload.direct_contract_payment, true); assert.equal(payload.proof_reference, "Receipt 1"); assert.equal(payload.invoice_id, null); }
   else { assert.equal(payload.adjustment_kind, "reduction"); assert.equal(payload.cost_code_id, "scope"); }
   fail = false; submit(); await settle(); assert.equal(closed, 1);
 });
@@ -709,4 +708,32 @@ test("Documents: readers download PDFs without mutation controls", async () => {
   assert.ok(!tree.some(n => n.type === "Button" && ["New document", "Document types", "Edit"].includes(n.props.children)));
   tree.find(n => n.type === "Button" && n.props.children === "Download PDF").props.onClick(); await settle();
   assert.equal(calls[0][0], "project"); assert.equal(calls[0][1], row);
+});
+
+test("certificate entry sends a single period amount and exact deductions atomically", async () => {
+  let payload;
+  const render = mount("projects/construction/ContractDocuments", "DocumentEditor", {
+    "../DeleteRecordButton": {},
+    "@/lib/api": {construction: {createCertificate: async (_p, _c, body) => {payload=body;}}},
+    "@/lib/format": contractFormat,
+  }, {projectId:"p", mode:"certificates", contract:{id:"c", contract_number:"CT", vendor_name:"Vendor", currency_code:"EUR", certified_to_date:"100.00", advance_outstanding:"20.00", retention_outstanding:"10.00", cost_code_position:[{cost_code_id:"scope"}]}, certificates:[], onClose(){}, async onChanged(){}});
+  const set=(label,value,custom=false)=>nodes(render()).find(n=>n.type==="Field"&&n.props.label===label).props.children.props.onChange(custom?value:{target:{value}});
+  set("Reference","IPC-2"); set("Document date","2026-10-18"); set("Period start","2026-10-01"); set("Period end","2026-10-18");
+  set("Work completed this period, excluding tax","123456.78",true); set("Advance recovery this period","10.01",true); set("Certificate / completion evidence reference","Engineer certificate");
+  nodes(render()).find(n=>n.type==="form").props.onSubmit({preventDefault(){}}); await settle();
+  assert.equal(payload.current_work_value_ex_tax,"123456.78"); assert.equal(payload.advance_recovery_amount,"10.01"); assert.equal(payload.cost_code_id,null);
+  assert.ok(!("lines" in payload));
+});
+
+test("paid invoice selection is sent without recomputing its balance", async () => {
+  let payload;
+  const render=mount("projects/construction/ContractTransactions","ContractTransactionEditor", {
+    "../DeleteRecordButton": {},
+    "@/lib/api":{construction:{recordPayment:async(_p,_c,body)=>{payload=body;}}},
+    "@/lib/format":contractFormat,
+  }, {kind:"payment",projectId:"p",contract:{id:"c",contract_number:"CT",lines:[],cost_code_position:[],currency_code:"EUR",currency_id:"f63c733c-bfaa-4236-8ab4-ea103f265854"}, invoices:[{id:"invoice",status:"approved",invoice_number:"ADV-1",invoice_type:"advance",outstanding:"100.00"}], onClose(){},async onChanged(){}});
+  nodes(render()).find(n=>n.type==="select").props.onChange({target:{value:"invoice"}});
+  nodes(render()).find(n=>n.type==="MoneyInput").props.onChange("25.01");
+  nodes(render()).find(n=>n.type==="form").props.onSubmit({preventDefault(){}}); await settle();
+  assert.equal(payload.invoice_id,"invoice"); assert.equal(payload.amount,"25.01"); assert.equal(payload.direct_contract_payment,true);
 });
