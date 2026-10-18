@@ -366,7 +366,9 @@ export interface DocumentReference {
   title: string;
   document_type_code: string;
   reference_number: string | null;
-  external_url: string;
+  external_url: string | null;
+  filename: string | null;
+  sha256: string | null;
   notes: string | null;
   is_active: boolean;
 }
