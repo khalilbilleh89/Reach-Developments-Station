@@ -6084,7 +6084,7 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .matrix-watermark { font-size: 4rem; font-weight: 800; color: var(--accent); line-height: 1; }
 .matrix-context { white-space: pre-wrap; color: var(--text-secondary); margin: 24px 0; }
 .matrix-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
-.matrix-cell { padding: 24px; background: var(--matrix-wash); border-radius: var(--radius-card); border-top: 4px solid var(--matrix-tone); min-width: 0; }
+.matrix-cell { margin: 0; padding: 24px; background: var(--matrix-wash); border-radius: var(--radius-card); border-top: 4px solid var(--matrix-tone); min-width: 0; }
 .matrix-cell-heading { display: flex; gap: 16px; align-items: flex-start; }
 .matrix-cell-heading h3 { margin: 0; font-size: var(--title-section); }
 .matrix-cell-heading p { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
