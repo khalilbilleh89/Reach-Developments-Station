@@ -32,6 +32,7 @@ import {
 } from "@/components/ui";
 import { UnassignedAssets } from "./inventory/UnassignedAssets";
 import { RemovedUnits } from "./inventory/RemovedUnits";
+import { MasterplanWorkspace } from "./inventory/MasterplanWorkspace";
 import { CommonAreas } from "./inventory/CommonAreas";
 import { InventoryConfiguration } from "./inventory/InventoryConfiguration";
 import { StockSummary, StockTable } from "./inventory/StockView";
@@ -94,7 +95,7 @@ export function InventoryTab({
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
   // Open the property browser first; preserve explicitly selected register views.
   const [viewFields, setViewFields] = useRegisterFields({ view: "stock" });
-  const view = (["phases", "buildings", "floors", "units", "stock", "common_areas", "configuration"].includes(viewFields.view) ? viewFields.view : "stock") as "phases" | "buildings" | "floors" | "units" | "stock" | "common_areas" | "configuration";
+  const view = (["phases", "buildings", "floors", "units", "stock", "masterplan", "common_areas", "configuration"].includes(viewFields.view) ? viewFields.view : "stock") as "phases" | "buildings" | "floors" | "units" | "stock" | "masterplan" | "common_areas" | "configuration";
   const [stockFields,setStockFields]=useRegisterFields({stock_areas:""});
   const setView = (view: string) => setViewFields({ view });
   const [addingUnit, setAddingUnit] = useState(false);
@@ -181,6 +182,7 @@ export function InventoryTab({
   //: the operator to read out of three dropdowns. Nothing here is derived from
   //: a rendered row: these are the records the server returned.
   const noun = {
+    masterplan: "mapped units",
     common_areas: "common areas",
     stock: "units",
     configuration: "choices",
@@ -291,6 +293,7 @@ export function InventoryTab({
           onSelect={(key) => setView(key as typeof view)}
           tabs={[
             { key: "stock", label: "Stock" },
+            { key: "masterplan", label: "Masterplan" },
             { key: "common_areas", label: "Common Areas" },
             { key: "configuration", label: "Configuration" },
             { key: "phases", label: "Phases" },
@@ -379,6 +382,7 @@ export function InventoryTab({
           </section>
         ) : null}
 
+        {view === "masterplan" ? <MasterplanWorkspace key={projectId} projectId={projectId} canWrite={canWriteStructure} /> : null}
         {view === "common_areas" ? <CommonAreas key={projectId} projectId={projectId} canWrite={canWriteStructure} /> : null}
       {view === "configuration" ? <div className="stack"><InventoryConfiguration key={projectId} projectId={projectId} canConfigure={canConfigure} />{roles.has("system_admin") || roles.has("master_admin") ? <UnassignedAssets key={`assets-${projectId}`} projectId={projectId} /> : null}</div> : null}
         {view === "stock" && register ? <StockSummary register={register} prices={launchValues} /> : null}
