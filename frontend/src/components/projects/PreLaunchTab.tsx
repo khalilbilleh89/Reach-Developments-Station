@@ -50,6 +50,7 @@ const statusTone = (status: string): Tone =>
   status === "confirmed" ? "success" : status === "reversed" ? "muted" : "warning";
 
 const editableFields = (row: PreLaunchExpense) => ({
+  amount_ex_vat: row.amount_ex_vat ?? null, vat_rate_percent: row.vat_rate_percent ?? null,
   category: row.category, amount: row.amount, movement_date: row.movement_date,
   counterparty_reference: row.counterparty_reference, invoice_reference: row.invoice_reference,
   evidence_reference: row.evidence_reference, notes: row.notes,
@@ -154,7 +155,7 @@ export function PreLaunchTab({
       {register ? (
         <Card tone="command" title="Expense position"><Position compact>
           <PositionFigure label="Recorded amount" value={money(register.recorded_amount, currencyCode)} note="Not confirmed cash" />
-          <PositionFigure lead label="Confirmed paid amount" value={money(register.confirmed_paid_amount, currencyCode)} note="Included once in project cashflow" />
+          <PositionFigure lead label="Confirmed paid amount" value={money(register.confirmed_paid_amount, currencyCode)} note="Total including VAT; included once in project cashflow" />
         </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment. Master Administrator / Boss can confirm their own expenses.</p></Card>
       ) : null}
       <div className="prelaunch-ledger-layout">
@@ -165,21 +166,21 @@ export function PreLaunchTab({
           <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : expenses.length === 0 ? <EmptyState title="No matching expenses" actions={<Button onClick={() => { setSearch(""); setStatus(""); }}>Reset filters</Button>} /> : (
           schedule ? <TableScroll label="Pre-Launch expense register" fixedFirst>
-            <thead><tr><th scope="col">Description</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Amount</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
+            <thead><tr><th scope="col">Description</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Total including VAT</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
             <tbody>{expenses.map((row) => (
               <tr key={row.id}>
                 <th scope="row" className="cell-prose">{row.notes ?? row.movement_reference}</th>
                 <td>{categoryLabel(row.category)}</td>
                 <td>{row.counterparty_reference ?? "—"}</td>
                 <td>{businessDate(row.movement_date)}</td>
-                <td className="num">{money(row.amount, row.currency_code ?? currencyCode)}</td>
+                <td className="num">{money(row.amount, row.currency_code ?? currencyCode)}<ExpenseVat row={row} currencyCode={currencyCode} /></td>
                 <td><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge>{row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}</td>
                 <td><span className="cell-secondary">Invoice: {row.invoice_reference ?? "—"}</span><span className="cell-secondary">Evidence: {row.evidence_reference ?? "—"}</span></td>
                 <td className="cell-prose">{expenseActions(row)}</td>
               </tr>
             ))}</tbody>
           </TableScroll> : <div className="expense-entry-list">{expenses.map(row => <article className="expense-entry" key={row.id}>
-            <header><div><span className="eyebrow"><Icon name="money" />{categoryLabel(row.category)}</span><h3>{row.notes ?? row.movement_reference}</h3><p className="footnote">{row.counterparty_reference ?? "Counterparty not recorded"}</p></div><div className="expense-entry-amount"><strong>{money(row.amount, row.currency_code ?? currencyCode)}</strong><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></div></header>
+            <header><div><span className="eyebrow"><Icon name="money" />{categoryLabel(row.category)}</span><h3>{row.notes ?? row.movement_reference}</h3><p className="footnote">{row.counterparty_reference ?? "Counterparty not recorded"}</p></div><div className="expense-entry-amount"><strong>{money(row.amount, row.currency_code ?? currencyCode)}</strong><ExpenseVat row={row} currencyCode={currencyCode} /><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></div></header>
             <dl><div><dt>Movement date</dt><dd>{businessDate(row.movement_date)}</dd></div><div><dt>Movement reference</dt><dd>{row.movement_reference}</dd></div><div><dt>Invoice reference</dt><dd>{row.invoice_reference ?? "Not recorded"}</dd></div><div><dt>Supporting evidence</dt><dd>{row.evidence_reference ?? "Not recorded"}</dd></div></dl>
             {row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}<footer>{expenseActions(row)}</footer>
           </article>)}</div>
@@ -187,35 +188,59 @@ export function PreLaunchTab({
       </Card>
       {register ? <Card title="Expenses by category" description="Current recorded and confirmed expenses. Removed and reversed entries are excluded." actions={<Button small aria-pressed={showEmptyCategories} onClick={() => setShowEmptyCategories(!showEmptyCategories)}>{showEmptyCategories ? "Hide empty categories" : "Include empty categories"}</Button>}>
         <div className="expense-category-list">{register.categories.filter(category => showEmptyCategories || nonzero(category.recorded_amount) || nonzero(category.confirmed_paid_amount)).map(category => <section key={category.category}><h3>{categoryLabel(category.category)}</h3><dl><div><dt>Recorded</dt><dd>{money(category.recorded_amount, currencyCode)}</dd></div><div><dt>Confirmed paid</dt><dd>{money(category.confirmed_paid_amount, currencyCode)}</dd></div><div><dt>Total expenses</dt><dd>{money(category.total_amount, currencyCode)}</dd></div><div><dt>Share of confirmed paid</dt><dd>{nonzero(register.confirmed_paid_amount) ? category.confirmed_share_percent + "%" : "No confirmed payments"}</dd></div></dl></section>)}</div>
-        <p className="footnote">Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
+        <p className="footnote">Amounts include VAT where recorded. Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
       </Card> : null}
       </div>
-      {adding ? <ExpenseDialog currencyId={currencyId} currencyCode={currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setAdding(false); }} onSubmit={(body) => { void run(() => prelaunch.record(projectId, body)); }} /> : null}
-      {editing ? <ExpenseDialog key={editing.id} initial={editing} currencyId={currencyId} currencyCode={editing.currency_code ?? currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setEditing(null); }} onSubmit={(changes) => { void run(() => prelaunch.update(projectId, editing.id, { expected: editableFields(editing), changes })); }} /> : null}
+      {adding ? <ExpenseDialog projectId={projectId} currencyId={currencyId} currencyCode={currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setAdding(false); }} onSubmit={(body) => { void run(() => prelaunch.record(projectId, body)); }} /> : null}
+      {editing ? <ExpenseDialog projectId={projectId} key={editing.id} initial={editing} currencyId={currencyId} currencyCode={editing.currency_code ?? currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setEditing(null); }} onSubmit={(changes) => { void run(() => prelaunch.update(projectId, editing.id, { expected: editableFields(editing), changes })); }} /> : null}
       {removing ? <PromptDialog title="Remove this recorded expense" label="Reason" hint={`${removing.notes ?? removing.movement_reference} · ${money(removing.amount, removing.currency_code ?? currencyCode)}. This unconfirmed entry will leave recorded totals and remain in history. Confirmed cash is unchanged.`} confirmLabel="Remove expense" busy={busy} error={error} onCancel={() => { if (!busy) setRemoving(null); }} onSubmit={(reason) => { void run(() => prelaunch.remove(projectId, removing.id, { expected: editableFields(removing), reason })); }} /> : null}
       {reversing ? <PromptDialog title="Reverse this expense" label="Reason" hint="The original remains in history and is removed from current actual cash." confirmLabel="Reverse" busy={busy} error={error} onCancel={() => { if (!busy) setReversing(null); }} onSubmit={(reason) => { void run(() => prelaunch.reverse(projectId, reversing, reason)); }} /> : null}
     </div>
   );
 }
 
-function ExpenseDialog({ initial, currencyId, currencyCode, busy, error, onCancel, onSubmit }: { initial?: PreLaunchExpense; currencyId: string; currencyCode: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
+function ExpenseVat({ row, currencyCode }: { row: PreLaunchExpense; currencyCode: string | null }) {
+  return row.amount_ex_vat != null ? <p className="footnote">Excl. VAT {money(row.amount_ex_vat, row.currency_code ?? currencyCode)} · VAT {row.vat_rate_percent}%: {money(row.vat_amount, row.currency_code ?? currencyCode)}</p> : <p className="footnote">VAT breakdown not recorded</p>;
+}
+
+function ExpenseDialog({ projectId, initial, currencyId, currencyCode, busy, error, onCancel, onSubmit }: { projectId: string; initial?: PreLaunchExpense; currencyId: string; currencyCode: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
   const [category, setCategory] = useState<string>(initial?.category ?? "permits");
   const [description, setDescription] = useState(initial?.notes ?? "");
-  const [amount, setAmount] = useState(initial?.amount ?? "");
+  const [amount, setAmount] = useState(initial?.amount_ex_vat ?? initial?.amount ?? "");
+  const [vatRate, setVatRate] = useState(initial?.vat_rate_percent ?? "");
+  const [legacyTotal, setLegacyTotal] = useState(!!initial && initial.amount_ex_vat == null);
+  const [result, setResult] = useState<{ key: string; value: import("@/lib/api/types").PreLaunchAmount } | null>(null);
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
+  const [retry, setRetry] = useState(0);
+  const previewKey = JSON.stringify([projectId, amount, vatRate, legacyTotal, retry]);
+  useEffect(() => {
+    let active = true;
+    if (!amount) return;
+    const timer = setTimeout(() => {
+      const body = legacyTotal ? { amount } : { amount_ex_vat: amount, vat_rate_percent: vatRate || "0" };
+      void prelaunch.preview(projectId, body).then(value => { if (active) { setResult({ key: previewKey, value }); setFailure(null); } })
+        .catch(caught => { if (active) setFailure({ key: previewKey, message: caught instanceof ApiError ? caught.message : "Could not calculate the expense total." }); });
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [projectId, amount, vatRate, legacyTotal, previewKey]);
+  const preview = result?.key === previewKey ? result.value : null;
+  const previewError = failure?.key === previewKey ? failure.message : null;
   const [date, setDate] = useState(initial?.movement_date ?? "");
   const [counterparty, setCounterparty] = useState(initial?.counterparty_reference ?? "");
   const [reference, setReference] = useState(initial?.invoice_reference ?? "");
   const [evidence, setEvidence] = useState(initial?.evidence_reference ?? "");
-  const dirty = category !== (initial?.category ?? "permits") || description !== (initial?.notes ?? "") || amount !== (initial?.amount ?? "") || date !== (initial?.movement_date ?? "") || counterparty !== (initial?.counterparty_reference ?? "") || reference !== (initial?.invoice_reference ?? "") || evidence !== (initial?.evidence_reference ?? "");
-  const submit = () => onSubmit({ category, amount, movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description });
-  return <RecordPage title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} eyebrow="Pre-Launch" subtitle="Record an expense and its payment evidence" onClose={onCancel}><DraftBoundary dirty={dirty} busy={busy}><form onSubmit={event => { event.preventDefault(); if (!busy && description.trim() && amount && date) submit(); }}>
+  const dirty = category !== (initial?.category ?? "permits") || description !== (initial?.notes ?? "") || amount !== (initial?.amount_ex_vat ?? initial?.amount ?? "") || vatRate !== (initial?.vat_rate_percent ?? "") || legacyTotal !== (!!initial && initial.amount_ex_vat == null) || date !== (initial?.movement_date ?? "") || counterparty !== (initial?.counterparty_reference ?? "") || reference !== (initial?.invoice_reference ?? "") || evidence !== (initial?.evidence_reference ?? "");
+  const submit = () => onSubmit({ category, ...(legacyTotal ? { amount } : { amount_ex_vat: amount, vat_rate_percent: vatRate || "0" }), movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description });
+  return <RecordPage title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} eyebrow="Pre-Launch" subtitle="Record an expense and its payment evidence" onClose={onCancel}><DraftBoundary dirty={dirty} busy={busy}><form onSubmit={event => { event.preventDefault(); if (!busy && description.trim() && amount && date && preview) submit(); }}>
     <p className="footnote">This records an entry. It becomes cash after confirmation. Master Administrator / Boss may self-confirm; other users need a different authorised confirmer.</p>
     {error ? <Notice tone="error">{error}</Notice> : null}
     <FormSection title="Expense"><Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-    <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Amount"><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>
+    <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label={legacyTotal ? "Existing total (VAT breakdown unknown)" : "Amount excluding VAT"}><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>
+    {legacyTotal ? <Notice tone="info">This entry has no recorded VAT breakdown. Its total is preserved. <Button onClick={() => { setLegacyTotal(false); setAmount(""); }}>Enter VAT breakdown</Button></Notice> : <Field label="VAT (%)" optional hint="Leave blank or enter 0 when VAT does not apply."><input className="input" type="number" min="0" max="100" step="0.0001" value={vatRate} onChange={event => setVatRate(event.target.value)} /></Field>}
+    {previewError ? <Notice tone="error">{previewError} <Button onClick={() => setRetry(retry + 1)}>Retry total</Button></Notice> : preview ? <Position compact><PositionFigure label="VAT amount" value={preview.vat_amount == null ? "Not recorded" : money(preview.vat_amount, currencyCode)} /><PositionFigure lead label="Total including VAT" value={money(preview.amount, currencyCode)} /></Position> : amount ? <Loading label="Calculating expense total" /> : null}
     </FormSection><FormSection title="Payment and evidence"><FieldRow><Field label="Payment / movement date"><input className="input" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Counterparty / authority" optional><input className="input" value={counterparty} onChange={(event) => setCounterparty(event.target.value)} /></Field></FieldRow>
     <FieldRow><Field label="Reference" optional><input className="input" value={reference} onChange={(event) => setReference(event.target.value)} /></Field><Field label="Evidence / proof" optional><input className="input" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field></FieldRow>
     </FormSection>
-    <FormActions><Button variant="primary" type="submit" disabled={busy || !description.trim() || !amount || !date}>{busy ? "Saving…" : initial ? "Save changes" : "Record expense"}</Button><Button data-leaves-editor disabled={busy} onClick={onCancel}>Cancel</Button></FormActions>
+    <FormActions><Button variant="primary" type="submit" disabled={busy || !description.trim() || !amount || !date || !preview}>{busy ? "Saving…" : initial ? "Save changes" : "Record expense"}</Button><Button data-leaves-editor disabled={busy} onClick={onCancel}>Cancel</Button></FormActions>
   </form></DraftBoundary></RecordPage>;
 }
