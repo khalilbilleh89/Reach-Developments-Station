@@ -246,6 +246,7 @@ def delete_record(
                 "unit_economics_unit_costs": "unit costs",
                 "inventory_sub_assets": "parking or storage assets",
                 "inventory_common_areas": "common-area allocations",
+                "inventory_masterplan_mappings": "masterplan footprints (remove in Masterplan)",
             }.get(table, "dependent business records")
             raise ConflictError(
                 f"Permanent deletion is blocked by linked {label}. "

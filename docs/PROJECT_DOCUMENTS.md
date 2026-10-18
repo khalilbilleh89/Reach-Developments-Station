@@ -8,6 +8,6 @@ PDF creation streams a bounded request body, checks the filename and PDF signatu
 
 Delete removes the document from registers and disables its file endpoint while retaining the original bytes, identity, hash and audit. Supersede/Restore remains available separately. Removal requires a nonblank reason. Writes lock the project so creation, type deletion and evidence removal cannot race around dependency checks.
 
-Migration 0045 follows 0044. Upgrade preserves all existing link references, adds nullable file columns, a false removal marker and project type configuration. Clean downgrade is tested; downgrade refuses after project choices, PDF evidence or removal history exists. Roll forward after use. No production data is seeded.
+Migration 0046 follows the merged masterplan revision 0045. Upgrade preserves all existing link references, adds nullable file columns, a false removal marker and project type configuration. Clean downgrade is tested; downgrade refuses after project choices, PDF evidence or removal history exists. Roll forward after use. No production data is seeded.
 
 Governance: docs/ENGINEERING_RULES.md and docs/DELETION_POLICY.md.

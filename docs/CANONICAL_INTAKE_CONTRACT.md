@@ -192,6 +192,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `marketing_content` | New marketing content; never legacy-imported. |
 | `marketing_rental_scenarios` | Rental assumptions; excluded from legacy import. |
 | `marketing_indicators` | Market observations; excluded from legacy import. |
+| `inventory_masterplans` | Application-authored drawing pages and calibration; excluded from legacy intake. |
+| `inventory_masterplan_mappings` | Project-scoped traced unit footprints; excluded from legacy intake. |
 | `commercial_faqs` | Project-authored reusable sales answers maintained in Reach; excluded from legacy import. |
 
 

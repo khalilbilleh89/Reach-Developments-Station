@@ -187,10 +187,10 @@ def test_document_migration_retains_history(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0044_team_job_description")
+    command.downgrade(config, "0045_inventory_masterplans")
     command.upgrade(config, "head")
     command.check(config)
     assert upload(admin_client, f"{PROJECTS}/{project_id}").status_code == 201
     with pytest.raises(RuntimeError, match="Retained document history"):
-        command.downgrade(config, "0044_team_job_description")
+        command.downgrade(config, "0045_inventory_masterplans")
     command.upgrade(config, "head")

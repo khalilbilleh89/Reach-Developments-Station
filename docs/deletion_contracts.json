@@ -784,6 +784,22 @@
     "notes": "Optional attachment; authorized writers can replace or delete with version control and named reason confirmation. File bytes and audit remain retained; deleted members cannot expose attachments. Tested in test_project_team_documents.py."
   },
   {
+    "handler": "inventory.create_plan",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/inventory/masterplans/{plan_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/inventory/MasterplanWorkspace.tsx",
+    "notes": "Whole-project structure writer; delete footprints first, current version and reason required. Audit retained, business originals unchanged."
+  },
+  {
+    "handler": "inventory.create_mapping",
+    "create_route": "POST /{plan_id}/mappings",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/inventory/masterplans/{plan_id}/mappings/{mapping_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/inventory/MasterplanWorkspace.tsx",
+    "notes": "Selected unit full page exposes Delete footprint. Whole-project writer, version and reason required; audit retained, unit unchanged."
+  },
+  {
     "handler": "projects.create_document_type",
     "create_route": "POST /{project_id}/document-types",
     "status": "implemented",
