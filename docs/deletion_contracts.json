@@ -466,10 +466,10 @@
   {
     "handler": "projects.create_document",
     "create_route": "POST /{project_id}/documents",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Delete is missing on current main."
+    "status": "implemented",
+    "removal_route": "POST /{project_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
+    "notes": "Reasoned retained removal for links and PDFs. Scope, role and audit enforced; original evidence retained."
   },
   {
     "handler": "projects.create_parcel",
@@ -782,5 +782,21 @@
     "removal_route": "POST /{member_id}/job-description/delete",
     "ui_file": "frontend/src/components/projects/team/TeamJobDescription.tsx",
     "notes": "Optional attachment; authorized writers can replace or delete with version control and named reason confirmation. File bytes and audit remain retained; deleted members cannot expose attachments. Tested in test_project_team_documents.py."
+  },
+  {
+    "handler": "projects.create_document_type",
+    "create_route": "POST /{project_id}/document-types",
+    "status": "implemented",
+    "removal_route": "POST /{project_id}/document-types/{type_id}/delete",
+    "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
+    "notes": "Project-owned types: unused types deleted with audit; all document history blocks deletion."
+  },
+  {
+    "handler": "projects.upload_project_document",
+    "create_route": "POST /{project_id}/documents/upload",
+    "status": "implemented",
+    "removal_route": "POST /{project_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
+    "notes": "PDF uploaded atomically with metadata, removed with reason while bytes and audit are retained."
   }
 ]
