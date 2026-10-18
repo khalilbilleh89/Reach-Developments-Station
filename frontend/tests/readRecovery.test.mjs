@@ -214,7 +214,7 @@ function mount(file, name, dependencies, props) {
 function nodes(tree) {
   if (!tree || typeof tree !== "object") return [];
   if (Array.isArray(tree)) return tree.flatMap(nodes);
-  return [tree, ...nodes(tree.props?.children)];
+  return [tree, ...nodes(tree.props?.children), ...nodes(tree.props?.actions)];
 }
 
 test("active consultant agreement edits the same record and keeps a refused save open", async () => {
@@ -358,7 +358,7 @@ for (const [component, dependency, readyData, label] of [
     const recovered = nodes(render());
     assert.ok(calls.length > before);
     assert.ok(!recovered.some(node => node.type === "Notice" && node.props.children === "Temporary read failure"));
-    assert.ok(calls.every(method => ["documents", "parcels", "permits", "register", "workspace"].includes(method)));
+    assert.ok(calls.every(method => ["documents", "documentTypes", "parcels", "permits", "register", "workspace"].includes(method)));
   });
 }
 
@@ -644,6 +644,71 @@ test("current cost inputs preserve exact amounts, explicit zero tax and failed d
   fail = false; submit(); await settle(); assert.equal(saved, 1);
 });
 
+
+test("Documents: project types work without Settings and a new type is selected", async () => {
+  const calls = []; let types = [];
+  const projects = {
+    documents: async () => [], parcels: async () => [], permits: async () => ({ permits: [] }),
+    documentTypes: async () => types,
+    createDocumentType: async (id, label) => { calls.push([id, label]); const row = { id: "type", code: "DOC_NEW", label, is_active: true, removable: true }; types = [row]; return row; },
+  };
+  const render = mount("projects/DocumentsTab", "DocumentsTab", {
+    "@/lib/api": { projects, ApiError: class extends Error {} },
+    "@/components/ui/UnsavedChangesGuard": { DraftBoundary: "DraftBoundary" },
+  }, { projectId: "project", canWrite: true });
+  render(); await settle();
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "New document").props.onClick();
+  assert.ok(nodes(render()).some(n => n.type === "RecordPage" && n.props.title === "New document"));
+  const field = nodes(render()).find(n => n.type === "Field" && n.props.label === "New document type");
+  nodes(field).find(n => n.type === "input").props.onChange({ target: { value: "Survey" } });
+  const form = nodes(render()).filter(n => n.type === "form")[1];
+  await form.props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(calls, [["project", "Survey"]]);
+  const select = nodes(nodes(render()).find(n => n.type === "Field" && n.props.label === "Document type")).find(n => n.type === "select");
+  assert.equal(select.props.value, "DOC_NEW");
+  assert.ok(nodes(select).some(n => n.type === "option" && n.props.children === "Survey"));
+});
+
+test("Documents: failed PDF upload retains file and typed metadata", async () => {
+  class ApiError extends Error {}
+  const calls = [];
+  const projects = {
+    documents: async () => [], parcels: async () => [], permits: async () => ({ permits: [] }),
+    documentTypes: async () => [{ id: "type", code: "DEED", label: "Deed", is_active: true }],
+    uploadDocument: async (...args) => { calls.push(args); throw new ApiError("Upload failed"); },
+  };
+  const render = mount("projects/DocumentsTab", "DocumentsTab", {
+    "@/lib/api": { projects, ApiError },
+    "@/components/ui/UnsavedChangesGuard": { DraftBoundary: "DraftBoundary" },
+  }, { projectId: "project", canWrite: true });
+  render(); await settle();
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "New document").props.onClick();
+  const control = label => nodes(nodes(render()).find(n => n.type === "Field" && n.props.label === label)).find(n => ["input", "select"].includes(n.type));
+  control("Title").props.onChange({ target: { value: "Site deed" } });
+  control("Document type").props.onChange({ target: { value: "DEED" } });
+  control("Document source").props.onChange({ target: { value: "pdf" } });
+  const file = { name: "deed.pdf", size: 100 };
+  control("PDF file").props.onChange({ target: { files: [file] } });
+  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(calls[0][0], "project"); assert.equal(calls[0][1].title, "Site deed");
+  assert.equal(calls[0][1].document_type_code, "DEED"); assert.equal(calls[0][2], file);
+  assert.equal(control("Title").props.value, "Site deed");
+  assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children === "Upload failed"));
+  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(calls[1][2], file);
+});
+
+test("Documents: readers download PDFs without mutation controls", async () => {
+  const calls = [];
+  const row = { id: "doc", title: "Deed", document_type_code: "DEED", filename: "deed.pdf", external_url: null, is_active: true };
+  const projects = { documents: async () => [row], parcels: async () => [], permits: async () => ({ permits: [] }), documentTypes: async () => [], downloadDocument: async (...args) => { calls.push(args); } };
+  const render = mount("projects/DocumentsTab", "DocumentsTab", { "@/lib/api": { projects, ApiError: class extends Error {} } }, { projectId: "project", canWrite: false });
+  render(); await settle();
+  const tree = nodes(render());
+  assert.ok(!tree.some(n => n.type === "Button" && ["New document", "Document types", "Edit"].includes(n.props.children)));
+  tree.find(n => n.type === "Button" && n.props.children === "Download PDF").props.onClick(); await settle();
+  assert.equal(calls[0][0], "project"); assert.equal(calls[0][1], row);
+});
 
 test("certificate entry sends a single period amount and exact deductions atomically", async () => {
   let payload;

@@ -184,14 +184,20 @@ def test_documents_can_be_filtered_by_what_they_support(
     assert [item["title"] for item in filtered] == ["Title deed 9911"]
 
 
-def test_there_is_no_file_upload_endpoint(admin_client: TestClient, project_id: str) -> None:
-    """Given this PR stores references only, then no upload path exists."""
-    for path in ("documents/upload", "documents/files", "files"):
+def test_upload_requires_metadata_and_other_file_routes_stay_reserved(
+    admin_client: TestClient, project_id: str
+) -> None:
+    """PDF intake validates metadata; unrelated file APIs remain reserved."""
+    response = admin_client.post(f"{PROJECTS}/{project_id}/documents/upload", json={})
+    assert response.status_code == 422
+    for path in ("documents/files", "files"):
         response = admin_client.post(f"{PROJECTS}/{project_id}/{path}", json={})
         assert response.status_code == 404, path
 
 
-def test_documents_have_no_delete_endpoint(admin_client: TestClient, documents_url: str) -> None:
+def test_documents_require_the_reasoned_removal_route(
+    admin_client: TestClient, documents_url: str
+) -> None:
     created = admin_client.post(documents_url, json=_document()).json()
 
     assert admin_client.delete(f"{documents_url}/{created['id']}").status_code == 404
