@@ -1,7 +1,9 @@
 # Project image galleries
 
-Project Overview contains three project-scoped presentation galleries: Interior,
-Exterior and 3D renders. Any user who can open a project can view its active
+Marketing / 3D Shots manages three project-scoped presentation galleries: Interior,
+Exterior and 3D renders. Project Overview retains a read-only view of the same images,
+with a management link for project writers. Upload, category selection and removal
+controls live only under 3D Shots. Existing images do not need to be moved or uploaded again. Any user who can open a project can view its active
 images. The existing project-writer roles (`system_admin` and `project_manager`)
 can add and remove them.
 
