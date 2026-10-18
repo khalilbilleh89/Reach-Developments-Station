@@ -514,6 +514,8 @@ class VariationDetailOut(VariationOut):
 
 
 class CertificateCreate(StrictRequest):
+    current_work_value_ex_tax: Money | None = None
+    cost_code_id: uuid.UUID | None = None
     certificate_number: str = Field(min_length=1, max_length=64)
     period_start: date
     period_end: date
@@ -619,6 +621,7 @@ class InvoiceOut(Response):
 
 
 class PaymentRecord(StrictRequest):
+    invoice_id: uuid.UUID | None = None
     direct_contract_payment: bool = False
     payment_reference: str = Field(min_length=1, max_length=64)
     payment_date: date

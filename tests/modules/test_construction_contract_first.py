@@ -16,10 +16,13 @@ from app.modules.construction import service
 from tests.conftest import alembic_config
 from tests.modules.conftest import (
     PROJECTS,
+    certify,
     construction_url,
+    create_certificate,
     create_contract,
     grant_access,
     project_payload,
+    record_invoice,
     set_contract_line,
 )
 from tests.test_migrations import HEAD_REVISION
@@ -217,7 +220,12 @@ def test_existing_draft_signed_activation_preserves_lines(
         == 200
     )
     blocked = finance_client.post(f"{url}/register-signed", json={"reason": "Signed agreement"})
-    assert blocked.status_code == 422, blocked.text
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["line_total"] == "1000000.00"
+    draft = create_contract(
+        finance_client, project_id, currency_id, contract_number="CT-002"
+    ).json()
+    url = f"{base}/contracts/{draft['id']}"
     assert (
         set_contract_line(
             finance_client,
@@ -333,3 +341,204 @@ def test_direct_workflow_removal_respects_project_and_phase_scope(
         ).status_code
         == 403
     )
+
+
+def test_total_certificate_advance_recovery_invoice_settlement(
+    finance_client: TestClient,
+    second_finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    currency_id: str,
+) -> None:
+    contract = signed(
+        finance_client,
+        project_id,
+        currency_id,
+        advance_entitlement_amount="200000.00",
+        retention_rate_fraction="0.100000",
+    )
+    base = construction_url(project_id)
+    advance = record_invoice(
+        finance_client,
+        project_id,
+        contract["id"],
+        invoice_type="advance",
+        amount_ex_tax="100000.00",
+    ).json()
+    assert cfo_client.post(f"{base}/invoices/{advance['id']}/approve", json={}).status_code == 200
+    paid = payment(
+        finance_client,
+        base,
+        contract["id"],
+        currency_id,
+        invoice_id=advance["id"],
+        amount="100000.00",
+    )
+    assert paid.status_code == 201, paid.text
+    assert finance_client.get(f"{base}/invoices/{advance['id']}").json()["outstanding"] == "0.00"
+    certificate = create_certificate(
+        finance_client,
+        project_id,
+        contract["id"],
+        current_work_value_ex_tax="200000.00",
+        advance_recovery_amount="10000.00",
+    )
+    assert certificate.status_code == 201, certificate.text
+    assert certificate.json()["retention_held_amount"] == "20000.00"
+    assert certificate.json()["net_due"] == "170000.00"
+    certified = certify(finance_client, second_finance_client, project_id, certificate.json()["id"])
+    assert certified.status_code == 200, certified.text
+    invoice = record_invoice(
+        finance_client,
+        project_id,
+        contract["id"],
+        invoice_number="PROGRESS-01",
+        amount_ex_tax="170000.00",
+        certificate_id=certificate.json()["id"],
+    ).json()
+    assert cfo_client.post(f"{base}/invoices/{invoice['id']}/approve", json={}).status_code == 200
+    settlement = payment(
+        finance_client,
+        base,
+        contract["id"],
+        currency_id,
+        invoice_id=invoice["id"],
+        payment_reference="BANK-02",
+        amount="170000.00",
+    )
+    assert settlement.status_code == 201, settlement.text
+    position = finance_client.get(f"{base}/contracts/{contract['id']}").json()
+    assert position["confirmed_paid"] == "270000.00"
+    assert position["invoice_outstanding"] == "0.00"
+    assert position["advance_outstanding"] == "90000.00"
+    assert position["retention_outstanding"] == "20000.00"
+    assert position["certified_to_date"] == "200000.00"
+    assert (
+        payment(
+            finance_client,
+            base,
+            contract["id"],
+            currency_id,
+            invoice_id=invoice["id"],
+            payment_reference="OVER",
+            amount="0.01",
+        ).status_code
+        == 409
+    )
+    assert len(finance_client.get(f"{base}/payments").json()) == 2
+    assert (
+        cfo_client.post(
+            f"{base}/payments/{paid.json()['id']}/reverse",
+            json={"reason": "Cannot reverse recovered advance"},
+        ).status_code
+        == 409
+    )
+    assert (
+        cfo_client.post(
+            f"{base}/payments/{settlement.json()['id']}/reverse",
+            json={"reason": "Bank returned funds"},
+        ).status_code
+        == 200
+    )
+    assert (
+        finance_client.get(f"{base}/invoices/{invoice['id']}").json()["outstanding"] == "170000.00"
+    )
+
+
+def test_total_certificate_deletion_scope_and_atomic_validation(
+    finance_client: TestClient,
+    admin_client: TestClient,
+    project_id: str,
+    currency_id: str,
+    db: Session,
+) -> None:
+    contract = signed(finance_client, project_id, currency_id)
+    base = construction_url(project_id)
+    bad = create_certificate(
+        finance_client,
+        project_id,
+        contract["id"],
+        current_work_value_ex_tax="100.00",
+        cost_code_id=str(uuid.uuid4()),
+    )
+    assert bad.status_code == 422, bad.text
+    assert finance_client.get(f"{base}/certificates").json() == []
+    created = create_certificate(
+        finance_client, project_id, contract["id"], current_work_value_ex_tax="100.00"
+    )
+    assert created.status_code == 201, created.text
+    url = f"{base}/certificates/{created.json()['id']}"
+    assert admin_client.delete(url, params={"reason": "Wrong role"}).status_code == 403
+    assert (
+        finance_client.delete(
+            f"{base}/certificates/{uuid.uuid4()}", params={"reason": "Wrong id"}
+        ).status_code
+        == 404
+    )
+    assert finance_client.delete(url, params={"reason": "Duplicate draft"}).status_code == 204
+    assert finance_client.delete(url, params={"reason": "Duplicate draft"}).status_code == 404
+    event = db.scalar(
+        select(AuditEvent).where(AuditEvent.action == "construction.draft_certificate_deleted")
+    )
+    assert event is not None
+
+
+def test_invoice_settlement_rejects_unapproved_or_other_contract(
+    finance_client: TestClient,
+    cfo_client: TestClient,
+    project_id: str,
+    currency_id: str,
+) -> None:
+    first = signed(finance_client, project_id, currency_id, advance_entitlement_amount="100000.00")
+    other = signed(finance_client, project_id, currency_id, contract_number="OTHER")
+    base = construction_url(project_id)
+    invoice = record_invoice(
+        finance_client, project_id, first["id"], invoice_type="advance", amount_ex_tax="10000.00"
+    ).json()
+    assert (
+        payment(
+            finance_client,
+            base,
+            first["id"],
+            currency_id,
+            invoice_id=invoice["id"],
+            amount="100.00",
+        ).status_code
+        == 409
+    )
+    assert cfo_client.post(f"{base}/invoices/{invoice['id']}/approve", json={}).status_code == 200
+    assert (
+        payment(
+            finance_client,
+            base,
+            other["id"],
+            currency_id,
+            invoice_id=invoice["id"],
+            amount="100.00",
+        ).status_code
+        == 404
+    )
+    assert finance_client.get(f"{base}/payments").json() == []
+
+
+def test_submitted_contract_without_lines_activates_from_total(
+    finance_client: TestClient,
+    project_id: str,
+    currency_id: str,
+    db: Session,
+) -> None:
+    from app.modules.construction.models import Contract
+
+    draft = create_contract(finance_client, project_id, currency_id).json()
+    row = db.get(Contract, uuid.UUID(draft["id"]))
+    assert row is not None
+    row.status = "submitted"
+    db.commit()
+    base = construction_url(project_id)
+    result = finance_client.post(
+        f"{base}/contracts/{draft['id']}/register-signed",
+        json={"reason": "Previously signed agreement"},
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["status"] == "active"
+    assert result.json()["line_total"] == "1000000.00"

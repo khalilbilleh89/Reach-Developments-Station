@@ -45,7 +45,7 @@ def test_draft_and_ready_events_use_the_same_plan() -> None:
     assert "draft ==" not in source()
 
 
-def test_ordinary_pr_uses_one_to_three_targeted_runners_not_eight_full_runners() -> None:
+def test_targeted_runner_count_is_planned_without_expanding_to_full_coverage() -> None:
     targeted = block("backend_targeted")
     full = block("backend_system_full")
     assert "image: postgres:16" in targeted
