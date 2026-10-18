@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { construction } from "@/lib/api";
-import type { ContractDetail, ConstructionPayment, Variation } from "@/lib/api";
+import type { ContractDetail, ConstructionInvoice, ConstructionPayment, Variation } from "@/lib/api";
 import { hasAnyRole } from "@/lib/roles";
 import { money, businessDate } from "@/lib/format";
 import { Button, ButtonRow, DraftBoundary, Field, MoneyInput, Notice, PromptDialog, RecordPage, TableScroll } from "@/components/ui";
@@ -10,12 +10,12 @@ import { DeleteRecordButton } from "../DeleteRecordButton";
 
 type Props = {
   projectId: string; contract: ContractDetail; roles: Set<string>;
-  variations: Variation[] | null; payments: ConstructionPayment[] | null;
+  invoices: ConstructionInvoice[] | null; variations: Variation[] | null; payments: ConstructionPayment[] | null;
   onChanged: () => Promise<void>; unavailable: boolean;
 };
 
 /** Payments already made and changes agreed with the contractor are separate records. */
-export function ContractTransactions({ projectId, contract, roles, variations, payments, onChanged, unavailable }: Props) {
+export function ContractTransactions({ projectId, contract, roles, invoices, variations, payments, onChanged, unavailable }: Props) {
   const [editor, setEditor] = useState<"payment" | "addition" | "reduction" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,14 +31,14 @@ export function ContractTransactions({ projectId, contract, roles, variations, p
     catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save the change."); }
     finally { setBusy(false); }
   }
-  if (editor) return <ContractTransactionEditor kind={editor} projectId={projectId} contract={contract} unavailable={unavailable} onClose={() => setEditor(null)} onChanged={onChanged} />;
+  if (editor) return <ContractTransactionEditor invoices={invoices} kind={editor} projectId={projectId} contract={contract} unavailable={unavailable} onClose={() => setEditor(null)} onChanged={onChanged} />;
   return <div className="stack">
     {error ? <Notice tone="error">{error}</Notice> : null}
     <ButtonRow>
       {standing && finance ? <Button variant="primary" disabled={busy || unavailable} onClick={() => setEditor("payment")}>Record payment already made</Button> : null}
       {standing && prepare ? <><Button disabled={busy || unavailable} onClick={() => setEditor("addition")}>Add variation</Button><Button disabled={busy || unavailable} onClick={() => setEditor("reduction")}>Add cost reduction</Button></> : null}
     </ButtonRow>
-    <p>Payments update paid to date immediately. Changes adjust the contract value after approval. Invoices and certificates remain available as supporting records.</p>
+    <p>Payments update paid to date immediately. Changes adjust the contract value after approval. Use Certificates to value completed work, then Invoices & payments to record the related invoice. Advance invoices identify advance cash separately.</p>
     <TableScroll label="Contract variations and reductions"><thead><tr><th scope="col">Reference</th><th scope="col">Description</th><th scope="col">Change excluding tax</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>
       {variations?.map(row => <tr key={row.id}><th scope="row">{row.variation_number}</th><td>{row.description}</td><td>{money(row.total_value_ex_tax, contract.currency_code)}</td><td>{row.status}</td><td>
         {prepare && row.status === "draft" ? <><Button disabled={busy || unavailable} onClick={() => void act(() => construction.submitVariation(projectId, row.id))}>Submit change</Button><DeleteRecordButton label="draft change" recordName={row.variation_number} description="Delete this draft change and its lines. The audit trail remains." onDelete={reason => construction.deleteDraftVariation(projectId, row.id, reason)} onDeleted={onChanged} /></> : null}
@@ -49,7 +49,7 @@ export function ContractTransactions({ projectId, contract, roles, variations, p
     </tbody></TableScroll>
     {variations === null ? <Notice tone="warning">Changes are unavailable. Refresh the contract to retry.</Notice> : variations.length === 0 ? <p>No variations or reductions recorded.</p> : null}
     <TableScroll label="Contract payment history"><thead><tr><th scope="col">Reference</th><th scope="col">Payment date</th><th scope="col">Amount including tax</th><th scope="col">Basis</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>
-      {payments?.map(row => <tr key={row.id}><th scope="row">{row.payment_reference}</th><td>{businessDate(row.payment_date)}</td><td>{money(row.amount, row.currency_code)}</td><td>{row.direct_contract_payment ? "Paid against contract" : "Invoice payment"}</td><td>{row.status}</td><td>
+      {payments?.map(row => <tr key={row.id}><th scope="row">{row.payment_reference}</th><td>{businessDate(row.payment_date)}</td><td>{money(row.amount, row.currency_code)}</td><td>{row.allocations.length ? row.allocations.map(item => item.invoice_number).join(", ") : row.direct_contract_payment ? "Paid against contract" : "Invoice payment"}</td><td>{row.status}</td><td>
         {check && row.status === "confirmed" ? <Button disabled={busy || unavailable} onClick={() => { setError(null); setReasonAction({ title: `Reverse payment ${row.payment_reference}`, run: reason => construction.reversePayment(projectId, row.id, reason) }); }}>Reverse payment</Button> : null}
       </td></tr>)}
     </tbody></TableScroll>
@@ -58,7 +58,8 @@ export function ContractTransactions({ projectId, contract, roles, variations, p
   </div>;
 }
 
-function ContractTransactionEditor({ kind, projectId, contract, unavailable, onClose, onChanged }: { kind: "payment" | "addition" | "reduction"; projectId: string; contract: ContractDetail; unavailable: boolean; onClose: () => void; onChanged: () => Promise<void> }) {
+function ContractTransactionEditor({ invoices, kind, projectId, contract, unavailable, onClose, onChanged }: { invoices: ConstructionInvoice[] | null; kind: "payment" | "addition" | "reduction"; projectId: string; contract: ContractDetail; unavailable: boolean; onClose: () => void; onChanged: () => Promise<void> }) {
+  const [invoiceId, setInvoiceId] = useState("");
   const [reference, setReference] = useState("");
   const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
@@ -74,17 +75,18 @@ function ContractTransactionEditor({ kind, projectId, contract, unavailable, onC
     if (busy || unavailable || saved) return;
     setBusy(true); setError(null);
     try {
-      if (payment) await construction.recordPayment(projectId, contract.id, { payment_reference: reference, payment_date: date, amount, currency_id: contract.currency_id, proof_reference: evidence, notes: description, direct_contract_payment: true });
+      if (payment) await construction.recordPayment(projectId, contract.id, { payment_reference: reference, payment_date: date, amount, currency_id: contract.currency_id, proof_reference: evidence, notes: description, direct_contract_payment: true, invoice_id: invoiceId || null });
       else await construction.createVariation(projectId, contract.id, { variation_number: reference, description, requested_date: date, instruction_reference: evidence, cost_code_id: code, adjustment_amount: amount, adjustment_kind: kind, cause: kind === "reduction" ? "Client-supplied items / scope reduction" : "Additional scope" });
       setSaved(true); onClose(); await onChanged();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save this record."); }
     finally { setBusy(false); }
   }
   return <RecordPage title={title} subtitle={`${contract.contract_number} · ${contract.vendor_name}`} onClose={onClose}>
-    <DraftBoundary dirty={!saved && !!(reference || date || amount || description || evidence)} busy={busy}>
+    <DraftBoundary dirty={!saved && !!(reference || date || amount || description || evidence || invoiceId)} busy={busy}>
       <form className="stack" onSubmit={event => { event.preventDefault(); void save(); }}>
         {error ? <Notice tone="error">{error}</Notice> : null}
         <p>{payment ? "Record an actual bank payment. This immediately counts as paid; no invoice or certificate is required. This does not instruct a bank transfer." : "Enter a positive amount. A reduction subtracts this amount from the contract after approval; the original signed value stays unchanged."}</p>
+        {payment ? <Field label="Invoice to settle" optional hint="Choose an approved invoice to reduce its outstanding balance. An advance invoice also updates recoverable advance. Leave blank for a direct contract payment."><select className="input" value={invoiceId} onChange={e => setInvoiceId(e.target.value)}><option value="">Direct contract payment (no invoice)</option>{invoices?.filter(row => row.status === "approved").map(row => <option key={row.id} value={row.id}>{row.invoice_number} · {row.invoice_type} · outstanding {money(row.outstanding, contract.currency_code)}</option>)}</select>{invoices === null ? <p>Invoices could not be loaded. Refresh before settling an invoice.</p> : null}</Field> : null}
         <Field label="Reference"><input className="input" required maxLength={64} value={reference} onChange={e => setReference(e.target.value)} /></Field>
         <Field label={payment ? "Payment date" : "Change date"}><input className="input" type="date" required value={date} onChange={e => setDate(e.target.value)} /></Field>
         <Field label={payment ? "Amount paid including tax" : "Change amount excluding tax"}><MoneyInput required code={contract.currency_code} value={amount} onChange={setAmount} /></Field>

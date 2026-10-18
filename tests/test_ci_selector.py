@@ -264,7 +264,7 @@ def test_github_outputs_are_machine_readable(tmp_path: Path) -> None:
     assert values["domains"] == '["marketing","pricing","sales"]'
 
 
-def test_unusually_large_targeted_plan_uses_three_shards_without_becoming_full() -> None:
+def test_unusually_large_targeted_plan_uses_eight_shards_without_becoming_full() -> None:
     result = selector.Selection(
         risk="cross-domain",
         paths=[f"tests/modules/test_{index}.py" for index in range(81)],
@@ -272,5 +272,14 @@ def test_unusually_large_targeted_plan_uses_three_shards_without_becoming_full()
         changed_domains=["pricing", "sales"],
         reasons=[],
     )
-    assert selector.targeted_shard_count(result) == 3
+    assert selector.targeted_shard_count(result) == 8
+    assert not result.full
+
+
+def test_construction_plan_is_parallel_without_losing_selected_coverage() -> None:
+    result = chosen("app/modules/construction/service.py")
+    before = list(result.paths)
+    assert selector.targeted_shard_count(result) == 8
+    assert result.paths == before
+    assert result.domains == ["cashflow", "construction", "unit_economics"]
     assert not result.full
