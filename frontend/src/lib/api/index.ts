@@ -1980,6 +1980,8 @@ export const construction = {
     get<CertificateDetail>(
       `/projects/${projectId}/construction/certificates/${certificateId}`,
     ),
+  deleteDraftCertificate: (projectId: string, certificateId: string, reason: string) =>
+    remove(`/projects/${projectId}/construction/certificates/${certificateId}?reason=${encodeURIComponent(reason)}`),
   createCertificate: (
     projectId: string,
     contractId: string,
