@@ -25,7 +25,16 @@ CATEGORIES = {
 }
 
 
-class MatrixItem(StrictRequest):
+class MatrixTextRequest(StrictRequest):
+    @field_validator("*", mode="after")
+    @classmethod
+    def reject_nul(cls, value: object) -> object:
+        if isinstance(value, str) and "\x00" in value:
+            raise ValueError("Text cannot contain null characters.")
+        return value
+
+
+class MatrixItem(MatrixTextRequest):
     label: str = Field(min_length=1, max_length=300)
     notes: str = Field(default="", max_length=2000)
     category: str = Field(default="", max_length=80)
@@ -44,7 +53,7 @@ class MatrixItem(StrictRequest):
         return value.strip()
 
 
-class MatrixFields(StrictRequest):
+class MatrixFields(MatrixTextRequest):
     title: str = Field(min_length=1, max_length=200)
     framework: Framework
     as_of: date
@@ -83,7 +92,7 @@ class MatrixUpdate(MatrixFields):
     version: int = Field(ge=1)
 
 
-class MatrixRemoval(StrictRequest):
+class MatrixRemoval(MatrixTextRequest):
     version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=1000)
 

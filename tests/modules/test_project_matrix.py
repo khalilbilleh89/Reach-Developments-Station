@@ -7,12 +7,13 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.audit.models import AuditEvent
 from app.modules.projects.matrix_models import ProjectMatrix
-from app.modules.projects.matrix_schemas import CATEGORIES
+from app.modules.projects.matrix_schemas import CATEGORIES, MatrixFields, MatrixRemoval
 from app.modules.projects.models import UserProjectAccess
 from tests.factories import client_for, make_user
 from tests.modules.conftest import PROJECTS, grant_access, project_payload
@@ -221,3 +222,20 @@ def test_migration_roundtrip_and_retention(
     with pytest.raises(RuntimeError, match="Matrix history"):
         command.downgrade(config, "0044_team_job_description")
     command.upgrade(config, "head")
+
+
+@pytest.mark.parametrize(
+    "field", ["title", "context", "effect", "label", "notes", "category", "reason"]
+)
+def test_all_text_fields_reject_null_characters(field: str) -> None:
+    body = payload()
+    invalid = "bad\x00text"
+    with pytest.raises(ValidationError):
+        if field == "reason":
+            MatrixRemoval(version=1, reason=invalid)
+        else:
+            if field in {"label", "notes", "category"}:
+                body["items"][0][field] = invalid
+            else:
+                body[field] = invalid
+            MatrixFields.model_validate(body)
