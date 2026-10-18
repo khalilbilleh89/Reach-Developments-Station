@@ -749,7 +749,7 @@
     "status": "implemented",
     "removal_route": "DELETE /projects/{project_id}/images/{image_id}",
     "ui_file": "frontend/src/components/projects/ProjectImages.tsx",
-    "notes": "Project writers remove gallery images after a named confirmation. Removed rows, actor attribution and byte content are retained; ordinary lists and file reads hide removed records."
+    "notes": "Project writers remove gallery images in Marketing / 3D Shots after a named confirmation. Overview is read-only. Removed rows, actor attribution and byte content are retained; ordinary lists and file reads hide removed records."
   },
   {
     "handler": "projects.create_team_member",
@@ -782,6 +782,22 @@
     "removal_route": "POST /{member_id}/job-description/delete",
     "ui_file": "frontend/src/components/projects/team/TeamJobDescription.tsx",
     "notes": "Optional attachment; authorized writers can replace or delete with version control and named reason confirmation. File bytes and audit remain retained; deleted members cannot expose attachments. Tested in test_project_team_documents.py."
+  },
+  {
+    "handler": "inventory.create_plan",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/inventory/masterplans/{plan_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/inventory/MasterplanWorkspace.tsx",
+    "notes": "Whole-project structure writer; delete footprints first, current version and reason required. Audit retained, business originals unchanged."
+  },
+  {
+    "handler": "inventory.create_mapping",
+    "create_route": "POST /{plan_id}/mappings",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/inventory/masterplans/{plan_id}/mappings/{mapping_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/inventory/MasterplanWorkspace.tsx",
+    "notes": "Selected unit full page exposes Delete footprint. Whole-project writer, version and reason required; audit retained, unit unchanged."
   },
   {
     "handler": "projects.create_price_escalation",

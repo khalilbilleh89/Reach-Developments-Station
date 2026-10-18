@@ -85,6 +85,18 @@ test("readers see grouped images and meaningful alternatives without mutation co
   assert.equal(view.filter(node => node.type === "Button").length, 0);
 });
 
+test("overview retains the gallery and a management link without upload or removal controls", () => {
+  const view = nodes(harness(images).render({
+    canEdit: false,
+    managementHref: "/projects/?project=project&section=marketing-shots",
+  }));
+  assert.equal(view.filter(node => node.type === "img").length, 3);
+  assert.equal(view.filter(node => node.type === "input" || node.type === "Button").length, 0);
+  const link = view.find(node => node.type === "a");
+  assert.equal(link.props.href, "/projects/?project=project&section=marketing-shots");
+  assert.match(link.props.children, /Marketing \/ 3D Shots/);
+});
+
 test("writers can select multiple files; all are attempted and server truth refreshes after partial failure", async () => {
   const h = harness(images);
   let view = nodes(h.render({ canEdit: true }));
