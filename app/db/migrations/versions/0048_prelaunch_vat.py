@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0045_prelaunch_vat"
-down_revision = "0044_team_job_description"
+revision = "0048_prelaunch_vat"
+down_revision = "0045_inventory_masterplans"
 branch_labels = None
 depends_on = None
 

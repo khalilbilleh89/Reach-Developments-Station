@@ -18,7 +18,11 @@ function errorMessage(caught: unknown, fallback: string): string {
   return caught instanceof ApiError ? caught.message : fallback;
 }
 
-export function ProjectImages({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+export function ProjectImages({ projectId, canEdit, managementHref }: {
+  projectId: string;
+  canEdit: boolean;
+  managementHref?: string;
+}) {
   const answer = useAnswer(true, () => projects.images(projectId), [projectId]);
   const [category, setCategory] = useState<ProjectImage["category"]>("interior");
   const [files, setFiles] = useState<File[]>([]);
@@ -87,6 +91,7 @@ export function ProjectImages({ projectId, canEdit }: { projectId: string; canEd
       title="Project images"
       description="Interior, exterior and 3D presentation images for this project."
     >
+      {managementHref ? <p><a href={managementHref}>Manage images in Marketing / 3D Shots</a></p> : null}
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {canEdit ? (
         <div className="project-images-controls">

@@ -36,7 +36,7 @@ must retain the explicit net/rate form (zero VAT remains available).
 
 ## Migration and retained removal
 
-`0045_prelaunch_vat` follows `0044_team_job_description`, adds two nullable columns
+`0048_prelaunch_vat` follows `0045_inventory_masterplans`, adds two nullable columns
 and one check, and leaves every existing amount unchanged. Empty/legacy-only
 downgrade is supported. Retained VAT breakdowns, including zero-rate, removed or
 reversed entries, block downgrade to avoid losing evidence; roll forward instead.
