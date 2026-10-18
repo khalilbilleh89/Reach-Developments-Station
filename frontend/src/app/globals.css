@@ -6054,3 +6054,27 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .marketing-guide dt { font-weight: 600; }
 .marketing-guide dd { margin: 0; color: var(--text-secondary); }
 @media (max-width: 64rem) { .marketing-comparison { grid-template-columns: minmax(0, 1fr); } }
+
+/* Masterplan: image-aligned geometry, one full-width sales and authoring surface. */
+.masterplan-controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-4); }
+.masterplan-controls > * { flex: 1 1 10rem; min-width: 0; }
+.masterplan-controls .button-row { flex: 2 1 20rem; flex-wrap: wrap; }
+.masterplan-canvas-wrap { min-width: 0; width: 100%; }
+.masterplan-canvas { width: 100%; height: min(65vh, 48rem); min-height: 18rem; display: block; background: var(--surface-secondary); border: 1px solid var(--line-default); border-radius: var(--radius-card); margin-top: var(--space-4); }
+.masterplan-footprint { --footprint-color: var(--text-muted); cursor: pointer; }
+.masterplan-footprint[data-status="available"] { --footprint-color: var(--success); }
+.masterplan-footprint[data-status="held"] { --footprint-color: var(--warning); }
+.masterplan-footprint[data-status="reserved"], .masterplan-footprint[data-status="contract_pending"] { --footprint-color: var(--info); }
+.masterplan-footprint[data-status="contracted"] { --footprint-color: var(--accent); }
+.masterplan-footprint polygon { fill: var(--footprint-color); fill-opacity: var(--footprint-opacity); stroke: var(--footprint-color); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.masterplan-footprint .masterplan-wall { fill-opacity: 0.7; stroke-width: 1; }
+.masterplan-footprint[data-selected] polygon, .masterplan-footprint polygon:focus { stroke: var(--accent); stroke-width: 4; outline: none; }
+.masterplan-footprint polygon:hover { fill-opacity: 0.85; }
+.masterplan-draft { fill: none; stroke: var(--accent); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.masterplan-vertex { fill: var(--accent); stroke: var(--surface); stroke-width: 1; }
+.masterplan-caption, .masterplan-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; }
+.masterplan-caption { overflow-wrap: anywhere; }
+.masterplan-legend { justify-content: start; }
+.masterplan-vertices li { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
+.masterplan-vertices input { max-width: 12rem; }
+@media (max-width: 48rem) { .masterplan-canvas { height: 45vh; } .masterplan-controls > * { flex-basis: 100%; } }

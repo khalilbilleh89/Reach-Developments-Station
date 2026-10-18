@@ -66,5 +66,5 @@ Bytes are immutable, deferred PostgreSQL binary data, excluded from list respons
 snapshots. Audit records retain metadata and SHA-256. Delete requires a reason and current
 version, hides the entry and retains its PDF/history. Replace by uploading another entry and
 removing the superseded one. Active documents block company removal. Migration
-0045_company_documents is additive and refuses downgrade if any PDF entry exists, including
+0046_company_documents is additive and refuses downgrade if any PDF entry exists, including
 removed entries. No backfill or new dependencies.

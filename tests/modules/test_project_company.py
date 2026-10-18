@@ -370,7 +370,7 @@ def test_document_migration_preserves_retained_pdf(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0044_team_job_description")
+    command.downgrade(config, "0045_inventory_masterplans")
     command.upgrade(config, "head")
     command.check(config)
     company = create(admin_client, project_id)
@@ -381,7 +381,7 @@ def test_document_migration_preserves_retained_pdf(
     )
     db.rollback()
     with pytest.raises(RuntimeError, match="Company documents exist"):
-        command.downgrade(config, "0044_team_job_description")
+        command.downgrade(config, "0045_inventory_masterplans")
     command.upgrade(config, "head")
     assert db.get(CompanyDocument, uuid.UUID(row["id"])).document == PDF
 

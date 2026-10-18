@@ -1,14 +1,14 @@
 """Company registration PDFs with labels and retained removal.
 
-Revision ID: 0045_company_documents
-Revises: 0044_team_job_description
+Revision ID: 0046_company_documents
+Revises: 0045_inventory_masterplans
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0045_company_documents"
-down_revision = "0044_team_job_description"
+revision = "0046_company_documents"
+down_revision = "0045_inventory_masterplans"
 branch_labels = None
 depends_on = None
 
