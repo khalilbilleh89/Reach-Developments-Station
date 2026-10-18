@@ -1208,6 +1208,11 @@ textarea {
   align-items: center;
 }
 
+.company-documents,
+.company-document-file {
+  overflow-wrap: anywhere;
+}
+
 .page-title {
   margin: 0;
   font-size: var(--title-page);

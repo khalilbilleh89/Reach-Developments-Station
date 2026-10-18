@@ -782,5 +782,13 @@
     "removal_route": "POST /{member_id}/job-description/delete",
     "ui_file": "frontend/src/components/projects/team/TeamJobDescription.tsx",
     "notes": "Optional attachment; authorized writers can replace or delete with version control and named reason confirmation. File bytes and audit remain retained; deleted members cannot expose attachments. Tested in test_project_team_documents.py."
+  },
+  {
+    "handler": "projects.create_company_document",
+    "create_route": "POST /{company_id}/documents",
+    "status": "implemented",
+    "removal_route": "POST /{company_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyDocuments.tsx",
+    "notes": "Company-scoped writers remove with reason and version; bytes, hash and audit retained. Active documents block company removal."
   }
 ]

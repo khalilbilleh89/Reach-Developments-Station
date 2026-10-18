@@ -51,3 +51,20 @@ repeat removal, retained audit, migration roundtrip and guarded downgrade.
 Frontend tests cover optional fields, failed-save draft retention, account rendering
 and request gating. Browser checks use synthetic data on an isolated local database.
 Repository policy: docs/ENGINEERING_RULES.md and docs/DELETION_POLICY.md.
+
+
+## Company registration PDFs
+
+Each company has a Company Registration Documents section. Add any number of PDF entries,
+each with a required descriptive label and one PDF (up to 10 MiB). Label editing is version
+checked. Downloads require the same whole-project financial access as Company; upload,
+label editing and Delete use the existing Company writer roles. Labels are not document
+verification or approval. Filename extension and PDF header are checked; this is not a malware
+scanner or proof of legal validity.
+
+Bytes are immutable, deferred PostgreSQL binary data, excluded from list responses and audit
+snapshots. Audit records retain metadata and SHA-256. Delete requires a reason and current
+version, hides the entry and retains its PDF/history. Replace by uploading another entry and
+removing the superseded one. Active documents block company removal. Migration
+0045_company_documents is additive and refuses downgrade if any PDF entry exists, including
+removed entries. No backfill or new dependencies.

@@ -6,6 +6,7 @@ import { companies, type Company, type CompanyFields, type BankFields, type Bank
 import { useAnswer } from "@/lib/answer";
 import { hasAnyRole, PROJECT_FINANCIAL_READERS } from "@/lib/roles";
 import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, RecordPage, SectionHeader } from "@/components/ui";
+import { CompanyDocuments } from "./CompanyDocuments";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 export const COMPANY_FIELDS: [keyof CompanyFields, string][] = [
@@ -80,7 +81,7 @@ export function CompanyTab({ projectId, roles }: { projectId: string; roles: Set
   const selected = rows.find(row => row.id === selectedId) ?? rows[0];
   const name = (row: Company) => row.legal_name || row.trading_name || "Unnamed company";
   return <div className="stack">
-    <PageHeader title="Company" subtitle="Company information and registered bank accounts." actions={canWrite ? <Button onClick={() => setEditor({ kind: "company" })}>Add company</Button> : undefined} />
+    <PageHeader title="Company" subtitle="Company information, registration documents and registered bank accounts." actions={canWrite ? <Button onClick={() => setEditor({ kind: "company" })}>Add company</Button> : undefined} />
     {answer.status === "loading" ? <Loading label="Loading company details…" /> : null}
     {answer.status === "off" || answer.status === "denied" ? <Notice tone="info">Company details are not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}
@@ -93,11 +94,12 @@ export function CompanyTab({ projectId, roles }: { projectId: string; roles: Set
         <SectionHeader level={2} title="Company Information" actions={canWrite ? <>
           <Button variant="default" onClick={() => setEditor({ kind: "company", row: selected })}>Edit company</Button>
           <DeleteRecordButton label="company" recordName={name(selected)} confirmLabel="Delete company"
-            description="Remove this company from the register and retain its history. Delete its bank accounts first."
+            description="Remove this company from the register and retain its history. Delete its bank accounts and documents first."
             onDelete={reason => companies.remove(projectId, selected.id, reason)} onDeleted={refresh} />
         </> : undefined} />
         <KeyValueGrid>{COMPANY_FIELDS.map(([key, label]) => <KeyValue key={key} label={label} value={selected[key] || "Not entered"} />)}</KeyValueGrid>
       </Card>
+      <CompanyDocuments key={selected.id} projectId={projectId} companyId={selected.id} canWrite={canWrite} />
       <Card>
         <SectionHeader level={2} title="Bank Details" actions={canWrite ? <Button onClick={() => setEditor({ kind: "bank", companyId: selected.id })}>Add bank account</Button> : undefined} />
         {selected.bank_accounts.length === 0 ? <EmptyState title="No bank accounts recorded" hint="You can add multiple accounts for this company." /> :
