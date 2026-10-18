@@ -42,11 +42,13 @@ only when its exact product path set and its integration test change together;
 partial or additional product changes fall back to the ordinary domain
 families. The risk tier and changed-domain report remain cross-domain.
 
-Cross-domain plans with more than 80 selected files are deterministically split
-across three targeted runners. Each selected file is assigned exactly once by
+Targeted plans with more than 60 selected files are deterministically split
+across eight targeted runners. Each selected file is assigned exactly once by
 collected-test weight. This preserves the complete risk plan while keeping the
-serial targeted job inside its 20-minute bound; ordinary plans still use one
-PostgreSQL runner.
+targeted jobs inside their 20-minute bound; smaller plans still use one
+PostgreSQL runner. A construction plan with 73 files and 1,394 collected tests
+previously hit the serial timeout at roughly 25% progress. The wider matrix
+changes scheduling only; it neither removes selected tests nor broadens to Full.
 
 ### System
 

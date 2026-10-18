@@ -35,7 +35,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import MEASURE, MONEY, RATE, Base, in_list
 
-#: Floor area ratio. Not a fraction of one — an FAR of 4.5 is ordinary.
+#: Floor area ratio. Not a fraction of one â€” an FAR of 4.5 is ordinary.
 RATIO = Numeric(12, 4)
 
 #: Machine states for a project. Local display wording stays in reference
@@ -60,14 +60,14 @@ PROJECT_IMAGE_CATEGORIES = ("interior", "exterior", "render_3d")
 #: How much of a project's inventory a member may see. The column lives on
 #: ``user_project_access`` because it narrows that membership, so the closed set
 #: lives here beside it; the phase grants it points at are inventory's.
-#: ``all`` is the historical behaviour and the default — every row that existed
+#: ``all`` is the historical behaviour and the default â€” every row that existed
 #: before phases did means it, and must keep meaning it.
 PHASE_SCOPES = ("all", "selected")
 PHASE_SCOPE_ALL = "all"
 PHASE_SCOPE_SELECTED = "selected"
 
 #: Machine states for a permit. Fixed rather than configurable because system
-#: behaviour depends on their meaning — a workflow whose states are data is a
+#: behaviour depends on their meaning â€” a workflow whose states are data is a
 #: workflow engine, and this PR does not build one.
 PERMIT_STATUSES = (
     "not_started",
@@ -296,7 +296,7 @@ class LandParcel(Base):
     #: genuinely uses the other supported unit. Nothing converts between them.
     area_unit: Mapped[str] = mapped_column(String(8), nullable=False)
     #: Free text since PR-V2-01. Ownership wording is a jurisdiction and deal
-    #: fact — "Freehold", "75% acquired, balance under negotiation" — and a
+    #: fact â€” "Freehold", "75% acquired, balance under negotiation" â€” and a
     #: closed dictionary made the register refuse the truth on the deed.
     ownership_type: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ownership_share_fraction: Mapped[Decimal | None] = mapped_column(RATE, nullable=True)
@@ -324,7 +324,7 @@ class LandParcel(Base):
     #: "Mortgage release pending" in its own words, and the register records
     #: what it said.
     title_status: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    #: The authority's classification *as issued* — "Residential B",
+    #: The authority's classification *as issued* â€” "Residential B",
     #: "Special development zone". Not the planning envelope: that is
     #: :class:`PlanningControl`, and conflating the two loses both.
     zoning: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -632,12 +632,7 @@ class PermitStatusEvent(Base):
 
 
 class DocumentReference(Base):
-    """A pointer to a document that lives somewhere else.
-
-    Deliberately a reference, not a document store: no upload, no blob storage,
-    no versioning, no parsing. The record says which evidence supports a fact
-    and where to find it.
-    """
+    """Project evidence: an external link or a retained immutable PDF."""
 
     __tablename__ = "document_references"
 
@@ -659,7 +654,11 @@ class DocumentReference(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     document_type_code: Mapped[str] = mapped_column(String(64), nullable=False)
     reference_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    external_url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    external_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    document: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -680,6 +679,34 @@ class DocumentReference(Base):
             "parcel_id IS NULL OR permit_id IS NULL",
             name="single_attachment",
         ),
+        CheckConstraint(
+            "(external_url IS NOT NULL AND filename IS NULL AND document IS NULL "
+            "AND sha256 IS NULL) OR (external_url IS NULL AND filename IS NOT NULL "
+            "AND document IS NOT NULL AND sha256 IS NOT NULL "
+            "AND octet_length(document) BETWEEN 1 AND 10485760)",
+            name="source_valid",
+        ),
         Index("ix_document_references_parcel_id", "parcel_id"),
         Index("ix_document_references_permit_id", "permit_id"),
+    )
+
+
+class ProjectDocumentType(Base):
+    """Project-owned choices supplement the jurisdiction's existing document types."""
+
+    __tablename__ = "project_document_types"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("project_id", "code"),
+        CheckConstraint("length(trim(label)) > 0", name="label_not_blank"),
     )
