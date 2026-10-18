@@ -23,6 +23,10 @@ fastapi==0.141.1
 # formula engine, and formulas in an uploaded workbook are refused rather than
 # evaluated (app/modules/inventory/workbook.py).
 openpyxl==3.1.5
+# Render uploaded architectural PDFs and validate/rasterise images. Native PDFium
+# runs in a bounded subprocess; Pillow encodes the safe PNG preview.
+pypdfium2==5.14.0
+pillow==12.3.0
 psycopg[binary]==3.3.4
 pydantic-settings==2.15.0
 sqlalchemy==2.0.52

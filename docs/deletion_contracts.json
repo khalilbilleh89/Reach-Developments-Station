@@ -774,5 +774,21 @@
     "removal_route": null,
     "ui_file": "frontend/src/components/portfolio/ActionRecord.tsx",
     "notes": "Management actions are cancelled through POST /{action_id}/transitions, which retains the action, its reason and its audit history. An unused open action has no Delete; recorded as an existing gap found by the operational audit when the guard began scanning *_api.py routers."
+  },
+  {
+    "handler": "inventory.create_plan",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/inventory/masterplans/{plan_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/inventory/MasterplanWorkspace.tsx",
+    "notes": "Whole-project structure writer; delete footprints first, current version and reason required. Audit retained, business originals unchanged."
+  },
+  {
+    "handler": "inventory.create_mapping",
+    "create_route": "POST /{plan_id}/mappings",
+    "status": "implemented",
+    "removal_route": "DELETE /projects/{project_id}/inventory/masterplans/{plan_id}/mappings/{mapping_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/inventory/MasterplanWorkspace.tsx",
+    "notes": "Selected unit full page exposes Delete footprint. Whole-project writer, version and reason required; audit retained, unit unchanged."
   }
 ]
