@@ -776,6 +776,14 @@
     "notes": "Management actions are cancelled through POST /{action_id}/transitions, which retains the action, its reason and its audit history. An unused open action has no Delete; recorded as an existing gap found by the operational audit when the guard began scanning *_api.py routers."
   },
   {
+    "handler": "projects.upload_job_description",
+    "create_route": "POST /{member_id}/job-description",
+    "status": "implemented",
+    "removal_route": "POST /{member_id}/job-description/delete",
+    "ui_file": "frontend/src/components/projects/team/TeamJobDescription.tsx",
+    "notes": "Optional attachment; authorized writers can replace or delete with version control and named reason confirmation. File bytes and audit remain retained; deleted members cannot expose attachments. Tested in test_project_team_documents.py."
+  },
+  {
     "handler": "inventory.create_plan",
     "create_route": "POST ",
     "status": "implemented",

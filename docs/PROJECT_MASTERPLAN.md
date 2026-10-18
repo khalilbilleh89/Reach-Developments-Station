@@ -84,7 +84,7 @@ requires explicitly deleting that footprint first; ordinary retained unit remova
 leaves the map link unavailable. Project-level locking serialises competing authoring,
 unit removal and deletion operations; stale edits/deletes return 409.
 
-Migration `0044_inventory_masterplans` adds only `inventory_masterplans` and
+Migration `0045_inventory_masterplans` adds only `inventory_masterplans` and
 `inventory_masterplan_mappings`. No backfill or business-state changes. Downgrade
 refuses while a drawing remains, preventing silent source/geometry loss. Export and
 resolve app-authored records before downgrading; code rollback can retain the additive

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { team, type TeamKind, type TeamMember } from "@/lib/api/team";
 import { useAnswer } from "@/lib/answer";
 import { Button, DataToolbar, Icon, Loading, Notice, PageHeader } from "@/components/ui";
+import { TeamJobDescription } from "./team/TeamJobDescription";
 import { TeamMemberForm } from "./team/TeamMemberForm";
 import { TeamSection } from "./team/TeamSection";
 
@@ -12,6 +13,7 @@ export function TeamTab({ projectId }: { projectId: string }) {
   const answer = useAnswer(true, () => team.list(projectId), [projectId]);
   const [query, setQuery] = useState("");
   const [editor, setEditor] = useState<{ team: TeamKind; member?: TeamMember } | null>(null);
+  const [documentMember, setDocumentMember] = useState<TeamMember | null>(null);
   const [notice, setNotice] = useState("");
   const rows = answer.status === "ready" ? answer.data.members : [];
   const search = query.trim().toLocaleLowerCase();
@@ -30,9 +32,11 @@ export function TeamTab({ projectId }: { projectId: string }) {
         onReset={query ? () => setQuery("") : undefined} actions={<Button variant="quiet" onClick={answer.retry}>Refresh</Button>} />
       {(["operations", "engineering"] as const).map(kind => <TeamSection key={kind} projectId={projectId} kind={kind}
         query={search} members={filtered.filter(member => member.team === kind)} canManage={canManage}
-        onAdd={() => setEditor({ team: kind })} onEdit={member => setEditor({ team: member.team, member })}
+        onAdd={() => setEditor({ team: kind })} onEdit={member => setEditor({ team: member.team, member })} onDocument={setDocumentMember}
         onDeleted={async name => { setNotice(`${name} removed from the team.`); answer.retry(); }} />)}
     </> : null}
+    {documentMember ? <TeamJobDescription projectId={projectId} member={documentMember} onClose={() => setDocumentMember(null)}
+      onSaved={() => { setDocumentMember(null); setNotice("Job description updated."); answer.retry(); }} /> : null}
     {editor ? <TeamMemberForm key={editor.member?.id ?? editor.team} projectId={projectId} initialTeam={editor.team} member={editor.member}
       onClose={() => setEditor(null)} onSaved={name => { setEditor(null); setNotice(`${name} saved to the team.`); answer.retry(); }} /> : null}
   </div>;

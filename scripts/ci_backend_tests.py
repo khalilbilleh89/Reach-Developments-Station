@@ -488,7 +488,7 @@ def domain_of_migration(path: str) -> str | None:
         "0026_common_areas",
         "0030_unit_removal",
         "0032_building_units",
-        "0044_inventory_masterplans",
+        "0045_inventory_masterplans",
     }:
         return "inventory"
     if stem == "0043_commercial_faqs":
@@ -501,6 +501,7 @@ def domain_of_migration(path: str) -> str | None:
         "0026_permit_completed",
         "0033_project_company",
         "0040_project_team",
+        "0044_team_job_description",
         "0041_project_agreements",
     }:
         return "projects"

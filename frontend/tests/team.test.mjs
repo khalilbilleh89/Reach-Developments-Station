@@ -18,6 +18,8 @@ function harness(file, mocks = {}) {
     }};
     if (key === "@/components/ui") return new Proxy({}, { get: (_, name) => name });
     if (key.includes("DeleteRecordButton")) return { DeleteRecordButton: "DeleteRecordButton" };
+    if (key.includes("TeamJobDescription")) return { TeamJobDescription: "TeamJobDescription" };
+    if (key === "@/lib/api") return { ApiError: class ApiError extends Error {} };
     if (key.includes("TeamMemberForm")) return { TeamMemberForm: "TeamMemberForm" };
     if (key.includes("TeamSection")) return { TeamSection: "TeamSection" };
     return require(key);
@@ -110,4 +112,61 @@ test("member editor retains failures, submits every field and protects the draft
   assert.equal(saved[2].scope_of_work, "Updated scope\nSecond line");
   assert.equal(saved[2].email, member.email);
   assert.equal(closed, true);
+});
+
+
+test("optional job description retains failed upload selection and carries member version", async () => {
+  class ApiError extends Error {}
+  let saved = false; let calls = []; let fail = true;
+  const render = harness("team/TeamJobDescription", {
+    "@/lib/api": { ApiError },
+    "@/lib/api/team": { team: { uploadDocument: async (...args) => { calls.push(args); if (fail) throw new ApiError("Changed by someone else"); } } },
+  });
+  const props = { projectId: "project", member, onSaved() { saved = true; }, onClose() {} };
+  let tree = render("TeamJobDescription", props);
+  assert.equal(find(tree, "Button")[0].props.disabled, true);
+  assert.equal(find(tree, "DraftBoundary")[0].props.dirty, false);
+  assert.equal(find(tree, "Field")[0].props.optional, true);
+  const file = { name: "Role.pdf", size: 100 };
+  find(tree, "input")[0].props.onChange({ target: { files: [file] } });
+  tree = render("TeamJobDescription", props);
+  assert.equal(find(tree, "DraftBoundary")[0].props.dirty, true);
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  tree = render("TeamJobDescription", props);
+  assert.equal(saved, false);
+  assert.equal(find(tree, "ValidationSummary")[0].props.error.message, "Changed by someone else");
+  fail = false;
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(calls[1][1].version, 7);
+  assert.equal(calls[1][2], file);
+  assert.equal(saved, true);
+});
+
+test("job description removal keeps confirmation mounted while pending and sends reason", async () => {
+  let finish; let args; let refreshed = false;
+  const render = harness("team/TeamJobDescription", { "@/lib/api/team": { team: {
+    removeDocument: (...values) => { args = values; return new Promise(resolve => { finish = resolve; }); },
+  } } });
+  const props = { projectId: "project", member: { ...member, job_description: { id: "file", filename: "Role.pdf" } }, onSaved() { refreshed = true; }, onClose() {} };
+  let tree = render("TeamJobDescription", props);
+  const removing = find(tree, "DeleteRecordButton")[0].props.onDelete("Outdated role");
+  tree = render("TeamJobDescription", props);
+  assert.equal(find(tree, "DeleteRecordButton").length, 1);
+  assert.equal(find(tree, "DraftBoundary")[0].props.busy, true);
+  finish(); await removing;
+  await find(tree, "DeleteRecordButton")[0].props.onDeleted();
+  assert.equal(args[1].version, 7);
+  assert.equal(args[2], "Outdated role");
+  assert.equal(refreshed, true);
+});
+
+test("readers can download attached job descriptions but cannot manage files", async () => {
+  let downloaded;
+  const render = harness("team/TeamSection", { "@/lib/api/team": { team: { downloadDocument: async (...args) => { downloaded = args; } } } });
+  const props = { projectId: "project", kind: "engineering", members: [{ ...member, job_description: { id: "file", filename: "Role.pdf" } }], query: "", canManage: false };
+  const tree = render("TeamSection", props);
+  const buttons = find(tree, "Button");
+  assert.equal(buttons.length, 1);
+  await buttons[0].props.onClick();
+  assert.equal(downloaded[1].job_description.filename, "Role.pdf");
 });

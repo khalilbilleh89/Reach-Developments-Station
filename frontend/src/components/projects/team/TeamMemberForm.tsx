@@ -42,7 +42,7 @@ export function TeamMemberForm({ projectId, initialTeam, member, onSaved, onClos
               <Field label="Title" optional><input className="input" name="title" autoComplete="organization-title" value={values.title} onChange={event => change("title", event.target.value)} /></Field>
             </FieldRow>
           </FormSection>
-          <FormSection title="Responsibilities & contact" description="Describe what this person handles so everyone knows who to contact.">
+          <FormSection title="Responsibilities & contact" description="Describe what this person handles so everyone knows who to contact. You can attach an optional Job Description from their card after saving.">
             <Field label="Scope of Work" optional><textarea className="input" name="scope_of_work" rows={6} value={values.scope_of_work} onChange={event => change("scope_of_work", event.target.value)} /></Field>
             <Field label="Email Address" optional><input className="input" name="email" type="email" autoComplete="email" value={values.email} onChange={event => change("email", event.target.value)} /></Field>
           </FormSection>

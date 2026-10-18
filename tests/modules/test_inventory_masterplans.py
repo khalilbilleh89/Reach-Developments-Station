@@ -258,7 +258,7 @@ def test_inventory_masterplan_migration_roundtrip_and_retained_source(
     db.rollback()
     config = alembic_config()
     with pytest.raises(RuntimeError, match="Drawing sources prevent downgrade"):
-        command.downgrade(config, "0043_commercial_faqs")
+        command.downgrade(config, "0044_team_job_description")
     assert db.scalar(text("SELECT count(*) FROM inventory_masterplans")) == 1
     assert (
         admin_client.delete(
@@ -268,6 +268,6 @@ def test_inventory_masterplan_migration_roundtrip_and_retained_source(
         == 204
     )
     db.rollback()
-    command.downgrade(config, "0043_commercial_faqs")
+    command.downgrade(config, "0044_team_job_description")
     command.upgrade(config, "head")
     assert db.scalar(text("SELECT count(*) FROM inventory_masterplan_mappings")) == 0

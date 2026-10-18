@@ -50,10 +50,22 @@ class TeamRemoval(StrictRequest):
     reason: str = Field(min_length=1)
 
 
+class JobDescriptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    filename: str
+
+
+class JobDescriptionUpload(StrictRequest):
+    filename: str
+    version: int = Field(ge=1)
+
+
 class TeamMemberRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     project_id: uuid.UUID
+    job_description: JobDescriptionRead | None = None
     team: Team
     name: str
     title: str | None
