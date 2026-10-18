@@ -148,6 +148,8 @@ Forms retain field labels, optional markers, validation, busy state, exact input
 
 **Cashflow:** unrestricted cash leads, with total and restricted cash alongside. Basis and forecast status remain visible. Funding windows, lowest cash position, peak requirement, NPV and equity IRR use the server's values and availability. A missing or stale forecast must remain apparent.
 
+**Matrix:** Creative / Matrix leads with six framework thumbnails and a saved analysis library. Full-page input editors open framework-specific diagrams; exact dated inputs and source notes remain visible. BCG uses server-calculated classification and bounded geometry, with exact values in its legend. SWOT and Ansoff use quadrants, PESTEL six categories, Porter connected competitive forces, and Fishbone causes leading to the stated effect. See [MATRIX.md](MATRIX.md).
+
 **Supporting workspaces:** permits, consultant design, pre-launch expenses, documents and access use the same headers, surfaces, registers, forms and dialogs. Account settings separate security context from the password form. Users and audit remain operational registers; scope and authority are unchanged.
 
 ## 9. Financial and business boundaries

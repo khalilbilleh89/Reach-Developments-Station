@@ -42,6 +42,7 @@ from app.modules.pricing import models as pricing_models  # noqa: E402,F401
 from app.modules.projects import (  # noqa: E402
     agreement_models,  # noqa: F401
     company_models,  # noqa: F401
+    matrix_models,  # noqa: F401
     team_models,  # noqa: F401
 )
 from app.modules.projects import models as projects_models  # noqa: E402,F401

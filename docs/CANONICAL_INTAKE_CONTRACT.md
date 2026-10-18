@@ -186,6 +186,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 
 <!-- disposition:EXCLUDED -->
 
+| `project_matrices` | Project strategy inputs; created prospectively, never legacy imported. |
+
 | Table | Disposition |
 | --- | --- |
 | `marketing_content` | New marketing content; never legacy-imported. |
