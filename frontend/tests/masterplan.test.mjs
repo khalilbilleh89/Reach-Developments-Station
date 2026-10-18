@@ -51,3 +51,33 @@ test('render photographs are selectable flat references and never treated as mea
  assert.equal(nodes(tree).filter(n=>n.props?.className==='masterplan-wall').length,0);
  assert.ok(text(tree).includes('Reset view'));
 });
+
+test('refresh keeps the same canvas and selected-record tree mounted while marking prior inventory',()=>{
+ let cursor=0,answerCursor=0;const slots=[];let currentUnits={status:'ready',data:[unit],retry(){}};
+ const source=readFileSync(new URL('../src/components/projects/inventory/MasterplanWorkspace.tsx',import.meta.url),'utf8');
+ const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+ const exports={};
+ const choices={status:'ready',data:[{...plan,project_id:'project'}],retry(){}};
+ const mapped={status:'ready',data:[mapping],retry(){}};
+ const dependencies={
+  react:{useState(initial){const i=cursor++;slots[i]??={value:initial};return [slots[i].value,v=>{slots[i].value=typeof v==='function'?v(slots[i].value):v;}];},useEffect(){}},
+  '@/lib/answer':{useAnswer(){return [choices,currentUnits,mapped][answerCursor++];}},
+  '@/lib/api/masterplans':{masterplans:{preview:()=>'/preview'}},
+  '@/components/ui':new Proxy({},{get:(_,key)=>key}),
+  '@/components/shell/registerState':{useRegisterFields:()=>[{masterplan:'p1',masterplan_mode:'3d',masterplan_search:'',masterplan_state:''},()=>{}]},
+  '../DeleteRecordButton':{DeleteRecordButton:'DeleteRecordButton'},
+  './MasterplanEditors':{FootprintEditor:'FootprintEditor',PlanEditor:'PlanEditor'},
+  './MasterplanCanvas':{MasterplanCanvas:'MasterplanCanvas'},
+  './statusLabels':{statusLabel:s=>s,statusTone:()=> 'neutral'},
+  './StockView':{stockArea:()=> 'Not recorded'},
+ };
+ runInNewContext(`(function(require,exports){${code}\n})`)(name=>name in dependencies?dependencies[name]:require(name),exports);
+ function render(){cursor=0;answerCursor=0;return exports.MasterplanWorkspace({projectId:'project',canWrite:true});}
+ let tree=render();assert.ok(nodes(tree).some(n=>n.type==='MasterplanCanvas'));
+ currentUnits={status:'loading',retry(){}};tree=render();
+ assert.ok(nodes(tree).some(n=>n.type==='MasterplanCanvas'));
+ assert.ok(!nodes(tree).some(n=>n.type==='Loading'));
+ assert.match(text(tree),/previous inventory response remains visible/);
+ currentUnits={status:'ready',data:[{...unit,commercial_status:'contracted'}],retry(){}};tree=render();
+ assert.equal(nodes(tree).find(n=>n.type==='MasterplanCanvas').props.units[0].commercial_status,'contracted');
+});
