@@ -749,7 +749,7 @@
     "status": "implemented",
     "removal_route": "DELETE /projects/{project_id}/images/{image_id}",
     "ui_file": "frontend/src/components/projects/ProjectImages.tsx",
-    "notes": "Project writers remove gallery images after a named confirmation. Removed rows, actor attribution and byte content are retained; ordinary lists and file reads hide removed records."
+    "notes": "Project writers remove gallery images in Marketing / 3D Shots after a named confirmation. Overview is read-only. Removed rows, actor attribution and byte content are retained; ordinary lists and file reads hide removed records."
   },
   {
     "handler": "projects.create_team_member",
