@@ -1,16 +1,20 @@
 "use client";
 
+import { ApiError } from "@/lib/api";
 import { useState } from "react";
 import type { TeamKind, TeamMember } from "@/lib/api/team";
 import { team } from "@/lib/api/team";
-import { Badge, Button, Card, Disclosure, EmptyState, Icon, RegisterPagination, SectionHeader } from "@/components/ui";
+import { Badge, Button, Card, Disclosure, EmptyState, Icon, RegisterPagination, SectionHeader, Notice } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 const PAGE_SIZE = 12;
-export function TeamSection({ projectId, kind, members, query, canManage, onAdd, onEdit, onDeleted }: {
+export function TeamSection({ projectId, kind, members, query, canManage, onAdd, onEdit, onDocument, onDeleted }: {
   projectId: string; kind: TeamKind; members: TeamMember[]; query: string; canManage: boolean;
+  onDocument: (member: TeamMember) => void;
   onAdd: () => void; onEdit: (member: TeamMember) => void; onDeleted: (name: string) => Promise<void>;
 }) {
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
   const [page, setPage] = useState({ query, offset: 0 });
   const offset = Math.min(page.query === query ? page.offset : 0, Math.max(0, Math.floor((members.length - 1) / PAGE_SIZE) * PAGE_SIZE));
   const title = kind === "operations" ? "Operations Team" : "Engineering Team";
@@ -22,6 +26,7 @@ export function TeamSection({ projectId, kind, members, query, canManage, onAdd,
       </div>
       {canManage ? <Button variant="default" onClick={onAdd}><Icon name="plus" /> Add to {kind === "operations" ? "Operations" : "Engineering"}</Button> : null}
     </div>
+    {downloadError ? <Notice tone="error">{downloadError}</Notice> : null}
     {!members.length ? <Card tone="subtle"><EmptyState title={query ? "No matching team members" : `Build your ${kind} team`}
       hint={query ? "Try another name, title, responsibility or email." : "Add the people involved and keep their responsibilities easy to find."} /></Card> :
       <div className="team-member-grid">{members.slice(offset, offset + PAGE_SIZE).map(member => <Card key={member.id}><div className="team-member-card">
@@ -37,6 +42,20 @@ export function TeamSection({ projectId, kind, members, query, canManage, onAdd,
         </div>
         <div className="team-member-contact"><span className="muted">Email Address</span>
           {member.email ? <a href={`mailto:${encodeURIComponent(member.email)}`}>{member.email}</a> : <span className="muted">Email not entered</span>}
+        </div>
+        <div className="team-member-contact">
+          <span className="muted">Job Description</span>
+          {member.job_description ? <>
+            <span>{member.job_description.filename}</span>
+            <Button variant="quiet" disabled={downloading === member.id} onClick={async () => {
+              setDownloadError(null); setDownloading(member.id);
+              try { await team.downloadDocument(projectId, member); }
+              catch (caught) { setDownloadError(caught instanceof ApiError ? caught.message : "Could not download the job description. Try again."); }
+              finally { setDownloading(null); }
+            }}>{downloading === member.id ? "Downloading..." : "Download job description"}</Button>
+          </> : <span className="muted">No file attached</span>}
+          {canManage ? <Button variant="quiet" onClick={() => onDocument(member)} aria-label={`Job description for ${member.name}`}>
+            {member.job_description ? "Manage job description" : "Attach job description"}</Button> : null}
         </div>
         {canManage ? <div className="team-member-actions">
           <Button variant="default" onClick={() => onEdit(member)} aria-label={`Edit ${member.name}`}>Edit</Button>
