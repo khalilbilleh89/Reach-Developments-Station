@@ -189,9 +189,29 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
 # Exact reviewed ownership: names alone must not certify an arbitrary migration.
 # New revisions register BOTH their owner and their own integrity test(s).
 MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "0045_project_matrices.py": (
+    "0050_project_matrices.py": (
         "projects",
         ("tests/modules/test_project_matrix.py::test_migration_roundtrip_and_retention",),
+    ),
+    "0049_price_escalation.py": (
+        "projects",
+        ("tests/modules/test_project_price_escalation.py::test_escalation_migration_roundtrip",),
+    ),
+    "0048_prelaunch_vat.py": (
+        "cashflow",
+        ("tests/modules/test_prelaunch_vat.py::test_vat_migration_roundtrip_and_retention",),
+    ),
+    "0046_project_documents.py": (
+        "projects",
+        (
+            "tests/modules/test_project_documents_upload.py::test_document_migration_retains_history",
+        ),
+    ),
+    "0045_inventory_masterplans.py": (
+        "inventory",
+        (
+            "tests/modules/test_inventory_masterplans.py::test_inventory_masterplan_migration_roundtrip_and_retained_source",
+        ),
     ),
     "0044_team_job_description.py": (
         "projects",
@@ -256,6 +276,10 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "0026_common_areas.py": (
         "inventory",
         ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
+    ),
+    "0047_company_documents.py": (
+        "projects",
+        ("tests/modules/test_project_company.py::test_document_migration_preserves_retained_pdf",),
     ),
     "0033_project_company.py": ("projects", ("tests/modules/test_project_company.py",)),
     "0032_building_units.py": (

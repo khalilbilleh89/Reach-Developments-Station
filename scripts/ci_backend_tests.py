@@ -102,6 +102,8 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
         "project_images",
         "project_team",
         "project_matrix",
+        "project_price_escalation",
+        "project_documents",
         "project_agreements",
         "project_currency_correction",
         "project_land",
@@ -386,9 +388,11 @@ SELECTOR_TESTS = "tests/test_ci_selector.py"
 
 # A single targeted runner is the inexpensive default. Exceptionally broad
 # cross-domain plans still keep their exact selected coverage, but distribute
-# it across the small matrix CI V2 allows rather than timing out serially.
-TARGETED_SHARD_THRESHOLD = 80
-TARGETED_SHARD_COUNT = 3
+# it across a bounded matrix rather than timing out serially. A 73-file construction plan
+# collected 1,394 tests and timed out after 20 minutes at about 25% complete.
+# Keep coverage and the timeout unchanged; distribute broad plans earlier.
+TARGETED_SHARD_THRESHOLD = 60
+TARGETED_SHARD_COUNT = 8
 
 
 class Selection:
@@ -480,8 +484,12 @@ def domain_of_migration(path: str) -> str | None:
         return "construction"
     if stem == "0039_project_images":
         return "projects"
+    if stem == "0046_project_documents":
+        return "projects"
     if stem == "0026_installment_tax":
         return "payment_plans"
+    if stem == "0048_prelaunch_vat":
+        return "cashflow"
     if stem == "0025_prelaunch_master":
         return "cashflow"
     if stem in {
@@ -489,6 +497,7 @@ def domain_of_migration(path: str) -> str | None:
         "0026_common_areas",
         "0030_unit_removal",
         "0032_building_units",
+        "0045_inventory_masterplans",
     }:
         return "inventory"
     if stem == "0043_commercial_faqs":
@@ -502,8 +511,10 @@ def domain_of_migration(path: str) -> str | None:
         "0033_project_company",
         "0040_project_team",
         "0044_team_job_description",
-        "0045_project_matrices",
+        "0049_price_escalation",
+        "0050_project_matrices",
         "0041_project_agreements",
+        "0047_company_documents",
     }:
         return "projects"
     if stem.endswith("_governance_access"):

@@ -1,4 +1,4 @@
-import { get, post, patch } from "./client";
+import { download, get, post, patch, postBinary } from "./client";
 
 export interface CompanyFields {
   legal_name: string | null;
@@ -39,3 +39,18 @@ export const companies = {
   removeBank: (projectId: string, id: string, accountId: string, reason: string) => post<void>(`${root(projectId)}/${id}/bank-accounts/${accountId}/delete`, { reason }),
 };
 
+
+export interface CompanyDocument { id: string; label: string; filename: string; version: number }
+const documentsRoot = (projectId: string, companyId: string) => `${root(projectId)}/${companyId}/documents`;
+export const companyDocuments = {
+  list: (projectId: string, companyId: string) => get<CompanyDocument[]>(documentsRoot(projectId, companyId)),
+  create: async (projectId: string, companyId: string, label: string, file: File) => {
+    if (!file.size || file.size > 10 * 1024 * 1024) throw new Error("Upload a non-empty PDF up to 10 MB.");
+    if (!file.name.toLowerCase().endsWith(".pdf")) throw new Error("Choose a PDF file.");
+    const query = new URLSearchParams({ label: label.trim(), filename: file.name });
+    return postBinary<CompanyDocument>(`${documentsRoot(projectId, companyId)}?${query}`, await file.arrayBuffer());
+  },
+  update: (projectId: string, companyId: string, row: CompanyDocument, label: string) => patch<CompanyDocument>(`${documentsRoot(projectId, companyId)}/${row.id}`, { label, expected_version: row.version }),
+  download: (projectId: string, companyId: string, row: CompanyDocument) => download(`${documentsRoot(projectId, companyId)}/${row.id}/file`, row.filename),
+  remove: (projectId: string, companyId: string, row: CompanyDocument, reason: string) => post<void>(`${documentsRoot(projectId, companyId)}/${row.id}/delete`, { reason, expected_version: row.version }),
+};

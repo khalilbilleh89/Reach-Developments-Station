@@ -39,6 +39,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
     func,
@@ -1224,4 +1225,66 @@ class InventoryOption(Base):
         CheckConstraint(
             "length(trim(code)) > 0 AND length(trim(label)) > 0", name="labels_not_blank"
         ),
+    )
+
+
+class Masterplan(Base):
+    """One immutable source page and its editable spatial calibration."""
+
+    __tablename__ = "inventory_masterplans"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    filename: Mapped[str] = mapped_column(String(200), nullable=False)
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    width_m: Mapped[Decimal | None] = mapped_column(MEASURE, nullable=True)
+    pixel_width: Mapped[int] = mapped_column(Integer, nullable=False)
+    pixel_height: Mapped[int] = mapped_column(Integer, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    source_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)
+    preview_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)
+    __table_args__ = (
+        UniqueConstraint("id", "project_id"),
+        CheckConstraint("kind IN ('plan', 'render', 'elevation')", name="kind_allowed"),
+        CheckConstraint("width_m IS NULL OR width_m > 0", name="width_positive"),
+        CheckConstraint(
+            "version > 0 AND page_number >= 0 AND pixel_width > 0 AND pixel_height > 0",
+            name="dimensions_valid",
+        ),
+        Index("ix_inventory_masterplans_project_id", "project_id"),
+    )
+
+
+class MasterplanMapping(Base):
+    """A unit footprint, never a second inventory or commercial status."""
+
+    __tablename__ = "inventory_masterplan_mappings"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    plan_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    points: Mapped[list[list[float]]] = mapped_column(JSONB, nullable=False)
+    base_m: Mapped[Decimal] = mapped_column(MEASURE, nullable=False)
+    height_m: Mapped[Decimal] = mapped_column(MEASURE, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["plan_id", "project_id"],
+            ["inventory_masterplans.id", "inventory_masterplans.project_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["unit_id", "project_id"], ["units.id", "units.project_id"], ondelete="RESTRICT"
+        ),
+        UniqueConstraint("plan_id", "unit_id"),
+        CheckConstraint("height_m > 0 AND base_m >= 0 AND version > 0", name="height_valid"),
+        Index("ix_inventory_masterplan_mappings_project_id", "project_id"),
     )

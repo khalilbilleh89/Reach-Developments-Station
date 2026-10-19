@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import (
@@ -37,6 +39,10 @@ from app.modules.projects.schemas import (
     DocumentReferenceCreateRequest,
     DocumentReferenceRead,
     DocumentReferenceUpdateRequest,
+    DocumentRemoval,
+    DocumentTypeCreate,
+    DocumentTypeRead,
+    DocumentUpload,
     LandAnalyticsRead,
     LandMarketAssumptionWrite,
     LandParcelCreateRequest,
@@ -342,7 +348,7 @@ def remove_project_image(
 
 
 # --------------------------------------------------------------------------- #
-# Project access — System Administrator only
+# Project access â€” System Administrator only
 # --------------------------------------------------------------------------- #
 
 
@@ -632,7 +638,7 @@ def create_permit_type(
     """Extend the permit vocabulary without leaving the permit workspace.
 
     Gated on the technical writer, which is the role already trusted with
-    permits and planning controls — not on the System Administrator that the
+    permits and planning controls â€” not on the System Administrator that the
     generic Settings write requires. A project team can add the consent their
     authority asks for; they still cannot touch tax rules or global
     configuration, because this route can only ever write one category into one
@@ -907,3 +913,107 @@ def update_document(
         **changes,
     )
     return DocumentReferenceRead.model_validate(updated)
+
+
+# Choice reads use the project's jurisdiction, never unrestricted Settings reads.
+@router.get("/{project_id}/document-types", response_model=list[DocumentTypeRead])
+def list_document_types(
+    project: AccessibleProject, session: DbSession, _actor: ActiveActor
+) -> list[dict]:
+    from app.modules.projects.document_service import types
+
+    return types(session, project)
+
+
+@router.post("/{project_id}/document-types", response_model=DocumentTypeRead, status_code=201)
+def create_document_type(
+    payload: DocumentTypeCreate, project: AccessibleProject, session: DbSession, actor: ActiveActor
+) -> dict:
+    from app.modules.projects.document_service import add_type
+
+    require_technical_writer(actor)
+    return add_type(session, project, actor, payload.label)
+
+
+@router.post("/{project_id}/document-types/{type_id}/delete", status_code=204)
+def delete_document_type(
+    type_id: uuid.UUID,
+    payload: DocumentRemoval,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> Response:
+    from app.modules.projects.document_service import remove_type
+
+    require_technical_writer(actor)
+    remove_type(session, project, actor, type_id, payload.reason)
+    return Response(status_code=204)
+
+
+@router.post(
+    "/{project_id}/documents/upload", response_model=DocumentReferenceRead, status_code=201
+)
+async def upload_project_document(
+    fields: Annotated[DocumentUpload, Query()],
+    request: Request,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> DocumentReferenceRead:
+    from app.modules.projects.agreement_service import MAX_DOCUMENT_BYTES, validate_document
+
+    require_technical_writer(actor)
+    content = bytearray()
+    async for chunk in request.stream():
+        if len(content) + len(chunk) > MAX_DOCUMENT_BYTES:
+            raise HTTPException(status_code=413, detail="PDF files must be no larger than 10 MB.")
+        content.extend(chunk)
+    if not fields.filename.lower().endswith(".pdf") or not content.startswith(b"%PDF-"):
+        raise HTTPException(status_code=422, detail="Choose a PDF file matching its file type.")
+    filename = validate_document(fields.filename, bytes(content))
+    values = fields.model_dump(exclude={"filename"})
+    row = await run_in_threadpool(
+        service.create_document,
+        session,
+        project=project,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        external_url=None,
+        filename=filename,
+        document_bytes=bytes(content),
+        **values,
+    )
+    return DocumentReferenceRead.model_validate(row)
+
+
+@router.get("/{project_id}/documents/{document_id}/file")
+def download_project_document(
+    document_id: uuid.UUID, project: AccessibleProject, session: DbSession, _actor: ActiveActor
+) -> Response:
+    row = service.get_document(session, project_id=project.id, document_id=document_id)
+    if not row.filename or row.document is None:
+        raise HTTPException(status_code=404, detail="PDF not found.")
+    return Response(
+        content=row.document,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(row.filename, safe=""),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@router.post("/{project_id}/documents/{document_id}/delete", status_code=204)
+def delete_project_document(
+    document_id: uuid.UUID,
+    payload: DocumentRemoval,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> Response:
+    from app.modules.projects.document_service import remove_document
+
+    require_technical_writer(actor)
+    remove_document(session, project, actor, document_id, payload.reason)
+    return Response(status_code=204)

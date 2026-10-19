@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SalesImport } from "./SalesImport";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesAgent } from "@/lib/api";
 import { Button, DataToolbar, DraftBoundary, EmptyState, Field, FieldRow, FormActions,
@@ -47,6 +48,7 @@ function AgentForm({projectId, agent, onSaved, onCancel}: {
 export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite: boolean}) {
   const [agents, setAgents] = useState<SalesAgent[] | null>(null);
   const [search, setSearch] = useState("");
+  const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<SalesAgent | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -55,6 +57,8 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
     catch (caught) { setAgents(null); setError(caught instanceof ApiError ? caught.message : "Could not load Agents."); }
   }, [projectId, search]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]);
+
+  if (importing) return <SalesImport projectId={projectId} kind="agents" onClose={() => setImporting(false)} onImported={() => { void load(); }} />;
 
   if (editing) return <RecordPage title={editing === "new" ? "Add agent" : `Edit ${editing.display_name}`} onClose={() => setEditing(null)}>
     <p className="field-hint">An Agent can exist before any buyer or sale. Changes to this roster never rewrite existing transaction snapshots.</p>
@@ -68,7 +72,7 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
     <DataToolbar search={{value: search, onChange: setSearch, label: "Search agents", placeholder: "Agent name"}}
       count={agents ? {shown: agents.length, noun: "agent"} : undefined}
       onReset={search ? () => setSearch("") : undefined}
-      actions={canWrite ? <Button variant="primary" onClick={() => setEditing("new")}>Add agent</Button> : undefined} />
+      actions={canWrite ? <><Button onClick={() => setImporting(true)}>Import from Excel</Button><Button variant="primary" onClick={() => setEditing("new")}>Add agent</Button></> : undefined} />
     {agents === null ? (error ? null : <Loading label="Loading Agents…" />) : agents.length === 0 ?
       <EmptyState title="No agents registered" hint="Add an Agent before assigning one to a buyer. Buyers may also have no Agent." /> :
       <TableScroll label="Project Agents" fixedFirst>

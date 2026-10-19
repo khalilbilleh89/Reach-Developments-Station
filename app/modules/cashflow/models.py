@@ -56,6 +56,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     func,
@@ -568,6 +569,10 @@ class CashflowDevelopmentMovement(Base):
         Boolean, nullable=False, server_default=text("false"), default=False
     )
 
+    # Null means the historical gross amount has no recorded VAT breakdown.
+    amount_ex_vat: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    vat_rate_percent: Mapped[Decimal | None] = mapped_column(Numeric(7, 4), nullable=True)
+
     #: The project-scoped human reference, ``DEV-000001``.
     movement_reference: Mapped[str] = mapped_column(String(32), nullable=False)
     category: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -646,6 +651,13 @@ class CashflowDevelopmentMovement(Base):
             " AND category IN ('land_fees', 'design', 'consultants', 'permits', 'utilities',"
             " 'insurance', 'developer_overhead', 'marketing', 'tax', 'other'))",
             name="master_confirmation_valid",
+        ),
+        CheckConstraint(
+            "(amount_ex_vat IS NULL AND vat_rate_percent IS NULL) OR "
+            "(amount_ex_vat IS NOT NULL AND vat_rate_percent IS NOT NULL "
+            "AND amount_ex_vat > 0 AND vat_rate_percent BETWEEN 0 AND 100 "
+            "AND amount = amount_ex_vat + round(amount_ex_vat * vat_rate_percent / 100, 2))",
+            name="vat_total_valid",
         ),
         Index("ix_cf_dev_movements_project_status", "project_id", "status"),
         Index("ix_cf_dev_movements_date", "project_id", "movement_date"),

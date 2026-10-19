@@ -12,7 +12,7 @@ BCG requires exact Decimal market growth percentages and relative market-share m
 
 All reads, previews and writes require whole-project scope; project managers and effective administrators may write, other whole-project members may read. A project row lock serializes writes. Full PUT requires a current version; stale updates/deletions return 409. Cross-project IDs return 404. Inputs are plain text, bounded to 100 items per analysis, and validated by framework. No attachments, rich text, external fetches or executable expressions are accepted.
 
-Migration 0045_project_matrices follows 0044_team_job_description and adds only project_matrices. Payloads hold validated versioned analysis inputs, not transaction data. Create, edit and delete are audited. Delete retains the payload and attributed reason; embedded item deletion is recorded in the parent's save audit. No analysis references or mutates financial, sales or legal transactions. Downgrade refuses any retained rows, including deleted ones; roll forward or export/approve data handling first. Empty-schema downgrade is supported.
+Migration 0050_project_matrices follows 0049_price_escalation and adds only project_matrices. Payloads hold validated versioned analysis inputs, not transaction data. Create, edit and delete are audited. Delete retains the payload and attributed reason; embedded item deletion is recorded in the parent's save audit. No analysis references or mutates financial, sales or legal transactions. Downgrade refuses any retained rows, including deleted ones; roll forward or export/approve data handling first. Empty-schema downgrade is supported.
 
 ## Validation
 

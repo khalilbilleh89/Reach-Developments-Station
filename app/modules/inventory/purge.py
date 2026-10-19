@@ -226,7 +226,11 @@ def _plan(
                 ):
                     label = next(
                         (scope.label for scope in SCOPES if scope.table.name == child_name),
-                        "Shared project records",
+                        (
+                            "Masterplan footprints (remove in Inventory / Masterplan first)"
+                            if child_name == "inventory_masterplan_mappings"
+                            else "Shared project records"
+                        ),
                     )
                     blockers.append(
                         f"{label} outside this purge still depend on the selected history."

@@ -1355,9 +1355,28 @@ def register_signed_contract(
     validate_signed_registration(session, project=project, contract=contract)
     if not signed_reference.strip():
         raise ValidationError("Enter the signed contract document reference.")
-    if not session.scalar(
-        select(ContractLine.id).where(ContractLine.contract_id == contract.id).limit(1)
+    lines = list(
+        session.scalars(select(ContractLine).where(ContractLine.contract_id == contract.id))
+    )
+    if (
+        not lines
+        or contract_line_total(session, contract_id=contract.id)
+        != contract.original_contract_value_ex_tax
     ):
+        old_lines = [
+            {
+                "id": str(row.id),
+                "sequence": row.sequence,
+                "cost_code_id": str(row.cost_code_id),
+                "description": row.description,
+                "notes": row.notes,
+                "amount": str(row.original_amount_ex_tax),
+            }
+            for row in lines
+        ]
+        for row in lines:
+            session.delete(row)
+        _flush(session)
         code = create_cost_code(
             session,
             project=project,
@@ -1367,15 +1386,26 @@ def register_signed_contract(
             cost_category="soft" if contract.contract_type == "consultancy" else CATEGORY_HARD,
             notes="Contract allocation created with the signed agreement; not a budget.",
         )
-        set_contract_line(
+        session.add(
+            ContractLine(
+                project_id=project.id,
+                contract_id=contract.id,
+                sequence=1,
+                description="Signed contract scope",
+                cost_code_id=code.id,
+                original_amount_ex_tax=contract.original_contract_value_ex_tax,
+            )
+        )
+        _flush(session)
+        record_event(
             session,
-            project=project,
-            actor=actor,
-            contract_id=contract.id,
-            sequence=1,
-            description="Signed contract scope",
-            cost_code_id=code.id,
-            original_amount_ex_tax=contract.original_contract_value_ex_tax,
+            action="construction.signed_contract_total_allocated",
+            entity_type=ENTITY_CONTRACT,
+            entity_id=contract.id,
+            correlation_id=actor.correlation_id,
+            actor_user_id=actor.user_id,
+            before={"draft_lines": old_lines},
+            after={"signed_total": str(contract.original_contract_value_ex_tax)},
         )
     before = _snapshot(contract, _CONTRACT_FIELDS)
     contract.status = CONTRACT_ACTIVE
@@ -1400,10 +1430,16 @@ def validate_signed_registration(session: Session, *, project: Project, contract
         raise ConflictError("The signed contract must use the project's base currency.")
     if contract.status not in {CONTRACT_DRAFT, CONTRACT_SUBMITTED}:
         raise ConflictError("Only a draft or submitted agreement can be registered as signed.")
-    if session.scalar(
-        select(ContractLine.id).where(ContractLine.contract_id == contract.id).limit(1)
+    if (
+        contract_line_total(session, contract_id=contract.id)
+        != contract.original_contract_value_ex_tax
     ):
-        _require_lines_reconcile(session, contract=contract)
+        for model in (Variation, Certificate, Invoice, Payment):
+            if session.scalar(select(model.id).where(model.contract_id == contract.id).limit(1)):
+                raise ConflictError(
+                    "This agreement has linked records. "
+                    "Reconcile its allocations before activation."
+                )
 
 
 def delete_unused_contract(
@@ -2439,6 +2475,79 @@ def create_certificate(
     return certificate
 
 
+def set_certificate_total(
+    session: Session,
+    *,
+    project: Project,
+    certificate: Certificate,
+    amount: Decimal,
+    cost_code_id: uuid.UUID | None,
+) -> None:
+    """Single-total entry uses the contract's sole allocation; legacy splits stay explicit."""
+    codes = set(
+        contract_committed_by_cost_code(
+            session,
+            project_id=project.id,
+            contract_id=certificate.contract_id,
+        )
+    )
+    if cost_code_id is None:
+        if len(codes) != 1:
+            raise ValidationError("Select the scope for this legacy contract's work valuation.")
+        cost_code_id = next(iter(codes))
+    if cost_code_id not in codes:
+        raise ValidationError("The selected scope does not belong to this contract.")
+    set_certificate_line(
+        session,
+        project=project,
+        certificate_id=certificate.id,
+        cost_code_id=cost_code_id,
+        current_work_value_ex_tax=amount,
+    )
+
+
+def delete_draft_certificate(
+    session: Session,
+    *,
+    project: Project,
+    actor: ActorContext,
+    certificate_id: uuid.UUID,
+    reason: str,
+) -> None:
+    lock_project(session, project.id)
+    certificate = get_certificate(session, project=project, certificate_id=certificate_id)
+    if certificate.status != CERTIFICATE_DRAFT:
+        raise ConflictError(
+            "Only draft certificates can be deleted. Reject or reverse posted evidence."
+        )
+    if session.scalar(select(Invoice.id).where(Invoice.certificate_id == certificate.id).limit(1)):
+        raise ConflictError("Linked invoices prevent removal of this certificate.")
+    before = _snapshot(certificate, _CERTIFICATE_FIELDS)
+    lines = list(
+        session.scalars(
+            select(CertificateLine).where(CertificateLine.certificate_id == certificate.id)
+        )
+    )
+    before["lines"] = [
+        {"cost_code_id": str(row.cost_code_id), "work": str(row.current_work_value_ex_tax)}
+        for row in lines
+    ]
+    for row in lines:
+        session.delete(row)
+    _flush(session)
+    session.delete(certificate)
+    record_event(
+        session,
+        action="construction.draft_certificate_deleted",
+        entity_type=ENTITY_CERTIFICATE,
+        entity_id=certificate_id,
+        correlation_id=actor.correlation_id,
+        actor_user_id=actor.user_id,
+        reason=reason,
+        before=before,
+    )
+
+
 def set_certificate_line(
     session: Session,
     *,
@@ -3102,6 +3211,7 @@ def record_payment(
     proof_reference: str | None = None,
     notes: str | None = None,
     direct_contract_payment: bool = False,
+    invoice_id: uuid.UUID | None = None,
 ) -> Payment:
     """Prepare an invoice disbursement, or register evidenced cash already paid.
     Direct entry records a historical fact; it neither authorizes nor initiates
@@ -3133,6 +3243,17 @@ def record_payment(
             )
         if not (proof_reference or "").strip():
             raise ValidationError("Enter a payment proof reference for money already paid.")
+    invoice = None
+    if invoice_id is not None:
+        if not direct_contract_payment:
+            raise ValidationError("Immediate invoice settlement requires a payment already made.")
+        invoice = _lock_invoice(session, project_id=project.id, invoice_id=invoice_id)
+        if invoice.contract_id != contract.id:
+            raise permissions.invoice_not_found()
+        if invoice.status != INVOICE_APPROVED:
+            raise ConflictError("Select an approved, undisputed invoice to settle.")
+        if money(amount) > invoice_outstanding(session, invoice=invoice):
+            raise ConflictError("The payment exceeds this invoice's outstanding balance.")
     payment = Payment(
         direct_contract_payment=direct_contract_payment,
         project_id=project.id,
@@ -3165,6 +3286,27 @@ def record_payment(
         actor_user_id=actor.user_id,
         after=_snapshot(payment, _PAYMENT_FIELDS),
     )
+    if invoice is not None:
+        session.add(
+            PaymentAllocation(
+                project_id=project.id,
+                contract_id=contract.id,
+                payment_id=payment.id,
+                invoice_id=invoice.id,
+                amount=money(amount),
+                created_by_user_id=actor.user_id,
+            )
+        )
+        _flush(session)
+        record_event(
+            session,
+            action="construction.paid_invoice_settled",
+            entity_type=ENTITY_PAYMENT,
+            entity_id=payment.id,
+            correlation_id=actor.correlation_id,
+            actor_user_id=actor.user_id,
+            after={"invoice_id": str(invoice.id), "amount": str(money(amount))},
+        )
     return payment
 
 

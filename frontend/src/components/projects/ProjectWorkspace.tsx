@@ -46,6 +46,8 @@ import { LandTab } from "@/components/projects/LandTab";
 import { MarketingContentTab } from "@/components/projects/marketing/MarketingContentTab";
 import { MarketingEconomicsTab } from "@/components/projects/marketing/MarketingEconomicsTab";
 import { MatrixTab } from "@/components/projects/MatrixTab";
+import { PriceEscalationTab } from "./PriceEscalationTab";
+
 import { TeamTab } from "@/components/projects/TeamTab";
 import { CompanyTab } from "@/components/projects/CompanyTab";
 import { PaymentPlansTab } from "@/components/projects/PaymentPlansTab";
@@ -232,7 +234,7 @@ export function ProjectWorkspace({
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
-          <ProjectImages projectId={projectId} canEdit={canWriteProject} />
+          <ProjectImages projectId={projectId} canEdit={false} managementHref={canWriteProject ? projectHref(projectId, "marketing-shots") : undefined} />
           <Disclosure title={<> Project construction stage configuration </>}>
             <ProjectStages projectId={projectId} roles={roles} />
           </Disclosure>
@@ -242,6 +244,10 @@ export function ProjectWorkspace({
     return (
       <>
         {section === "marketing-bio" || section === "marketing-branding" ? <MarketingContentTab key={`${projectId}-${section}`} projectId={projectId} roles={roles} kind={section === "marketing-bio" ? "bio" : "branding"} /> : null}
+        {section === "marketing-shots" ? <>
+          <PageHeader title="3D Shots" subtitle="Manage the project images displayed in Overview." />
+          <ProjectImages key={`shots-${projectId}`} projectId={projectId} canEdit={canWriteProject} />
+        </> : null}
         {section === "marketing-economics" ? <MarketingEconomicsTab key={projectId} projectId={projectId} roles={roles} currencyId={project.base_currency_id} /> : null}
         {section === "company" ? <CompanyTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "land" ? (
@@ -298,6 +304,7 @@ export function ProjectWorkspace({
         {section === "commissions" ? <CommissionsTab projectId={projectId} roles={roles} userId={user.id} currencyCodes={currencyCodes} /> : null}
         {section === "construction" ? <ConstructionTab projectId={projectId} roles={roles} currencyId={project.base_currency_id} currencyCode={project.base_currency_code} /> : null}
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
+        {section === "price-escalation" ? <PriceEscalationTab key={projectId} projectId={projectId} /> : null}
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
         {section === "matrix" ? <MatrixTab key={projectId} projectId={projectId} /> : null}

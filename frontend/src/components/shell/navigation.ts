@@ -41,6 +41,7 @@ export type ProjectSection =
   | "marketing-bio"
   | "marketing-economics"
   | "marketing-branding"
+  | "marketing-shots"
   | "overview"
   | "company"
   | "land"
@@ -68,6 +69,7 @@ export type ProjectSection =
   | "construction"
   | "economics"
   | "cashflow"
+  | "price-escalation"
   | "documents"
   | "team"
   | "access";
@@ -181,6 +183,12 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
       {
         key: "marketing-branding", label: "Branding", icon: "documents", description: "The project name, its meaning, colour palette and typography.", visible: roles => hasAnyRole(roles, MARKETING_READERS),
       },
+      {
+        key: "marketing-shots", label: "3D Shots", icon: "documents",
+        description: "Manage the interior, exterior and 3D images shown in Project Overview.",
+        // Project images are readable by every user with access to this project.
+        visible: everyone,
+      },
     ],
   },
   {
@@ -270,6 +278,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "finance",
     label: "Finance",
     items: [
+      {
+        key: "price-escalation", label: "Price Escalation", icon: "money",
+        description: "Effective-dated price escalation strategy and custom project stages.",
+        visible: (roles) => hasAnyRole(roles, PROJECT_FINANCIAL_READERS),
+      },
       {
         key: "economics",
         label: "Unit Economics",

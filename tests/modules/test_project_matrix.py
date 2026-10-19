@@ -212,7 +212,7 @@ def test_migration_roundtrip_and_retention(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0044_team_job_description")
+    command.downgrade(config, "0049_price_escalation")
     command.upgrade(config, "head")
     command.check(config)
     row = create(admin_client, project_id)
@@ -220,7 +220,7 @@ def test_migration_roundtrip_and_retention(
         f"{url(project_id)}/{row['id']}/delete", json={"version": 1, "reason": "Retain"}
     )
     with pytest.raises(RuntimeError, match="Matrix history"):
-        command.downgrade(config, "0044_team_job_description")
+        command.downgrade(config, "0049_price_escalation")
     command.upgrade(config, "head")
 
 

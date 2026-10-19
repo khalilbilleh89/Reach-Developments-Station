@@ -65,6 +65,7 @@ def create_agent(
     project: Project,
     actor: ActorContext,
     fields: dict[str, object],
+    commit: bool = True,
 ) -> SalesAgent:
     permissions.require_client_writer(actor)
     project = lock_project(session, project.id)
@@ -84,8 +85,9 @@ def create_agent(
         correlation_id=actor.correlation_id,
         after={"project_id": str(project.id), "display_name": agent.display_name},
     )
-    session.commit()
-    session.refresh(agent)
+    if commit:
+        session.commit()
+        session.refresh(agent)
     return agent
 
 

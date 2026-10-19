@@ -627,6 +627,7 @@ class TestOnlyEntitledReadersAsk:
             "marketing-bio",
             "marketing-economics",
             "marketing-branding",
+            "marketing-shots",
             "agreements",
             # "agent-buyer" split into the two jobs it was doing: registering a
             # purchaser, and recording which sales team brought them. The old
@@ -641,6 +642,7 @@ class TestOnlyEntitledReadersAsk:
             "faqs",
             "operations",
             "construction",
+            "price-escalation",
             "economics",
             "cashflow",
             "team",
@@ -664,6 +666,7 @@ class TestOnlyEntitledReadersAsk:
             ("faqs", "SALES_READERS"),
             ("construction", "SPECIFICATION_READERS"),
             ("economics", "ECONOMICS_READERS"),
+            ("price-escalation", "PROJECT_FINANCIAL_READERS"),
             ("cashflow", "CASHFLOW_READERS"),
         ):
             entry = navigation.split(f'key: "{key}",')[1].split("},")[0]
