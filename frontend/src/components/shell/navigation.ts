@@ -107,7 +107,15 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
   {
     key: "creative",
     label: "Creative",
-    items: [{ key: "matrix", label: "Matrix", icon: "overview", description: "Create visual SWOT, PESTEL, Porter, BCG, Ansoff and Fishbone analyses.", visible: everyone }],
+    items: [
+      {
+        key: "matrix",
+        label: "Matrix",
+        icon: "overview",
+        description: "Create visual SWOT, PESTEL, Porter, BCG, Ansoff and Fishbone analyses.",
+        visible: everyone,
+      },
+    ],
   },
   {
     key: "development",
