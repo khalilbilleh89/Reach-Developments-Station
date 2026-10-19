@@ -2397,6 +2397,8 @@ export const cashflow = {
 
 /** Development language over the same Cashflow Development Movement rows. */
 export const prelaunch = {
+  preview: (projectId: string, body: Record<string, unknown>) =>
+    post<import("./types").PreLaunchAmount>(`/projects/${projectId}/pre-launch/expenses/preview`, body),
   update: (projectId: string, movementId: string, body: Record<string, unknown>) =>
     patch<PreLaunchExpense>(`/projects/${projectId}/pre-launch/expenses/${movementId}`, body),
   remove: (projectId: string, movementId: string, body: Record<string, unknown>) =>

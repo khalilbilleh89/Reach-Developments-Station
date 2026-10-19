@@ -192,7 +192,7 @@ function mount(file, name, dependencies, props) {
   const source = readFileSync(new URL(`../src/components/${file}.tsx`, import.meta.url), "utf8") + `\nexport { ${name} as TestedComponent };`;
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const ui = new Proxy({}, { get: (_, key) => key });
-  runInNewContext(`(function(require, exports) { ${code}\n})`)(key => {
+  runInNewContext(`(function(require, exports) { ${code}\n})`, { setTimeout, clearTimeout })(key => {
     if (key === "react") return react;
     if (key in dependencies) return dependencies[key];
     if (key === "@/lib/api") return { ApiError: class extends Error { fieldErrors = []; } };
@@ -296,15 +296,19 @@ test("Pre-Launch keeps a failed removal open, refreshes eligibility and blocks d
   assert.equal(reads, 2);
 });
 
-test("Pre-Launch editor sends only editable fields and retains corrected values after an error", () => {
+test("Pre-Launch editor sends only editable fields and retains corrected values after an error", async () => {
   const initial = { id: "expense", category: "utilities", amount: "1250.25", movement_date: "2026-01-01",
     notes: "Water fee", counterparty_reference: "Authority", invoice_reference: "INV", evidence_reference: "proof" };
   let submitted;
-  const props = { initial, currencyId: "currency", currencyCode: "USD", busy: false, error: null,
+  const props = { projectId: "project", initial, currencyId: "currency", currencyCode: "USD", busy: false, error: null,
     onCancel() {}, onSubmit(body) { submitted = body; } };
-  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {}, props);
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {
+    "@/lib/api": { prelaunch: { preview: async body => ({ amount: "99.99", vat_amount: null }) } },
+    "@/lib/format": landFormat,
+  }, props);
   nodes(render()).find(n => n.type === "MoneyInput").props.onChange("99.99");
   assert.equal(nodes(render()).find(n => n.type === "DraftBoundary").props.dirty, true);
+  await new Promise(resolve => setTimeout(resolve, 300));
   nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(submitted.amount, "99.99");
   assert.equal(submitted.invoice_reference, "INV");
@@ -312,6 +316,48 @@ test("Pre-Launch editor sends only editable fields and retains corrected values 
   props.error = "Validation refused";
   assert.equal(nodes(render()).find(n => n.type === "MoneyInput").props.value, "99.99");
   assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children === "Validation refused"));
+});
+
+test("Pre-Launch VAT input sends net and percentage strings and waits for the matching server total", async () => {
+  const requests = []; let submitted;
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {
+    "@/lib/api": { ApiError: Error, prelaunch: { preview: (...args) => new Promise(resolve => requests.push({ args, resolve })) } },
+    "@/lib/format": landFormat,
+  }, { projectId: "project", currencyId: "currency", currencyCode: "USD", busy: false, error: null,
+    onCancel() {}, onSubmit(body) { submitted = body; } });
+  const change = (label, value) => nodes(render()).find(n => n.type === "Field" && n.props.label === label).props.children.props.onChange({ target: { value } });
+  change("Description / notes", "Design expense"); change("Payment / movement date", "2026-10-18");
+  nodes(render()).find(n => n.type === "MoneyInput").props.onChange("1000.00");
+  change("VAT (%)", "5"); render();
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(requests[0].args[1].amount_ex_vat, "1000.00");
+  assert.equal(requests[0].args[1].vat_rate_percent, "5");
+  assert.equal(nodes(render()).find(n => n.type === "Button" && n.props.type === "submit").props.disabled, true);
+  change("VAT (%)", "10"); render();
+  requests[0].resolve({ amount: "1050.00", vat_amount: "50.00" }); await settle();
+  assert.ok(!nodes(render()).some(n => n.type === "PositionFigure"));
+  await new Promise(resolve => setTimeout(resolve, 300));
+  requests[1].resolve({ amount: "1100.00", vat_amount: "100.00" }); await settle();
+  assert.equal(nodes(render()).find(n => n.type === "PositionFigure" && n.props.label === "Total including VAT").props.value, landFormat.money("1100.00", "USD"));
+  nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(submitted.amount_ex_vat, "1000.00"); assert.equal(submitted.vat_rate_percent, "10");
+  assert.ok(!("amount" in submitted)); assert.equal(submitted.currency_id, "currency");
+});
+
+test("legacy VAT conversion clears the unknown total and failed previews retain the entered rate", async () => {
+  const initial = { id: "legacy", amount: "1050.00", amount_ex_vat: null, vat_rate_percent: null, notes: "Legacy fee", category: "design", movement_date: "2026-10-18" };
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {
+    "@/lib/api": { ApiError: Error, prelaunch: { preview: async () => { throw new Error("Preview unavailable"); } } },
+    "@/lib/format": landFormat,
+  }, { projectId: "project", initial, currencyCode: "USD", busy: false, error: null, onCancel() {}, onSubmit() {} });
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "Enter VAT breakdown").props.onClick();
+  assert.equal(nodes(render()).find(n => n.type === "MoneyInput").props.value, "");
+  nodes(render()).find(n => n.type === "MoneyInput").props.onChange("1000.00");
+  nodes(render()).find(n => n.type === "Field" && n.props.label === "VAT (%)").props.children.props.onChange({ target: { value: "5" } });
+  render(); await new Promise(resolve => setTimeout(resolve, 300));
+  assert.ok(nodes(render()).some(n => n.type === "Button" && n.props.children === "Retry total"));
+  assert.equal(nodes(render()).find(n => n.type === "Field" && n.props.label === "VAT (%)").props.children.props.value, "5");
+  assert.equal(nodes(render()).find(n => n.type === "Button" && n.props.type === "submit").props.disabled, true);
 });
 for (const component of ["ContractsSection", "VariationsSection", "CertificatesSection", "CashSection", "MilestonesSection", "ForecastSection"]) {
   test(`${component}: failed read retries GETs and accepts a recovered empty response`, async () => {

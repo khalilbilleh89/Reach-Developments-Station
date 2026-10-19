@@ -203,7 +203,26 @@ class DevelopmentMovementCreate(StrictRequest):
     notes: str | None = Field(default=None, max_length=2000)
 
 
-class DevelopmentMovementOut(Response):
+class PreLaunchAmountInput(StrictRequest):
+    amount: PositiveMoney | None = None
+    amount_ex_vat: PositiveMoney | None = None
+    vat_rate_percent: Annotated[DecimalStr, Field(ge=0, le=100, decimal_places=4)] | None = None
+
+
+class PreLaunchExpenseCreate(DevelopmentMovementCreate):
+    amount: PositiveMoney | None = None
+    amount_ex_vat: PositiveMoney | None = None
+    vat_rate_percent: Annotated[DecimalStr, Field(ge=0, le=100, decimal_places=4)] | None = None
+
+
+class PreLaunchAmountOut(Response):
+    amount: Money
+    amount_ex_vat: Money | None
+    vat_rate_percent: DecimalStr | None
+    vat_amount: Money | None
+
+
+class DevelopmentMovementOut(PreLaunchAmountOut):
     id: uuid.UUID
     movement_reference: str
     category: str
@@ -224,6 +243,8 @@ class DevelopmentMovementOut(Response):
 
 
 class PreLaunchEditableFields(StrictRequest):
+    amount_ex_vat: PositiveMoney | None = None
+    vat_rate_percent: Annotated[DecimalStr, Field(ge=0, le=100, decimal_places=4)] | None = None
     category: DevelopmentCategory
     amount: PositiveMoney
     movement_date: date
@@ -233,9 +254,13 @@ class PreLaunchEditableFields(StrictRequest):
     notes: str | None = Field(max_length=2000)
 
 
+class PreLaunchExpenseChanges(PreLaunchEditableFields):
+    amount: PositiveMoney | None = None
+
+
 class PreLaunchExpenseUpdate(StrictRequest):
     expected: PreLaunchEditableFields
-    changes: PreLaunchEditableFields
+    changes: PreLaunchExpenseChanges
 
 
 class PreLaunchExpenseRemove(ReasonRequest):

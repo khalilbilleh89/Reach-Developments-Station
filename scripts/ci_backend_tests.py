@@ -486,6 +486,8 @@ def domain_of_migration(path: str) -> str | None:
         return "projects"
     if stem == "0026_installment_tax":
         return "payment_plans"
+    if stem == "0048_prelaunch_vat":
+        return "cashflow"
     if stem == "0025_prelaunch_master":
         return "cashflow"
     if stem in {

@@ -136,7 +136,14 @@ _MOVEMENT_FIELDS = (
     "value_date",
     "status",
 )
-_DEVELOPMENT_FIELDS = (*_MOVEMENT_FIELDS, "category", "phase_id", "master_self_confirmed")
+_DEVELOPMENT_FIELDS = (
+    *_MOVEMENT_FIELDS,
+    "category",
+    "phase_id",
+    "master_self_confirmed",
+    "amount_ex_vat",
+    "vat_rate_percent",
+)
 _PRELAUNCH_CORRECTION_FIELDS = (
     *_DEVELOPMENT_FIELDS,
     "counterparty_reference",
@@ -1388,6 +1395,41 @@ def prelaunch_category_summary(
     ]
 
 
+def prelaunch_amounts(
+    *,
+    amount: Decimal | None = None,
+    amount_ex_vat: Decimal | None = None,
+    vat_rate_percent: Decimal | None = None,
+) -> schemas.PreLaunchAmountOut:
+    """One calculation for preview, recording and correction; amount remains gross cash."""
+    if amount_ex_vat is None:
+        if amount is None or vat_rate_percent is not None:
+            raise ValidationError("Enter an amount excluding VAT and an optional VAT percentage.")
+        if amount <= 0 or amount >= Decimal("10000000000000000"):
+            raise ValidationError("Enter a positive amount within the supported money range.")
+        return schemas.PreLaunchAmountOut(
+            amount=money(amount),
+            amount_ex_vat=None,
+            vat_rate_percent=None,
+            vat_amount=None,
+        )
+    if amount is not None:
+        raise ValidationError("Enter either an amount excluding VAT or a legacy total, not both.")
+    rate = vat_rate_percent if vat_rate_percent is not None else ZERO
+    if amount_ex_vat <= 0 or not ZERO <= rate <= 100:
+        raise ValidationError("Enter a positive amount and a VAT percentage between 0 and 100.")
+    vat = money(amount_ex_vat * rate / 100)
+    gross = amount_ex_vat + vat
+    if gross >= Decimal("10000000000000000"):
+        raise ValidationError("The total including VAT exceeds the supported money range.")
+    return schemas.PreLaunchAmountOut(
+        amount=gross,
+        amount_ex_vat=amount_ex_vat,
+        vat_rate_percent=rate,
+        vat_amount=vat,
+    )
+
+
 def correct_prelaunch_expense(
     session: Session,
     *,
@@ -1395,7 +1437,7 @@ def correct_prelaunch_expense(
     actor: ActorContext,
     movement_id: uuid.UUID,
     expected: schemas.PreLaunchEditableFields,
-    changes: schemas.PreLaunchEditableFields | None = None,
+    changes: schemas.PreLaunchExpenseChanges | None = None,
     removal_reason: str | None = None,
 ) -> CashflowDevelopmentMovement:
     """Correct or remove an unconfirmed entry, under the same lock as confirmation."""
@@ -1443,8 +1485,20 @@ def correct_prelaunch_expense(
         raise ValidationError("That category cannot be recorded through Pre-Launch.")
     if changes.movement_date > business_today():
         raise ValidationError("A movement cannot be dated in the future.")
+    if movement.amount_ex_vat is not None and changes.amount_ex_vat is None:
+        raise ValidationError("Keep the VAT breakdown: enter the amount excluding VAT.")
+    amounts = prelaunch_amounts(
+        amount=changes.amount,
+        amount_ex_vat=changes.amount_ex_vat,
+        vat_rate_percent=changes.vat_rate_percent,
+    )
     before = _snapshot(movement, _PRELAUNCH_CORRECTION_FIELDS)
-    for key, value in changes.model_dump().items():
+    movement.amount = amounts.amount
+    movement.amount_ex_vat = amounts.amount_ex_vat
+    movement.vat_rate_percent = amounts.vat_rate_percent
+    for key, value in changes.model_dump(
+        exclude={"amount", "amount_ex_vat", "vat_rate_percent"}
+    ).items():
         if key in {"counterparty_reference", "invoice_reference", "evidence_reference", "notes"}:
             value = (value or "").strip() or None
         setattr(movement, key, value)
@@ -1481,9 +1535,11 @@ def record_development_movement(
     project: Project,
     actor: ActorContext,
     category: str,
-    amount: Decimal,
+    amount: Decimal | None,
     movement_date: date,
     currency_id: uuid.UUID,
+    amount_ex_vat: Decimal | None = None,
+    vat_rate_percent: Decimal | None = None,
     value_date: date | None = None,
     phase_id: uuid.UUID | None = None,
     counterparty_reference: str | None = None,
@@ -1510,13 +1566,22 @@ def record_development_movement(
         raise ValidationError(
             "A movement is a record of something that happened. It cannot be dated in the future."
         )
+    if amount_ex_vat is not None and category not in PRELAUNCH_CATEGORIES:
+        raise ValidationError("VAT expense entry is limited to Pre-Launch categories.")
+    amounts = prelaunch_amounts(
+        amount=amount,
+        amount_ex_vat=amount_ex_vat,
+        vat_rate_percent=vat_rate_percent,
+    )
     movement = CashflowDevelopmentMovement(
+        amount_ex_vat=amounts.amount_ex_vat,
+        vat_rate_percent=amounts.vat_rate_percent,
         project_id=project.id,
         movement_reference=_next_reference(
             session, project_id=project.id, model=CashflowDevelopmentMovement, prefix="DEV"
         ),
         category=category,
-        amount=money(amount),
+        amount=amounts.amount,
         currency_id=currency_id,
         movement_date=movement_date,
         value_date=value_date,

@@ -397,7 +397,7 @@
     "status": "implemented",
     "removal_route": "POST /expenses/{movement_id}/remove",
     "ui_file": "frontend/src/components/projects/PreLaunchTab.tsx",
-    "notes": "Existing retained draft removal; confirmed expenses use reversal."
+    "notes": "Existing retained draft removal; confirmed expenses use reversal. VAT inputs and gross amount remain in retained removal/reversal history; preview creates no record."
   },
   {
     "handler": "pricing.activate_escalation",
