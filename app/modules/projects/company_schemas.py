@@ -2,7 +2,7 @@
 
 import uuid
 
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.projects.schemas import StrictRequest
 
@@ -50,3 +50,34 @@ class CompanyDetail(CompanyRead):
 
 class RemovalRequest(StrictRequest):
     reason: str = Field(min_length=1, max_length=2000)
+
+
+class DocumentFields(StrictRequest):
+    label: str = Field(min_length=1, max_length=320)
+
+    @field_validator("label")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a document label.")
+        return value.strip()
+
+
+class DocumentUpload(DocumentFields):
+    filename: str = Field(min_length=1, max_length=255)
+
+
+class DocumentUpdate(DocumentFields):
+    expected_version: int = Field(ge=1)
+
+
+class DocumentRemoval(RemovalRequest):
+    expected_version: int = Field(ge=1)
+
+
+class DocumentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    label: str
+    filename: str
+    version: int

@@ -28,7 +28,7 @@ from app.core.database import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "0000_mvp_baseline"
-HEAD_REVISION = "0046_project_documents"
+HEAD_REVISION = "0047_company_documents"
 
 
 @pytest.mark.parametrize(

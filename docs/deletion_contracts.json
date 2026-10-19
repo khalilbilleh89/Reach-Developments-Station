@@ -814,5 +814,13 @@
     "removal_route": "POST /{project_id}/documents/{document_id}/delete",
     "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
     "notes": "PDF uploaded atomically with metadata, removed with reason while bytes and audit are retained."
+  },
+  {
+    "handler": "projects.create_company_document",
+    "create_route": "POST /{company_id}/documents",
+    "status": "implemented",
+    "removal_route": "POST /{company_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyDocuments.tsx",
+    "notes": "Company-scoped writers remove with reason and version; bytes, hash and audit retained. Active documents block company removal."
   }
 ]
