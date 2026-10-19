@@ -101,6 +101,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
         "project_concurrency",
         "project_images",
         "project_team",
+        "project_price_escalation",
         "project_documents",
         "project_agreements",
         "project_currency_correction",
@@ -509,6 +510,7 @@ def domain_of_migration(path: str) -> str | None:
         "0033_project_company",
         "0040_project_team",
         "0044_team_job_description",
+        "0049_price_escalation",
         "0041_project_agreements",
         "0047_company_documents",
     }:

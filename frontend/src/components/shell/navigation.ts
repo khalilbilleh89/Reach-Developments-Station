@@ -68,6 +68,7 @@ export type ProjectSection =
   | "construction"
   | "economics"
   | "cashflow"
+  | "price-escalation"
   | "documents"
   | "team"
   | "access";
@@ -263,6 +264,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "finance",
     label: "Finance",
     items: [
+      {
+        key: "price-escalation", label: "Price Escalation", icon: "money",
+        description: "Effective-dated price escalation strategy and custom project stages.",
+        visible: (roles) => hasAnyRole(roles, PROJECT_FINANCIAL_READERS),
+      },
       {
         key: "economics",
         label: "Unit Economics",
