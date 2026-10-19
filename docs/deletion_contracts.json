@@ -5,7 +5,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/agents/{agent_id}?reason=...",
     "ui_file": "frontend/src/components/projects/sales/AgentsPanel.tsx",
-    "notes": "Unused Agent only; reason and audit required. Buyer, transaction, or Commission allocation references prevent hard deletion; deactivate instead. A removed draft Commission allocation releases its reference, subject to all other Agent history checks."
+    "notes": "Unused Agent only; reason and audit required. Buyer, transaction, or Commission allocation references prevent hard deletion; deactivate instead. A removed draft Commission allocation releases its reference, subject to all other Agent history checks. Excel-imported agents use this same removal and deactivation contract."
   },
   {
     "handler": "access.create_user",
@@ -525,7 +525,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/clients/{client_id}",
     "ui_file": "frontend/src/components/projects/sales/ClientsPanel.tsx",
-    "notes": "Unused buyer only; administrator; contracts and payments protected."
+    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract."
   },
   {
     "handler": "sales.create_handover",
