@@ -15,7 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.modules.projects.models import (
     PERMIT_STATUSES,
@@ -30,8 +30,8 @@ class StrictRequest(BaseModel):
     """A request body that refuses anything it does not declare.
 
     Pydantic's default is to ignore an unknown key, which means a client that
-    misspells a control flag — or names a field this API deliberately does not
-    accept, such as a permit ``status`` — is told the mutation succeeded when
+    misspells a control flag â€” or names a field this API deliberately does not
+    accept, such as a permit ``status`` â€” is told the mutation succeeded when
     part of it was silently dropped. For a register of statutory and financial
     record that is the wrong default.
 
@@ -258,7 +258,7 @@ class LandParcelRead(_ParcelFacts):
     updated_at: datetime
 
     #: Null for a caller not cleared to see development cost. Null means "not
-    #: exposed" — never a zero, which would read as a real figure of zero.
+    #: exposed" â€” never a zero, which would read as a real figure of zero.
     purchase_price: DecimalStr | None = None
     acquisition_fees: DecimalStr | None = None
     acquisition_tax_rate_fraction: DecimalStr | None = None
@@ -447,7 +447,7 @@ class PermitTypeCreateRequest(StrictRequest):
 
     Three fields, and no way to say which category or which jurisdiction: the
     route's project decides both. Strict, so a body naming ``category`` or
-    ``country_pack_id`` is refused rather than quietly ignored — the difference
+    ``country_pack_id`` is refused rather than quietly ignored â€” the difference
     matters when the field a caller is reaching for would turn this endpoint
     into a general-purpose Settings write.
     """
@@ -604,7 +604,9 @@ class DocumentReferenceRead(BaseModel):
     title: str
     document_type_code: str
     reference_number: str | None
-    external_url: str
+    external_url: str | None
+    filename: str | None = None
+    sha256: str | None = None
     notes: str | None
     is_active: bool
     created_at: datetime
@@ -630,3 +632,35 @@ class DocumentReferenceUpdateRequest(StrictRequest):
     reference_number: str | None = Field(default=None, max_length=120)
     notes: str | None = Field(default=None, max_length=2000)
     is_active: bool | None = None
+
+
+class DocumentTypeCreate(StrictRequest):
+    label: str = Field(min_length=1, max_length=200)
+
+
+class DocumentRemoval(StrictRequest):
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a removal reason.")
+        return value.strip()
+
+
+class DocumentUpload(StrictRequest):
+    title: str = Field(min_length=1, max_length=200)
+    document_type_code: str = Field(min_length=1, max_length=64)
+    filename: str = Field(min_length=1, max_length=255)
+    parcel_id: uuid.UUID | None = None
+    permit_id: uuid.UUID | None = None
+    reference_number: str | None = Field(default=None, max_length=120)
+
+
+class DocumentTypeRead(BaseModel):
+    id: uuid.UUID
+    code: str
+    label: str
+    is_active: bool
+    removable: bool

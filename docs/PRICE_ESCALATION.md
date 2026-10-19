@@ -10,6 +10,6 @@ The API accepts and returns decimal percentage strings. The server divides by De
 
 The register does not activate pricing escalation rules, change approved prices, reprice units or modify sale contracts. It records the owner's strategy and history. Inventory remains the place to maintain unit prices.
 
-Migration 0049_price_escalation follows 0045_inventory_masterplans and adds only project_price_escalations. No backfill or production facts are seeded. Empty downgrade drops the new table; any retained row, including a deleted entry, refuses downgrade. Roll back application code while retaining the additive schema, or roll forward. Never delete history to force rollback.
+Migration 0049_price_escalation follows 0048_prelaunch_vat and adds only project_price_escalations. No backfill or production facts are seeded. Empty downgrade drops the new table; any retained row, including a deleted entry, refuses downgrade. Roll back application code while retaining the additive schema, or roll forward. Never delete history to force rollback.
 
 Validation: tests/modules/test_project_price_escalation.py covers exact percentage persistence, custom statuses, ordering, partial edits, invalid/null/unknown input, stale writes, roles, project and phase isolation, reasoned deletion, audit, replay and migration roundtrip/drift/retention. frontend/tests/priceEscalation.test.mjs covers saved-value display, versioned deletion and refresh, failed/reader states, arbitrary status and failed-save draft retention. Shared migration head and CI migration ownership are updated.

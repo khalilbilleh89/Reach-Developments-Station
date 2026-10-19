@@ -200,7 +200,7 @@ def test_escalation_migration_roundtrip(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0045_inventory_masterplans")
+    command.downgrade(config, "0048_prelaunch_vat")
     command.upgrade(config, "head")
     command.check(config)
     row = create(admin_client, project_id)
@@ -211,5 +211,5 @@ def test_escalation_migration_roundtrip(
         == 204
     )
     with pytest.raises(RuntimeError, match="Price escalation history"):
-        command.downgrade(config, "0045_inventory_masterplans")
+        command.downgrade(config, "0048_prelaunch_vat")
     command.upgrade(config, "head")

@@ -377,6 +377,16 @@ export const projects = {
       `/projects/${id}/permits/${permitId}/status-history`,
     ),
 
+  documentTypes: (id: string) => get<{ id: string; code: string; label: string; is_active: boolean; removable: boolean }[]>(`/projects/${id}/document-types`),
+  createDocumentType: (id: string, label: string) => post<{ id: string; code: string; label: string; is_active: boolean; removable: boolean }>(`/projects/${id}/document-types`, { label }),
+  deleteDocumentType: (id: string, typeId: string, reason: string) => post<void>(`/projects/${id}/document-types/${typeId}/delete`, { reason }),
+  deleteDocument: (id: string, documentId: string, reason: string) => post<void>(`/projects/${id}/documents/${documentId}/delete`, { reason }),
+  uploadDocument: async (id: string, input: Record<string, string>, file: File) => {
+    if (!file.size || file.size > 10 * 1024 * 1024 || !file.name.toLowerCase().endsWith(".pdf")) throw new Error("Choose a non-empty PDF up to 10 MB.");
+    const query = new URLSearchParams({ ...input, filename: file.name });
+    return postBinary<DocumentReference>(`/projects/${id}/documents/upload?${query}`, await file.arrayBuffer());
+  },
+  downloadDocument: (id: string, row: DocumentReference) => download(`/projects/${id}/documents/${row.id}/file`, row.filename ?? "document.pdf"),
   documents: (id: string, query: Record<string, string> = {}) => {
     const params = new URLSearchParams(query);
     const suffix = params.toString();
@@ -1980,6 +1990,8 @@ export const construction = {
     get<CertificateDetail>(
       `/projects/${projectId}/construction/certificates/${certificateId}`,
     ),
+  deleteDraftCertificate: (projectId: string, certificateId: string, reason: string) =>
+    remove(`/projects/${projectId}/construction/certificates/${certificateId}?reason=${encodeURIComponent(reason)}`),
   createCertificate: (
     projectId: string,
     contractId: string,
@@ -2385,6 +2397,8 @@ export const cashflow = {
 
 /** Development language over the same Cashflow Development Movement rows. */
 export const prelaunch = {
+  preview: (projectId: string, body: Record<string, unknown>) =>
+    post<import("./types").PreLaunchAmount>(`/projects/${projectId}/pre-launch/expenses/preview`, body),
   update: (projectId: string, movementId: string, body: Record<string, unknown>) =>
     patch<PreLaunchExpense>(`/projects/${projectId}/pre-launch/expenses/${movementId}`, body),
   remove: (projectId: string, movementId: string, body: Record<string, unknown>) =>

@@ -192,7 +192,7 @@ function mount(file, name, dependencies, props) {
   const source = readFileSync(new URL(`../src/components/${file}.tsx`, import.meta.url), "utf8") + `\nexport { ${name} as TestedComponent };`;
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const ui = new Proxy({}, { get: (_, key) => key });
-  runInNewContext(`(function(require, exports) { ${code}\n})`)(key => {
+  runInNewContext(`(function(require, exports) { ${code}\n})`, { setTimeout, clearTimeout })(key => {
     if (key === "react") return react;
     if (key in dependencies) return dependencies[key];
     if (key === "@/lib/api") return { ApiError: class extends Error { fieldErrors = []; } };
@@ -214,7 +214,7 @@ function mount(file, name, dependencies, props) {
 function nodes(tree) {
   if (!tree || typeof tree !== "object") return [];
   if (Array.isArray(tree)) return tree.flatMap(nodes);
-  return [tree, ...nodes(tree.props?.children)];
+  return [tree, ...nodes(tree.props?.children), ...nodes(tree.props?.actions)];
 }
 
 test("active consultant agreement edits the same record and keeps a refused save open", async () => {
@@ -296,15 +296,19 @@ test("Pre-Launch keeps a failed removal open, refreshes eligibility and blocks d
   assert.equal(reads, 2);
 });
 
-test("Pre-Launch editor sends only editable fields and retains corrected values after an error", () => {
+test("Pre-Launch editor sends only editable fields and retains corrected values after an error", async () => {
   const initial = { id: "expense", category: "utilities", amount: "1250.25", movement_date: "2026-01-01",
     notes: "Water fee", counterparty_reference: "Authority", invoice_reference: "INV", evidence_reference: "proof" };
   let submitted;
-  const props = { initial, currencyId: "currency", currencyCode: "USD", busy: false, error: null,
+  const props = { projectId: "project", initial, currencyId: "currency", currencyCode: "USD", busy: false, error: null,
     onCancel() {}, onSubmit(body) { submitted = body; } };
-  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {}, props);
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {
+    "@/lib/api": { prelaunch: { preview: async body => ({ amount: "99.99", vat_amount: null }) } },
+    "@/lib/format": landFormat,
+  }, props);
   nodes(render()).find(n => n.type === "MoneyInput").props.onChange("99.99");
   assert.equal(nodes(render()).find(n => n.type === "DraftBoundary").props.dirty, true);
+  await new Promise(resolve => setTimeout(resolve, 300));
   nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(submitted.amount, "99.99");
   assert.equal(submitted.invoice_reference, "INV");
@@ -312,6 +316,48 @@ test("Pre-Launch editor sends only editable fields and retains corrected values 
   props.error = "Validation refused";
   assert.equal(nodes(render()).find(n => n.type === "MoneyInput").props.value, "99.99");
   assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children === "Validation refused"));
+});
+
+test("Pre-Launch VAT input sends net and percentage strings and waits for the matching server total", async () => {
+  const requests = []; let submitted;
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {
+    "@/lib/api": { ApiError: Error, prelaunch: { preview: (...args) => new Promise(resolve => requests.push({ args, resolve })) } },
+    "@/lib/format": landFormat,
+  }, { projectId: "project", currencyId: "currency", currencyCode: "USD", busy: false, error: null,
+    onCancel() {}, onSubmit(body) { submitted = body; } });
+  const change = (label, value) => nodes(render()).find(n => n.type === "Field" && n.props.label === label).props.children.props.onChange({ target: { value } });
+  change("Description / notes", "Design expense"); change("Payment / movement date", "2026-10-18");
+  nodes(render()).find(n => n.type === "MoneyInput").props.onChange("1000.00");
+  change("VAT (%)", "5"); render();
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(requests[0].args[1].amount_ex_vat, "1000.00");
+  assert.equal(requests[0].args[1].vat_rate_percent, "5");
+  assert.equal(nodes(render()).find(n => n.type === "Button" && n.props.type === "submit").props.disabled, true);
+  change("VAT (%)", "10"); render();
+  requests[0].resolve({ amount: "1050.00", vat_amount: "50.00" }); await settle();
+  assert.ok(!nodes(render()).some(n => n.type === "PositionFigure"));
+  await new Promise(resolve => setTimeout(resolve, 300));
+  requests[1].resolve({ amount: "1100.00", vat_amount: "100.00" }); await settle();
+  assert.equal(nodes(render()).find(n => n.type === "PositionFigure" && n.props.label === "Total including VAT").props.value, landFormat.money("1100.00", "USD"));
+  nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(submitted.amount_ex_vat, "1000.00"); assert.equal(submitted.vat_rate_percent, "10");
+  assert.ok(!("amount" in submitted)); assert.equal(submitted.currency_id, "currency");
+});
+
+test("legacy VAT conversion clears the unknown total and failed previews retain the entered rate", async () => {
+  const initial = { id: "legacy", amount: "1050.00", amount_ex_vat: null, vat_rate_percent: null, notes: "Legacy fee", category: "design", movement_date: "2026-10-18" };
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {
+    "@/lib/api": { ApiError: Error, prelaunch: { preview: async () => { throw new Error("Preview unavailable"); } } },
+    "@/lib/format": landFormat,
+  }, { projectId: "project", initial, currencyCode: "USD", busy: false, error: null, onCancel() {}, onSubmit() {} });
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "Enter VAT breakdown").props.onClick();
+  assert.equal(nodes(render()).find(n => n.type === "MoneyInput").props.value, "");
+  nodes(render()).find(n => n.type === "MoneyInput").props.onChange("1000.00");
+  nodes(render()).find(n => n.type === "Field" && n.props.label === "VAT (%)").props.children.props.onChange({ target: { value: "5" } });
+  render(); await new Promise(resolve => setTimeout(resolve, 300));
+  assert.ok(nodes(render()).some(n => n.type === "Button" && n.props.children === "Retry total"));
+  assert.equal(nodes(render()).find(n => n.type === "Field" && n.props.label === "VAT (%)").props.children.props.value, "5");
+  assert.equal(nodes(render()).find(n => n.type === "Button" && n.props.type === "submit").props.disabled, true);
 });
 for (const component of ["ContractsSection", "VariationsSection", "CertificatesSection", "CashSection", "MilestonesSection", "ForecastSection"]) {
   test(`${component}: failed read retries GETs and accepts a recovered empty response`, async () => {
@@ -358,7 +404,7 @@ for (const [component, dependency, readyData, label] of [
     const recovered = nodes(render());
     assert.ok(calls.length > before);
     assert.ok(!recovered.some(node => node.type === "Notice" && node.props.children === "Temporary read failure"));
-    assert.ok(calls.every(method => ["documents", "parcels", "permits", "register", "workspace"].includes(method)));
+    assert.ok(calls.every(method => ["documents", "documentTypes", "parcels", "permits", "register", "workspace"].includes(method)));
   });
 }
 
@@ -492,12 +538,11 @@ test("Signed contract entry preserves exact amounts, percentage conversion and u
   assert.equal(payload.tax_rate_fraction, "0");
 });
 
-test("Contract line edits retain sequence and send explicit zero without deleting history", () => {
-  let payload;
-  const render = mount("projects/construction/ContractWorkflow", "ContractLineEditor", {}, { detail: { currency_code: "JOD", lines: [] }, line: { sequence: 7, cost_code_id: "code", description: "Retained line", original_amount_ex_tax: "50.00" }, codes: [{ id: "code", is_active: true }], failure: null, busy: false, onSubmit: body => { payload = body; }, onCancel() {} });
-  const field = nodes(render()).find(node => node.type === "Field" && node.props.label === "Line value excluding tax");
-  field.props.children.props.onChange("0.00"); render().props.onSubmit();
-  assert.equal(payload.sequence, 7); assert.equal(payload.original_amount_ex_tax, "0.00");
+test("Contract workflow uses the total and exposes no line entry", () => {
+  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, { projectId: "p", detail: {status: "draft", workflow: {editing_blocker: null, signed_registration_blocker: null}, lines: []}, reading: false, unavailable: false });
+  const tree = nodes(render());
+  assert.ok(tree.some(n => n.type === "Button" && n.props.children === "Activate signed contract"));
+  assert.ok(!tree.some(n => n.type === "Button" && n.props.children === "Add contract line"));
 });
 
 test("Contract cancellation keeps the reason after a failed request and remains cancelable on failed refresh", () => {
@@ -511,18 +556,18 @@ test("Contract cancellation keeps the reason after a failed request and remains 
 });
 
 test("Contract workspace renders server activation blockers and offers no draft edits after submission", () => {
-  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", activation_blocker: "Budget has no room", cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} });
+  const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", signed_registration_blocker: "Currency must match project", cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} });
   const tree = nodes(render());
-  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Authorize and activate").props.disabled, true);
+  assert.equal(tree.find(node => node.type === "Button" && node.props.children === "Activate signed contract").props.disabled, true);
   assert.ok(!tree.some(node => node.type === "Button" && node.props.children === "Edit draft terms"));
-  assert.ok(tree.some(node => node.props.children === "Budget has no room"));
+  assert.ok(tree.some(node => node.props.children === "Currency must match project"));
 });
 
 test("Contract confirmation disables itself when refreshed eligibility changes", () => {
-  const props = { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", activation_blocker: null, cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} };
+  const props = { projectId: "project", detail: { status: "submitted", original_contract_value_ex_tax: "100.00", line_total: "100.00", currency_code: "JOD", lines: [], workflow: { editing_blocker: "Frozen", signed_registration_blocker: null, cancellation_blocker: null } }, codes: [], codesReady: true, reading: false, unavailable: false, onChanged: async () => {}, onRefresh: async () => {} };
   const render = mount("projects/construction/ContractWorkflow", "ContractWorkflow", { "@/lib/format": contractFormat }, props);
-  nodes(render()).find(node => node.type === "Button" && node.props.children === "Authorize and activate").props.onClick();
-  props.detail.workflow.activation_blocker = "Already activated by another operator";
+  nodes(render()).find(node => node.type === "Button" && node.props.children === "Activate signed contract").props.onClick();
+  props.detail.workflow.signed_registration_blocker = "Already activated by another operator";
   const dialog = nodes(render()).find(node => typeof node.type === "function" && node.type.name === "ContractDecision");
   assert.equal(dialog.props.unavailable, true);
   assert.equal(dialog.props.failure.message, "Already activated by another operator");
@@ -585,7 +630,7 @@ for (const kind of ["payment", "reduction"]) test(`${kind} entry sends exact val
   assert.equal(closed, 0);
   assert.ok(nodes(render()).some(node => node.type === "Notice" && node.props.children.includes("Could not save")));
   assert.equal(payload[kind === "payment" ? "amount" : "adjustment_amount"], "123456789.12");
-  if (kind === "payment") { assert.equal(payload.direct_contract_payment, true); assert.equal(payload.proof_reference, "Receipt 1"); assert.ok(!("invoice_id" in payload)); }
+  if (kind === "payment") { assert.equal(payload.direct_contract_payment, true); assert.equal(payload.proof_reference, "Receipt 1"); assert.equal(payload.invoice_id, null); }
   else { assert.equal(payload.adjustment_kind, "reduction"); assert.equal(payload.cost_code_id, "scope"); }
   fail = false; submit(); await settle(); assert.equal(closed, 1);
 });
@@ -643,4 +688,98 @@ test("current cost inputs preserve exact amounts, explicit zero tax and failed d
   assert.ok(nodes(render()).find(n => n.type === "DraftBoundary").props.dirty);
   assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children.includes("Could not save cost inputs")));
   fail = false; submit(); await settle(); assert.equal(saved, 1);
+});
+
+
+test("Documents: project types work without Settings and a new type is selected", async () => {
+  const calls = []; let types = [];
+  const projects = {
+    documents: async () => [], parcels: async () => [], permits: async () => ({ permits: [] }),
+    documentTypes: async () => types,
+    createDocumentType: async (id, label) => { calls.push([id, label]); const row = { id: "type", code: "DOC_NEW", label, is_active: true, removable: true }; types = [row]; return row; },
+  };
+  const render = mount("projects/DocumentsTab", "DocumentsTab", {
+    "@/lib/api": { projects, ApiError: class extends Error {} },
+    "@/components/ui/UnsavedChangesGuard": { DraftBoundary: "DraftBoundary" },
+  }, { projectId: "project", canWrite: true });
+  render(); await settle();
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "New document").props.onClick();
+  assert.ok(nodes(render()).some(n => n.type === "RecordPage" && n.props.title === "New document"));
+  const field = nodes(render()).find(n => n.type === "Field" && n.props.label === "New document type");
+  nodes(field).find(n => n.type === "input").props.onChange({ target: { value: "Survey" } });
+  const form = nodes(render()).filter(n => n.type === "form")[1];
+  await form.props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(calls, [["project", "Survey"]]);
+  const select = nodes(nodes(render()).find(n => n.type === "Field" && n.props.label === "Document type")).find(n => n.type === "select");
+  assert.equal(select.props.value, "DOC_NEW");
+  assert.ok(nodes(select).some(n => n.type === "option" && n.props.children === "Survey"));
+});
+
+test("Documents: failed PDF upload retains file and typed metadata", async () => {
+  class ApiError extends Error {}
+  const calls = [];
+  const projects = {
+    documents: async () => [], parcels: async () => [], permits: async () => ({ permits: [] }),
+    documentTypes: async () => [{ id: "type", code: "DEED", label: "Deed", is_active: true }],
+    uploadDocument: async (...args) => { calls.push(args); throw new ApiError("Upload failed"); },
+  };
+  const render = mount("projects/DocumentsTab", "DocumentsTab", {
+    "@/lib/api": { projects, ApiError },
+    "@/components/ui/UnsavedChangesGuard": { DraftBoundary: "DraftBoundary" },
+  }, { projectId: "project", canWrite: true });
+  render(); await settle();
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "New document").props.onClick();
+  const control = label => nodes(nodes(render()).find(n => n.type === "Field" && n.props.label === label)).find(n => ["input", "select"].includes(n.type));
+  control("Title").props.onChange({ target: { value: "Site deed" } });
+  control("Document type").props.onChange({ target: { value: "DEED" } });
+  control("Document source").props.onChange({ target: { value: "pdf" } });
+  const file = { name: "deed.pdf", size: 100 };
+  control("PDF file").props.onChange({ target: { files: [file] } });
+  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(calls[0][0], "project"); assert.equal(calls[0][1].title, "Site deed");
+  assert.equal(calls[0][1].document_type_code, "DEED"); assert.equal(calls[0][2], file);
+  assert.equal(control("Title").props.value, "Site deed");
+  assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children === "Upload failed"));
+  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(calls[1][2], file);
+});
+
+test("Documents: readers download PDFs without mutation controls", async () => {
+  const calls = [];
+  const row = { id: "doc", title: "Deed", document_type_code: "DEED", filename: "deed.pdf", external_url: null, is_active: true };
+  const projects = { documents: async () => [row], parcels: async () => [], permits: async () => ({ permits: [] }), documentTypes: async () => [], downloadDocument: async (...args) => { calls.push(args); } };
+  const render = mount("projects/DocumentsTab", "DocumentsTab", { "@/lib/api": { projects, ApiError: class extends Error {} } }, { projectId: "project", canWrite: false });
+  render(); await settle();
+  const tree = nodes(render());
+  assert.ok(!tree.some(n => n.type === "Button" && ["New document", "Document types", "Edit"].includes(n.props.children)));
+  tree.find(n => n.type === "Button" && n.props.children === "Download PDF").props.onClick(); await settle();
+  assert.equal(calls[0][0], "project"); assert.equal(calls[0][1], row);
+});
+
+test("certificate entry sends a single period amount and exact deductions atomically", async () => {
+  let payload;
+  const render = mount("projects/construction/ContractDocuments", "DocumentEditor", {
+    "../DeleteRecordButton": {},
+    "@/lib/api": {construction: {createCertificate: async (_p, _c, body) => {payload=body;}}},
+    "@/lib/format": contractFormat,
+  }, {projectId:"p", mode:"certificates", contract:{id:"c", contract_number:"CT", vendor_name:"Vendor", currency_code:"EUR", certified_to_date:"100.00", advance_outstanding:"20.00", retention_outstanding:"10.00", cost_code_position:[{cost_code_id:"scope"}]}, certificates:[], onClose(){}, async onChanged(){}});
+  const set=(label,value,custom=false)=>nodes(render()).find(n=>n.type==="Field"&&n.props.label===label).props.children.props.onChange(custom?value:{target:{value}});
+  set("Reference","IPC-2"); set("Document date","2026-10-18"); set("Period start","2026-10-01"); set("Period end","2026-10-18");
+  set("Work completed this period, excluding tax","123456.78",true); set("Advance recovery this period","10.01",true); set("Certificate / completion evidence reference","Engineer certificate");
+  nodes(render()).find(n=>n.type==="form").props.onSubmit({preventDefault(){}}); await settle();
+  assert.equal(payload.current_work_value_ex_tax,"123456.78"); assert.equal(payload.advance_recovery_amount,"10.01"); assert.equal(payload.cost_code_id,null);
+  assert.ok(!("lines" in payload));
+});
+
+test("paid invoice selection is sent without recomputing its balance", async () => {
+  let payload;
+  const render=mount("projects/construction/ContractTransactions","ContractTransactionEditor", {
+    "../DeleteRecordButton": {},
+    "@/lib/api":{construction:{recordPayment:async(_p,_c,body)=>{payload=body;}}},
+    "@/lib/format":contractFormat,
+  }, {kind:"payment",projectId:"p",contract:{id:"c",contract_number:"CT",lines:[],cost_code_position:[],currency_code:"EUR",currency_id:"f63c733c-bfaa-4236-8ab4-ea103f265854"}, invoices:[{id:"invoice",status:"approved",invoice_number:"ADV-1",invoice_type:"advance",outstanding:"100.00"}], onClose(){},async onChanged(){}});
+  nodes(render()).find(n=>n.type==="select").props.onChange({target:{value:"invoice"}});
+  nodes(render()).find(n=>n.type==="MoneyInput").props.onChange("25.01");
+  nodes(render()).find(n=>n.type==="form").props.onSubmit({preventDefault(){}}); await settle();
+  assert.equal(payload.invoice_id,"invoice"); assert.equal(payload.amount,"25.01"); assert.equal(payload.direct_contract_payment,true);
 });

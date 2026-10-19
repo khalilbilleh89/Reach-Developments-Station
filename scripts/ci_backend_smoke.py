@@ -193,6 +193,16 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "projects",
         ("tests/modules/test_project_price_escalation.py::test_escalation_migration_roundtrip",),
     ),
+    "0048_prelaunch_vat.py": (
+        "cashflow",
+        ("tests/modules/test_prelaunch_vat.py::test_vat_migration_roundtrip_and_retention",),
+    ),
+    "0046_project_documents.py": (
+        "projects",
+        (
+            "tests/modules/test_project_documents_upload.py::test_document_migration_retains_history",
+        ),
+    ),
     "0045_inventory_masterplans.py": (
         "inventory",
         (
@@ -262,6 +272,10 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "0026_common_areas.py": (
         "inventory",
         ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
+    ),
+    "0047_company_documents.py": (
+        "projects",
+        ("tests/modules/test_project_company.py::test_document_migration_preserves_retained_pdf",),
     ),
     "0033_project_company.py": ("projects", ("tests/modules/test_project_company.py",)),
     "0032_building_units.py": (

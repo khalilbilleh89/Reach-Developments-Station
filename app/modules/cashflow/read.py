@@ -198,6 +198,11 @@ def development_movement_out(
         movement_reference=movement.movement_reference,
         category=movement.category,
         amount=movement.amount,
+        amount_ex_vat=movement.amount_ex_vat,
+        vat_rate_percent=movement.vat_rate_percent,
+        vat_amount=movement.amount - movement.amount_ex_vat
+        if movement.amount_ex_vat is not None
+        else None,
         currency_code=_currency_code(session, movement.currency_id),
         movement_date=movement.movement_date,
         value_date=movement.value_date,

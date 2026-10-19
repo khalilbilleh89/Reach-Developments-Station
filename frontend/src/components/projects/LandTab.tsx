@@ -1299,7 +1299,7 @@ export function LandTab({
                         <td>{document.document_type_code}</td>
                         <td className="mono">{document.reference_number ?? "—"}</td>
                         <td>
-                          <ExternalLink href={document.external_url}>Open</ExternalLink>
+                          {document.filename ? <Button small onClick={() => { void projects.downloadDocument(projectId, document).catch(() => setDocumentsError(true)); }}>Download PDF</Button> : document.external_url ? <ExternalLink href={document.external_url}>Open</ExternalLink> : "—"}
                         </td>
                       </tr>
                     ))}

@@ -888,8 +888,37 @@ def create_certificate(
         evidence_reference=payload.evidence_reference,
         notes=payload.notes,
     )
+    if payload.current_work_value_ex_tax is not None:
+        service.set_certificate_total(
+            session,
+            project=project,
+            certificate=certificate,
+            amount=payload.current_work_value_ex_tax,
+            cost_code_id=payload.cost_code_id,
+        )
+    elif payload.cost_code_id is not None:
+        raise ValidationError("Enter the work value with its allocation.")
     session.commit()
     return certificate_detail(session, project=project, certificate=certificate)
+
+
+@router.delete("/certificates/{certificate_id}", status_code=204)
+def delete_draft_certificate(
+    project: GovernedConstructionProject,
+    certificate_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+    reason: str = Query(min_length=1, max_length=1000),
+) -> None:
+    permissions.require_construction_technical(actor)
+    service.delete_draft_certificate(
+        session,
+        project=project,
+        actor=actor,
+        certificate_id=certificate_id,
+        reason=reason,
+    )
+    session.commit()
 
 
 @router.get("/certificates/{certificate_id}", response_model=schemas.CertificateDetailOut)
@@ -1174,6 +1203,7 @@ def record_payment(
         proof_reference=payload.proof_reference,
         notes=payload.notes,
         direct_contract_payment=payload.direct_contract_payment,
+        invoice_id=payload.invoice_id,
     )
     session.commit()
     return payment_out(session, project=project, payment=payment)

@@ -366,7 +366,9 @@ export interface DocumentReference {
   title: string;
   document_type_code: string;
   reference_number: string | null;
-  external_url: string;
+  external_url: string | null;
+  filename: string | null;
+  sha256: string | null;
   notes: string | null;
   is_active: boolean;
 }
@@ -2908,7 +2910,14 @@ export interface CashflowForecastDetail extends CashflowForecastVersion {
   construction_reconciliation: CashflowCheck[];
 }
 
-export interface CashflowDevelopmentMovement {
+export interface PreLaunchAmount {
+  amount: MoneyStr;
+  amount_ex_vat: MoneyStr | null;
+  vat_rate_percent: string | null;
+  vat_amount: MoneyStr | null;
+}
+
+export interface CashflowDevelopmentMovement extends PreLaunchAmount {
   id: string;
   movement_reference: string;
   category: DevelopmentCategory;

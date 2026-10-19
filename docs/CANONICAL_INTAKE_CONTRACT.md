@@ -98,9 +98,11 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `operation_stages` | Project checklist stages; explicit application entry. |
 | `operation_buyers` | Buyer purpose and edit revision; application-owned operational records. |
 | `operation_progress` | Buyer milestones; application-owned with retained audit evidence. |
+| `project_document_types` | Project-owned document choices; configured through authenticated project APIs, never imported from a legacy batch. |
 | `team_job_descriptions` | Optional retained team job-description attachments; no legacy intake. |
 | `project_team_members` | Project directory contacts entered in Governance; not imported by legacy bundles. |
 | `project_companies` | Company information entered in Development; not imported by legacy bundles. |
+| `company_documents` | Company registration PDFs and labels maintained in Development; retained evidence, not legacy-imported. |
 | `project_agreements` | Project final-draft library and retained uploads, maintained through Agreements; not legacy-imported. |
 | `company_bank_accounts` | Company bank instructions maintained by authorized project users; not imported by legacy bundles. |
 | `user_roles` | Authorisation configuration. |

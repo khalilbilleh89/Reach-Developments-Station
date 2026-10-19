@@ -55,6 +55,16 @@ def list_expenses(
     return _register(session, project, actor)
 
 
+@router.post("/expenses/preview", response_model=schemas.PreLaunchAmountOut)
+def preview_expense_amount(
+    project: CashflowProject,
+    payload: schemas.PreLaunchAmountInput,
+    actor: ActiveActor,
+) -> schemas.PreLaunchAmountOut:
+    permissions.require_prelaunch_recorder(actor)
+    return service.prelaunch_amounts(**payload.model_dump())
+
+
 @router.post(
     "/expenses",
     response_model=schemas.PreLaunchExpenseOut,
@@ -62,7 +72,7 @@ def list_expenses(
 )
 def record_expense(
     project: CashflowProject,
-    payload: schemas.DevelopmentMovementCreate,
+    payload: schemas.PreLaunchExpenseCreate,
     session: DbSession,
     actor: ActiveActor,
 ) -> schemas.PreLaunchExpenseOut:
@@ -75,6 +85,8 @@ def record_expense(
         actor=actor,
         category=payload.category,
         amount=payload.amount,
+        amount_ex_vat=payload.amount_ex_vat,
+        vat_rate_percent=payload.vat_rate_percent,
         movement_date=payload.movement_date,
         currency_id=payload.currency_id,
         value_date=payload.value_date,

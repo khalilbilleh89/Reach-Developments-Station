@@ -5,7 +5,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/agents/{agent_id}?reason=...",
     "ui_file": "frontend/src/components/projects/sales/AgentsPanel.tsx",
-    "notes": "Unused Agent only; reason and audit required. Buyer, transaction, or Commission allocation references prevent hard deletion; deactivate instead. A removed draft Commission allocation releases its reference, subject to all other Agent history checks."
+    "notes": "Unused Agent only; reason and audit required. Buyer, transaction, or Commission allocation references prevent hard deletion; deactivate instead. A removed draft Commission allocation releases its reference, subject to all other Agent history checks. Excel-imported agents use this same removal and deactivation contract."
   },
   {
     "handler": "access.create_user",
@@ -146,10 +146,10 @@
   {
     "handler": "construction.create_certificate",
     "create_route": "POST /contracts/{contract_id}/certificates",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+    "status": "implemented",
+    "removal_route": "DELETE /certificates/{certificate_id}?reason=...",
+    "ui_file": "frontend/src/components/projects/construction/ContractDocuments.tsx",
+    "notes": "Unused drafts are deleted with their lines and audit before-image; submitted/certified evidence uses rejection/reversal."
   },
   {
     "handler": "construction.create_contract",
@@ -210,10 +210,10 @@
   {
     "handler": "construction.record_invoice",
     "create_route": "POST /contracts/{contract_id}/invoices",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Several records cancel, retire, reverse or void; unused and draft Delete coverage is incomplete."
+    "status": "implemented",
+    "removal_route": "POST /invoices/{invoice_id}/void",
+    "ui_file": "frontend/src/components/projects/construction/ContractDocuments.tsx",
+    "notes": "Visible Delete voids the retained invoice with a reason; confirmed allocations block until reversed."
   },
   {
     "handler": "construction.record_payment",
@@ -397,7 +397,7 @@
     "status": "implemented",
     "removal_route": "POST /expenses/{movement_id}/remove",
     "ui_file": "frontend/src/components/projects/PreLaunchTab.tsx",
-    "notes": "Existing retained draft removal; confirmed expenses use reversal."
+    "notes": "Existing retained draft removal; confirmed expenses use reversal. VAT inputs and gross amount remain in retained removal/reversal history; preview creates no record."
   },
   {
     "handler": "pricing.activate_escalation",
@@ -466,10 +466,10 @@
   {
     "handler": "projects.create_document",
     "create_route": "POST /{project_id}/documents",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Delete is missing on current main."
+    "status": "implemented",
+    "removal_route": "POST /{project_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
+    "notes": "Reasoned retained removal for links and PDFs. Scope, role and audit enforced; original evidence retained."
   },
   {
     "handler": "projects.create_parcel",
@@ -525,7 +525,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/clients/{client_id}",
     "ui_file": "frontend/src/components/projects/sales/ClientsPanel.tsx",
-    "notes": "Unused buyer only; administrator; contracts and payments protected."
+    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract."
   },
   {
     "handler": "sales.create_handover",
@@ -798,6 +798,30 @@
     "removal_route": "DELETE /projects/{project_id}/inventory/masterplans/{plan_id}/mappings/{mapping_id}?version=...&reason=...",
     "ui_file": "frontend/src/components/projects/inventory/MasterplanWorkspace.tsx",
     "notes": "Selected unit full page exposes Delete footprint. Whole-project writer, version and reason required; audit retained, unit unchanged."
+  },
+  {
+    "handler": "projects.create_document_type",
+    "create_route": "POST /{project_id}/document-types",
+    "status": "implemented",
+    "removal_route": "POST /{project_id}/document-types/{type_id}/delete",
+    "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
+    "notes": "Project-owned types: unused types deleted with audit; all document history blocks deletion."
+  },
+  {
+    "handler": "projects.upload_project_document",
+    "create_route": "POST /{project_id}/documents/upload",
+    "status": "implemented",
+    "removal_route": "POST /{project_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
+    "notes": "PDF uploaded atomically with metadata, removed with reason while bytes and audit are retained."
+  },
+  {
+    "handler": "projects.create_company_document",
+    "create_route": "POST /{company_id}/documents",
+    "status": "implemented",
+    "removal_route": "POST /{company_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyDocuments.tsx",
+    "notes": "Company-scoped writers remove with reason and version; bytes, hash and audit retained. Active documents block company removal."
   },
   {
     "handler": "projects.create_price_escalation",
