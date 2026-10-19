@@ -28,11 +28,13 @@ import uuid
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
+from app.core.xlsx import MAX_BYTES
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.projects.models import Project
-from app.modules.sales import agents, deletion, registration, removal, service, workspace
+from app.modules.sales import agents, deletion, imports, registration, removal, service, workspace
 from app.modules.sales.models import (
     Client,
     HandoverRecord,
@@ -43,6 +45,7 @@ from app.modules.sales.models import (
 from app.modules.sales.permissions import (
     SalesProject,
     may_read_client_pii,
+    require_client_writer,
     require_sales_reader,
 )
 from app.modules.sales.schemas import (
@@ -100,6 +103,7 @@ from app.modules.sales.schemas import (
     SalesAgentUpdateRequest,
     SalesHistoryRead,
     SalesHistoryRow,
+    SalesImportReportRead,
     SalesPolicyRead,
     SalesPolicyWriteRequest,
     SalesPricePreviewRead,
@@ -117,6 +121,42 @@ from app.modules.sales.schemas import (
 )
 
 router = APIRouter(prefix="/projects", tags=["sales"])
+
+
+@router.get("/{project_id}/sales/import/{kind}/template")
+def import_template(
+    kind: imports.Kind, session: DbSession, actor: ActiveActor, project: SalesProject
+) -> Response:
+    return Response(
+        content=imports.template(session, project, actor, kind),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{kind}-template.xlsx"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/{project_id}/sales/import/{kind}/{operation}", response_model=SalesImportReportRead)
+async def import_records(
+    kind: imports.Kind,
+    operation: Literal["validate", "apply"],
+    request: Request,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> dict[str, object]:
+    # Refuse unauthorized writers before consuming or parsing their workbook.
+    require_client_writer(actor)
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Upload an Excel file up to 5 MB.")
+        body.extend(chunk)
+    return await run_in_threadpool(
+        imports.process, session, project, actor, kind, bytes(body), apply=operation == "apply"
+    )
 
 
 @router.get("/{project_id}/sales/unit-options", response_model=SalesUnitOptionsRead)

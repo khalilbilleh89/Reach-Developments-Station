@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
-from app.modules.projects.company_models import CompanyBankAccount, ProjectCompany
+from app.modules.projects.company_models import CompanyBankAccount, CompanyDocument, ProjectCompany
 from app.modules.projects.company_schemas import BankAccountRead, CompanyDetail
 from app.modules.projects.models import Project
 from app.modules.projects.permissions import FINANCIAL_ROLES, whole_project_ids
@@ -127,6 +127,16 @@ def remove(
         is not None
     ):
         raise ConflictError("Delete this company's bank accounts before deleting the company.")
+    if (
+        isinstance(row, ProjectCompany)
+        and session.scalars(
+            select(CompanyDocument.id).where(
+                CompanyDocument.company_id == row.id, CompanyDocument.is_deleted.is_(False)
+            )
+        ).first()
+        is not None
+    ):
+        raise ConflictError("Delete this company's documents before deleting the company.")
     before = snapshot(row)
     row.is_deleted = True
     session.flush()

@@ -239,7 +239,7 @@ def test_vat_migration_roundtrip_and_retention(
 ) -> None:
     legacy = finance_client.post(root(project_id), json=payload(currency_id)).json()
     db.rollback()
-    command.downgrade(alembic_config(), "0045_inventory_masterplans")
+    command.downgrade(alembic_config(), "0047_company_documents")
     command.upgrade(alembic_config(), "head")
     stored = db.scalar(select(CashflowDevelopmentMovement))
     assert stored.amount == Decimal("1250.25") and stored.amount_ex_vat is None
@@ -259,5 +259,5 @@ def test_vat_migration_roundtrip_and_retention(
     assert response.status_code == 201, response.text
     db.rollback()
     with pytest.raises(RuntimeError, match="Retained expense VAT breakdowns"):
-        command.downgrade(alembic_config(), "0045_inventory_masterplans")
+        command.downgrade(alembic_config(), "0047_company_documents")
     assert finance_client.get(root(project_id)).json()["recorded_amount"] == "2300.25"

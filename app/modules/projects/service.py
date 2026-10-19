@@ -10,6 +10,7 @@ and commits once, so a change and its accountability record cannot come apart.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from datetime import UTC, date, datetime
@@ -25,7 +26,6 @@ from app.core.patching import resolve_updates
 from app.modules.access.models import ROLE_MASTER_ADMIN, ROLE_SYSTEM_ADMIN, User
 from app.modules.audit.service import record_event
 from app.modules.projects.models import (
-    CATEGORY_DOCUMENT_TYPE,
     CATEGORY_PERMIT_TYPE,
     CATEGORY_PROJECT_TYPE,
     PERMIT_STATUS_NOT_STARTED,
@@ -2049,6 +2049,9 @@ _DOCUMENT_FIELDS = (
     "external_url",
     "notes",
     "is_active",
+    "filename",
+    "sha256",
+    "is_deleted",
 )
 
 _DOCUMENT_UPDATABLE = (
@@ -2071,7 +2074,9 @@ def list_documents(
     document_type_code: str | None = None,
     is_active: bool | None = None,
 ) -> list[DocumentReference]:
-    statement = select(DocumentReference).where(DocumentReference.project_id == project_id)
+    statement = select(DocumentReference).where(
+        DocumentReference.project_id == project_id, DocumentReference.is_deleted.is_(False)
+    )
     if parcel_id is not None:
         statement = statement.where(DocumentReference.parcel_id == parcel_id)
     if permit_id is not None:
@@ -2089,6 +2094,7 @@ def get_document(
     document = session.scalars(
         select(DocumentReference).where(
             DocumentReference.id == document_id,
+            DocumentReference.is_deleted.is_(False),
             DocumentReference.project_id == project_id,
         )
     ).first()
@@ -2105,12 +2111,18 @@ def create_document(
     correlation_id: uuid.UUID,
     title: str,
     document_type_code: str,
-    external_url: str,
+    external_url: str | None,
+    filename: str | None = None,
+    document_bytes: bytes | None = None,
     parcel_id: uuid.UUID | None = None,
     permit_id: uuid.UUID | None = None,
     reference_number: str | None = None,
     notes: str | None = None,
 ) -> DocumentReference:
+    if not title.strip():
+        raise ValidationError("Enter a document title.")
+    if (external_url is None) == (document_bytes is None):
+        raise ValidationError("Provide a link or a PDF file.")
     # The document type is drawn from the project's country pack, so the same
     # lock applies here: this reference is one of the child records that makes
     # the jurisdiction permanent, and it must not be created against a pack the
@@ -2123,12 +2135,9 @@ def create_document(
         get_parcel(session, project_id=project.id, parcel_id=parcel_id)
     if permit_id is not None:
         get_permit(session, project_id=project.id, permit_id=permit_id)
-    require_active_reference_value(
-        session,
-        category=CATEGORY_DOCUMENT_TYPE,
-        code=document_type_code,
-        country_pack_id=project.country_pack_id,
-    )
+    from app.modules.projects.document_service import require_type
+
+    require_type(session, project, document_type_code)
 
     document = DocumentReference(
         project_id=project.id,
@@ -2138,6 +2147,9 @@ def create_document(
         document_type_code=document_type_code,
         reference_number=reference_number.strip() if reference_number else None,
         external_url=external_url,
+        filename=filename,
+        document=document_bytes,
+        sha256=hashlib.sha256(document_bytes).hexdigest() if document_bytes else None,
         notes=notes.strip() if notes else None,
         created_by_user_id=actor_user_id,
     )
@@ -2166,15 +2178,21 @@ def update_document(
     correlation_id: uuid.UUID,
     **changes: object,
 ) -> DocumentReference:
+    project = lock_project(session, project.id)
+    document = get_document(session, project_id=project.id, document_id=document.id)
+    session.refresh(document)
     updates = resolve_updates(changes, fields=_DOCUMENT_UPDATABLE, clearable=_DOCUMENT_CLEARABLE)
+    if "title" in updates and not str(updates["title"]).strip():
+        raise ValidationError("Enter a document title.")
     if updates.get("document_type_code") is not None:
-        require_active_reference_value(
-            session,
-            category=CATEGORY_DOCUMENT_TYPE,
-            code=updates["document_type_code"],  # type: ignore[arg-type]
-            country_pack_id=project.country_pack_id,
-        )
+        from app.modules.projects.document_service import require_type
 
+        require_type(session, project, updates["document_type_code"])
+
+    if document.filename and "external_url" in updates:
+        raise ValidationError(
+            "An uploaded PDF has an immutable file; add a new document to replace it."
+        )
     before = _snapshot(document, _DOCUMENT_FIELDS)
     for field, value in updates.items():
         setattr(document, field, value)

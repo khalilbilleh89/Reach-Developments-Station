@@ -1094,3 +1094,18 @@ class SalesHistoryRow(BaseModel):
 class SalesHistoryRead(BaseModel):
     items: list[SalesHistoryRow]
     total: int
+
+
+class SalesImportIssueRead(BaseModel):
+    row: int
+    column: str | None
+    message: str
+
+
+class SalesImportReportRead(BaseModel):
+    total_rows: int
+    created_count: int
+    applied: bool
+    error_count: int
+    issues: list[SalesImportIssueRead]
+    issues_truncated: bool

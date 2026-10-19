@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SalesImport } from "./SalesImport";
 
 import { ApiError, sales } from "@/lib/api";
 import type { ClientParty, SalesClient } from "@/lib/api";
@@ -82,6 +83,7 @@ export function ClientsPanel({
 }) {
   const [clients, setClients] = useState<SalesClient[] | null>(null);
   const [search, setSearch] = useState("");
+  const [importing, setImporting] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [parties, setParties] = useState<ClientParty[]>([]);
   const [shares, setShares] = useState<string | null>(null);
@@ -179,6 +181,8 @@ export function ClientsPanel({
     );
   }
 
+  if (importing) return <SalesImport projectId={projectId} kind="buyers" onClose={() => setImporting(false)} onImported={() => { void load(); void onChanged(); }} />;
+
   const chosen = clients.find((client) => client.id === selected) ?? null;
 
   return (
@@ -187,6 +191,7 @@ export function ClientsPanel({
       description="Buyer details, sales team and unit connections for this project."
       actions={
         <>
+          {canWrite ? <Button small data-leaves-editor onClick={() => setImporting(true)}>Import from Excel</Button> : null}
           {canWrite ? (
             <Button variant="primary" small data-leaves-editor={registering || undefined} onClick={() => setRegistering(!registering)}>
               {registering ? "Cancel" : "Register a buyer"}
