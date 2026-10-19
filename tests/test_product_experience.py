@@ -606,6 +606,7 @@ class TestOnlyEntitledReadersAsk:
         groups = re.findall(r'\n    key: "([a-z]+)",\n    label: ', block)
         assert groups == [
             "home",
+            "creative",
             "development",
             "marketing",
             "commercial",
@@ -616,6 +617,7 @@ class TestOnlyEntitledReadersAsk:
         items = re.findall(r'\n        key: "([a-z-]+)",', block)
         assert items == [
             "overview",
+            "matrix",
             "company",
             "land",
             "permits",
