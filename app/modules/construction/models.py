@@ -76,6 +76,7 @@ class TechnicalSpecification(Base):
     scope: Mapped[str] = mapped_column(String(16))
     applies_to: Mapped[str] = mapped_column(String(300))
     description: Mapped[str] = mapped_column(String(4000))
+    buyer_benefit: Mapped[str] = mapped_column(String(2000), default="", server_default="")
     brand_model: Mapped[str] = mapped_column(String(300), default="")
     inclusion: Mapped[str] = mapped_column(String(16), default="undecided")
     status: Mapped[str] = mapped_column(String(16), default="draft")

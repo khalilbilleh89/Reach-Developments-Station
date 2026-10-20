@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -41,16 +41,22 @@ class SpecificationInput(StrictRequest):
     scope: Literal["project", "units"]
     applies_to: str = Field(min_length=1, max_length=300)
     description: str = Field(min_length=1, max_length=4000)
+    buyer_benefit: str = Field(default="", max_length=2000)
     brand_model: str = Field(default="", max_length=300)
     inclusion: Literal["included", "optional", "excluded", "undecided"] = "undecided"
     status: Literal["draft", "confirmed"] = "draft"
     source_reference: str = Field(default="", max_length=500)
     version: int = Field(default=1, ge=1)
 
+    @field_validator(
+        "title", "applies_to", "description", "buyer_benefit", "brand_model", "source_reference"
+    )
+    @classmethod
+    def trim_text(cls, value: str) -> str:
+        return value.strip()
+
     @model_validator(mode="after")
     def validate_text(self) -> "SpecificationInput":
-        for key in ("title", "applies_to", "description", "brand_model", "source_reference"):
-            setattr(self, key, getattr(self, key).strip())
         if not self.title or not self.applies_to or not self.description:
             raise ValueError("Item, applicability and specification must not be blank.")
         if self.status == "confirmed" and (
@@ -71,6 +77,7 @@ class SpecificationRead(BaseModel):
     scope: str
     applies_to: str
     description: str
+    buyer_benefit: str
     brand_model: str
     inclusion: str
     status: str
@@ -143,6 +150,9 @@ def save(
         raise ConflictError("This specification changed. Reload it before saving.")
     values = payload.model_dump(exclude={"version"})
     if row:
+        # Older clients omit this additive field; do not erase an existing sales explanation.
+        if "buyer_benefit" not in payload.model_fields_set:
+            values.pop("buyer_benefit")
         for key, value in values.items():
             setattr(row, key, value)
         row.version += 1
