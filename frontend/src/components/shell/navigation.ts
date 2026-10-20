@@ -37,6 +37,7 @@ import type { Roles } from "@/lib/roles";
  */
 
 export type ProjectSection =
+  | "matrix"
   | "marketing-bio"
   | "marketing-economics"
   | "marketing-branding"
@@ -101,6 +102,19 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         label: "Overview",
         icon: "overview",
         description: "Where this development stands, and what needs attention.",
+        visible: everyone,
+      },
+    ],
+  },
+  {
+    key: "creative",
+    label: "Creative",
+    items: [
+      {
+        key: "matrix",
+        label: "Matrix",
+        icon: "overview",
+        description: "Create visual SWOT, PESTEL, Porter, BCG, Ansoff and Fishbone analyses.",
         visible: everyone,
       },
     ],

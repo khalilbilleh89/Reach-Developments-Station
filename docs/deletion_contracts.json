@@ -784,6 +784,14 @@
     "notes": "Optional attachment; authorized writers can replace or delete with version control and named reason confirmation. File bytes and audit remain retained; deleted members cannot expose attachments. Tested in test_project_team_documents.py."
   },
   {
+    "handler": "projects.create_matrix",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{matrix_id}/delete",
+    "ui_file": "frontend/src/components/projects/matrix/MatrixEditor.tsx",
+    "notes": "Whole-project manager/admin deletion, named reason, optimistic version, retained payload and audit; child items removed in editor and audited on save. No links to financial transactions."
+  },
+  {
     "handler": "inventory.create_plan",
     "create_route": "POST ",
     "status": "implemented",
@@ -830,5 +838,6 @@
     "removal_route": "POST /{entry_id}/delete",
     "ui_file": "frontend/src/components/projects/PriceEscalationTab.tsx",
     "notes": "Whole-project administrators, project managers and Finance delete after named reason confirmation. Project lock and version check; retained row, values and audit. No unit prices or transactions changed. Tested in test_project_price_escalation.py."
+
   }
 ]
