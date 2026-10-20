@@ -107,19 +107,6 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     ],
   },
   {
-    key: "creative",
-    label: "Creative",
-    items: [
-      {
-        key: "matrix",
-        label: "Matrix",
-        icon: "overview",
-        description: "Create visual SWOT, PESTEL, Porter, BCG, Ansoff and Fishbone analyses.",
-        visible: everyone,
-      },
-    ],
-  },
-  {
     key: "development",
     label: "Development",
     items: [
@@ -298,6 +285,19 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         description:
           "Where the project's usable cash stands, what it expects to receive and spend, and when it needs funding.",
         visible: (roles) => hasAnyRole(roles, CASHFLOW_READERS),
+      },
+    ],
+  },
+  {
+    key: "creative",
+    label: "Creative",
+    items: [
+      {
+        key: "matrix",
+        label: "Matrix",
+        icon: "overview",
+        description: "Create visual SWOT, PESTEL, Porter, BCG, Ansoff and Fishbone analyses.",
+        visible: everyone,
       },
     ],
   },

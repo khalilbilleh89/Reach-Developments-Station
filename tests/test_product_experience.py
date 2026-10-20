@@ -606,18 +606,17 @@ class TestOnlyEntitledReadersAsk:
         groups = re.findall(r'\n    key: "([a-z]+)",\n    label: ', block)
         assert groups == [
             "home",
-            "creative",
             "development",
             "marketing",
             "commercial",
             "delivery",
             "finance",
+            "creative",
             "governance",
         ]
         items = re.findall(r'\n        key: "([a-z-]+)",', block)
         assert items == [
             "overview",
-            "matrix",
             "company",
             "land",
             "permits",
@@ -645,6 +644,7 @@ class TestOnlyEntitledReadersAsk:
             "price-escalation",
             "economics",
             "cashflow",
+            "matrix",
             "team",
             "documents",
             "access",
