@@ -187,7 +187,7 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # ``cashflow.service.reconciliation`` — and, through the ``construction ->
     # cashflow`` edge above, this one line is also what carries a construction
     # change to the cutover. One edge, because the closure is transitive.
-    "cashflow": ("cutover", "project_analysis", "prelaunch"),
+    "cashflow": ("cutover", "project_analysis", "prelaunch", "consultant_engineering"),
     "prelaunch": ("project_analysis", "portfolio"),
     # The cutover claims a batch through ``record_event``, so a change to the
     # audit write contract can break it. The edge points *into* the cutover,
@@ -478,6 +478,8 @@ def domain_of_migration(path: str) -> str | None:
             continue
         if stem.endswith(domain) or stem.endswith(domain.rstrip("s")):
             return domain
+    if stem == "0051_design_payments":
+        return "consultant_engineering"
     if stem == "0034_unit_current_costs":
         return "unit_economics"
     if stem == "0033_contract_payments":

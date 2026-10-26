@@ -217,6 +217,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `consultant_disciplines` | As above. |
 | `consultant_design_stages` | As above. |
 | `consultant_deliverables` | As above. |
+| `consultant_stage_payments` | Application-entered links to authoritative Cashflow movements; no legacy intake. |
+| `consultant_payment_proofs` | Retained payment evidence; no legacy intake. |
 | `commission_grants` | Gate 0A governed distribution history sourced from a Reach sale; never fabricated by intake. |
 | `commission_allocations` | As above. |
 | `management_report_snapshots` | Prospective immutable management captures; no backfill or legacy intake. |

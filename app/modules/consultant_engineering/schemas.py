@@ -6,12 +6,20 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.cashflow.schemas import (
+    Money,
+    PreLaunchExpenseCreate,
+    PreLaunchExpenseOut,
+    SignedMoney,
+)
+
 Strict = ConfigDict(extra="forbid")
 Read = ConfigDict(from_attributes=True)
 
 
 class EngagementCreate(BaseModel):
     model_config = Strict
+    engagement_type: Literal["main", "subconsultant"] = "main"
     consultant_name: str = Field(min_length=1, max_length=200)
     agreement_reference: str = Field(min_length=1, max_length=120)
     agreement_date: date | None = None
@@ -23,6 +31,12 @@ class EngagementCreate(BaseModel):
 
 class EngagementUpdate(EngagementCreate):
     expected_updated_at: datetime
+
+
+class EngagementRemoval(BaseModel):
+    model_config = Strict
+    expected_updated_at: datetime
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class EngagementOut(EngagementCreate):
@@ -53,6 +67,7 @@ class DisciplineOut(DisciplineWrite):
 
 class StageWrite(BaseModel):
     model_config = Strict
+    agreed_payment_amount: Money | None = None
     name: str = Field(min_length=1, max_length=200)
     planned_date: date | None = None
     forecast_date: date | None = None
@@ -120,3 +135,39 @@ class WorkspaceOut(BaseModel):
     total_stages: int
     outstanding_deliverables: int
     accepted_deliverables: int
+
+
+class StagePaymentCreate(PreLaunchExpenseCreate):
+    request_id: uuid.UUID
+    expected_stage_updated_at: datetime
+    category: Literal["consultants"] = "consultants"
+
+
+class PaymentProofOut(BaseModel):
+    model_config = Read
+    id: uuid.UUID
+    payment_id: uuid.UUID
+    filename: str
+    created_at: datetime
+
+
+class StagePaymentOut(BaseModel):
+    id: uuid.UUID
+    stage_id: uuid.UUID
+    expense: PreLaunchExpenseOut
+    proofs: list[PaymentProofOut]
+
+
+class StagePaymentPosition(BaseModel):
+    stage_id: uuid.UUID
+    agreed_payment_amount: Money | None
+    recorded_amount: Money
+    confirmed_paid_amount: Money
+    remaining_amount: SignedMoney | None
+
+
+class PaymentsWorkspaceOut(BaseModel):
+    currency_id: uuid.UUID
+    currency_code: str | None
+    payments: list[StagePaymentOut]
+    stages: list[StagePaymentPosition]

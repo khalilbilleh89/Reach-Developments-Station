@@ -250,10 +250,10 @@
   {
     "handler": "consultant_engineering.create_engagement",
     "create_route": "POST /engagements",
-    "status": "missing",
-    "removal_route": null,
-    "ui_file": null,
-    "notes": "Engagement termination exists; draft engagement and child Delete are missing."
+    "status": "implemented",
+    "removal_route": "POST /engagements/{engagement_id}/delete",
+    "ui_file": "frontend/src/components/projects/ConsultantEngineerTab.tsx",
+    "notes": "Unused draft main/sub-consultant agreements have reasoned Delete; programme/deliverable references block deletion and audit is retained."
   },
   {
     "handler": "consultant_engineering.create_stage",
@@ -838,6 +838,21 @@
     "removal_route": "POST /{entry_id}/delete",
     "ui_file": "frontend/src/components/projects/PriceEscalationTab.tsx",
     "notes": "Whole-project administrators, project managers and Finance delete after named reason confirmation. Project lock and version check; retained row, values and audit. No unit prices or transactions changed. Tested in test_project_price_escalation.py."
-
+  },
+  {
+    "handler": "consultant_engineering.create_stage_payment",
+    "create_route": "POST /stages/{stage_id}/payments",
+    "status": "implemented",
+    "removal_route": "POST /payments/{payment_id}/remove",
+    "ui_file": "frontend/src/components/projects/design/DesignPayments.tsx",
+    "notes": "Reasoned retained deletion; payment reversal preserves cash and optional PDF evidence."
+  },
+  {
+    "handler": "consultant_engineering.create_payment_proof",
+    "create_route": "POST /payments/{payment_id}/proofs",
+    "status": "implemented",
+    "removal_route": "POST /payments/{payment_id}/proofs/{proof_id}/delete",
+    "ui_file": "frontend/src/components/projects/design/DesignPayments.tsx",
+    "notes": "Reasoned retained deletion; payment reversal preserves cash and optional PDF evidence."
   }
 ]

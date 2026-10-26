@@ -30,7 +30,7 @@ EDITOR_ROLES = frozenset({"project_manager", "design_engineering"})
 
 def require_reader(actor: ActorContext) -> None:
     if not actor.role_keys.intersection(READER_ROLES):
-        raise PermissionDeniedError("You do not have permission to view Consultant Engineer.")
+        raise PermissionDeniedError("You do not have permission to view Design.")
 
 
 def require_editor(actor: ActorContext) -> None:
@@ -47,8 +47,7 @@ def accessible_project(
     require_reader(actor)
     if visible_phase_ids(session, project_id=project.id, actor=actor) is not None:
         raise PermissionDeniedError(
-            "Consultant Engineer is whole-project design truth and cannot be shown "
-            "as a partial phase view."
+            "Design is whole-project design truth and cannot be shown as a partial phase view."
         )
     return project
 

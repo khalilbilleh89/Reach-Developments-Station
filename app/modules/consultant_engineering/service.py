@@ -98,7 +98,10 @@ def workspace(session: Session, project: Project) -> schemas.WorkspaceOut:
             )
         )
     )
-    active = next((row for row in engagements if row.status == "active"), None)
+    active = next(
+        (row for row in engagements if row.status == "active" and row.engagement_type == "main"),
+        None,
+    )
     current = next(
         (row for row in stages if row.status in {"in_progress", "on_hold"}),
         next((row for row in stages if row.status == "not_started"), None),
@@ -157,6 +160,10 @@ def update_engagement(
         raise ConflictError("Engagement changed. Reload before saving.")
     _validate_engagement_dates(payload)
     values = payload.model_dump(exclude={"expected_updated_at"})
+    if "engagement_type" not in payload.model_fields_set:
+        values.pop("engagement_type", None)
+    elif payload.engagement_type != row.engagement_type:
+        raise ValidationError("Agreement type is fixed at creation; create a separate agreement.")
     before = {key: getattr(row, key) for key in values}
     for key, value in values.items():
         setattr(row, key, value.strip() if isinstance(value, str) else value)
@@ -196,6 +203,50 @@ def transition_engagement(
     session.commit()
     session.refresh(row)
     return row
+
+
+def delete_engagement(
+    session: Session,
+    project: Project,
+    actor: ActorContext,
+    identifier: uuid.UUID,
+    payload: schemas.EngagementRemoval,
+) -> None:
+    require_editor(actor)
+    lock_project(session, project.id)
+    row = _get(session, models.ConsultantEngagement, project, identifier)
+    if not payload.reason.strip():
+        raise ValidationError("Enter a reason for deleting this draft agreement.")
+    if row.status != "draft" or row.updated_at != payload.expected_updated_at:
+        raise ConflictError("Only the unchanged unused draft agreement may be deleted.")
+    for cls in (
+        models.ConsultantDiscipline,
+        models.ConsultantDesignStage,
+        models.ConsultantDeliverable,
+    ):
+        if session.scalar(
+            select(cls.id).where(cls.engagement_id == row.id, cls.project_id == project.id).limit(1)
+        ):
+            raise ConflictError(
+                "This agreement has programme or delivery records; retain its history."
+            )
+    record_event(
+        session,
+        action="design.draft_agreement_deleted",
+        entity_type="ConsultantEngagement",
+        entity_id=row.id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        reason=payload.reason,
+        before={
+            "consultant_name": row.consultant_name,
+            "agreement_reference": row.agreement_reference,
+            "engagement_type": row.engagement_type,
+            "project_id": project.id,
+        },
+    )
+    session.delete(row)
+    session.commit()
 
 
 def create_discipline(
@@ -310,6 +361,9 @@ def update_stage(
     row = _get(session, models.ConsultantDesignStage, project, identifier)
     _require_mutable_engagement(session, project, row.engagement_id)
     _validate_stage(payload.status, payload.actual_completion_date)
+    from app.modules.consultant_engineering.payments import guard_stage_change
+
+    guard_stage_change(session, project, row, payload)
     rows = list(
         session.scalars(
             select(models.ConsultantDesignStage)
@@ -326,7 +380,13 @@ def update_stage(
     target = payload.sequence
     if target > len(rows):
         raise ValidationError("Stage sequence must be a position in this engagement.")
-    before = {"sequence": row.sequence, "status": row.status, "name": row.name}
+    before = {
+        "sequence": row.sequence,
+        "status": row.status,
+        "name": row.name,
+        "agreed_payment_amount": row.agreed_payment_amount,
+        "actual_completion_date": row.actual_completion_date,
+    }
     old = row.sequence
     if target != old:
         row.sequence = len(rows) + 1
@@ -343,6 +403,8 @@ def update_stage(
     for key, value in payload.model_dump(
         exclude={"sequence", "expected_updated_at", "expected_order"}
     ).items():
+        if key == "agreed_payment_amount" and key not in payload.model_fields_set:
+            continue
         setattr(row, key, value)
     session.flush()
     _audit(
@@ -351,7 +413,13 @@ def update_stage(
         "consultant.stage_updated",
         row,
         before,
-        {"sequence": target, "status": row.status, "name": row.name},
+        {
+            "sequence": target,
+            "status": row.status,
+            "name": row.name,
+            "agreed_payment_amount": row.agreed_payment_amount,
+            "actual_completion_date": row.actual_completion_date,
+        },
     )
     session.commit()
     session.refresh(row)
