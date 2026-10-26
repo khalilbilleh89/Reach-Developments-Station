@@ -167,16 +167,17 @@ def test_prelaunch_correction_cannot_break_stage_attribution(
     row = record(client, project_id, stage, currency_id)
     assert row["expense"]["counterparty_reference"] == "Studio"
     url = f"/api/v1/projects/{project_id}/pre-launch/expenses/{row['expense']['id']}"
+    editable = {key: value for key, value in expected(row).items() if key != "amount"}
     for changes in ({"category": "other"}, {"movement_date": "2025-12-31"}):
         response = client.patch(
-            url, json={"expected": expected(row), "changes": {**expected(row), **changes}}
+            url, json={"expected": expected(row), "changes": {**editable, **changes}}
         )
         assert response.status_code == 409, response.text
     updated = client.patch(
         url,
         json={
             "expected": expected(row),
-            "changes": {**expected(row), "invoice_reference": "BANK-2"},
+            "changes": {**editable, "invoice_reference": "BANK-2"},
         },
     )
     assert updated.status_code == 200, updated.text
