@@ -6173,3 +6173,14 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .masterplan-vertices li { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
 .masterplan-vertices input { max-width: 12rem; }
 @media (max-width: 48rem) { .masterplan-canvas { height: 45vh; } .masterplan-controls > * { flex-basis: 100%; } }
+
+/* Sales specification guide: source and benefit remain distinct at every width. */
+.specification-guide { display: grid; gap: var(--space-6); }
+.specification-item { display: grid; gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
+.specification-item + .specification-item { border-top: 1px solid var(--line-default); padding-top: var(--space-6); }
+.specification-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); margin: 0; }
+.specification-comparison > div { min-width: 0; }
+.specification-comparison dt { font-weight: 600; margin-bottom: var(--space-2); }
+.specification-comparison dd { margin: 0; }
+.specification-comparison dd + dd { margin-top: var(--space-2); }
+@media (max-width: 768px) { .specification-comparison { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); } }

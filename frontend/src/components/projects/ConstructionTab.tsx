@@ -65,8 +65,8 @@ import { CurrentCostAnalysis } from "./economics/CurrentCostAnalysis";
 const SECTIONS = [
   { key: "overview", label: "Overview" },
   { key: "unit-costs", label: "Unit cost analysis" },
-  { key: "technical-specifications", label: "Technical Specifications" },
   { key: "contracts", label: "Contracts" },
+  { key: "technical-specifications", label: "Technical Specifications" },
   { key: "variations", label: "Variations & reductions" },
   { key: "certificates", label: "Certificates" },
   { key: "cash", label: "Invoices & Payments" },

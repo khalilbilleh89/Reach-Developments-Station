@@ -239,6 +239,12 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "construction",
         ("tests/modules/test_construction_contract_first.py::test_payment_migration_roundtrip",),
     ),
+    "0051_specification_benefit.py": (
+        "construction",
+        (
+            "tests/modules/test_technical_specifications.py::test_buyer_benefit_migration_preserves_records_and_blocks_loss",
+        ),
+    ),
     "0031_technical_specs.py": (
         "construction",
         ("tests/modules/test_technical_specifications.py::test_specification_migration_roundtrip",),
