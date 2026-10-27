@@ -661,7 +661,7 @@
     "status": "implemented",
     "removal_route": "DELETE /technical-specifications/{specification_id}",
     "ui_file": "frontend/src/components/projects/construction/TechnicalSpecifications.tsx",
-    "notes": "Whole-project technical writers delete drafts or remove confirmed specifications with retained data and audit; reason required. No dependent transactions are deleted."
+    "notes": "Whole-project technical writers delete drafts or remove confirmed specifications from the Sales guide with retained data and audit, including buyer benefit text; reason required. Delete stays beside each item. No dependent transactions are deleted."
   },
   {
     "handler": "unit_economics.record_current_cost_settings",

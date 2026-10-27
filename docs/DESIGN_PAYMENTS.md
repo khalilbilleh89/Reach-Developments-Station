@@ -56,7 +56,7 @@ deleted with a reason and version check; linked programmes block deletion.
 
 ## Migration and rollback
 
-Revision `0051_design_payments` preserves existing appointments as main, changes
+Revision `0052_design_payments` preserves existing appointments as main, changes
 only the active-main uniqueness predicate, adds optional stage fees and the two
 attribution/evidence tables. Downgrade is allowed only before stage fees,
 sub-consultants or payment/proof history exist. Afterwards restore the application

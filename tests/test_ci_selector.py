@@ -283,3 +283,14 @@ def test_construction_plan_is_parallel_without_losing_selected_coverage() -> Non
     assert result.paths == before
     assert result.domains == ["cashflow", "construction", "unit_economics"]
     assert not result.full
+
+
+def test_specification_benefit_migration_keeps_construction_and_direct_consumers() -> None:
+    result = chosen(
+        "app/modules/construction/specifications.py",
+        "app/db/migrations/versions/0051_specification_benefit.py",
+    )
+    assert not result.full and not result.error
+    assert result.domains == ["cashflow", "construction", "unit_economics"]
+    assert "tests/modules/test_technical_specifications.py" in result.paths
+    assert "tests/test_migrations.py" in result.paths

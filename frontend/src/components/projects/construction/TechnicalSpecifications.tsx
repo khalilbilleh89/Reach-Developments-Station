@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, DataToolbar, EmptyState, Loading, Notice, RecordPage, SectionHeader, ToolbarFilter } from "@/components/ui";
+import { Badge, Button, Card, Disclosure, DataToolbar, EmptyState, Loading, Notice, RecordPage, SectionHeader, ToolbarFilter } from "@/components/ui";
 import { technicalSpecifications, type TechnicalSpecification } from "@/lib/api/technicalSpecifications";
 import { hasAnyRole } from "@/lib/roles";
 import { businessDate } from "@/lib/format";
@@ -22,6 +22,12 @@ const categories = [
   { value: "shared", label: "Shared facilities & external works", hint: "Lifts, entrances, parking, landscaping, pools and common areas." },
   { value: "other", label: "Other specifications", hint: "Additional delivery details and exclusions." },
 ];
+const guideSections = [
+  { title: "Engineered for long-term performance", description: "Structure, protection, privacy and the building envelope.", categories: ["structure", "aluminium", "doors"] },
+  { title: "Finishes for daily living", description: "Materials, kitchens, bathrooms and their recorded brands.", categories: ["finishes", "sanitary", "kitchen"] },
+  { title: "Comfort, efficiency & clean design", description: "Water, electrical systems, cooling and ventilation.", categories: ["plumbing", "water", "electrical", "heating_cooling"] },
+  { title: "Outdoor living & shared facilities", description: "Landscaping, recreation, common spaces and additional features.", categories: ["shared", "other"] },
+];
 const inclusions = [
   { value: "undecided", label: "To be decided" }, { value: "included", label: "Included" },
   { value: "optional", label: "Optional upgrade" }, { value: "excluded", label: "Not included" },
@@ -35,7 +41,8 @@ export function TechnicalSpecifications({ projectId, roles }: { projectId: strin
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState("");
-  const [status, setStatus] = useState("");
+  const defaultStatus = canWrite ? "" : "confirmed";
+  const [status, setStatus] = useState(defaultStatus);
   const [editing, setEditing] = useState<TechnicalSpecification | "new" | null>(null);
   const load = useCallback(async () => {
     try { setRows(await technicalSpecifications.list(projectId)); setError(null); }
@@ -49,14 +56,15 @@ export function TechnicalSpecifications({ projectId, roles }: { projectId: strin
   }, [projectId]);
   const row = editing && editing !== "new" ? editing : null;
   const initial = { category: row?.category ?? "finishes", title: row?.title ?? "", scope: row?.scope ?? "units",
-    applies_to: row?.applies_to ?? "", description: row?.description ?? "", brand_model: row?.brand_model ?? "",
+    applies_to: row?.applies_to ?? "", description: row?.description ?? "", buyer_benefit: row?.buyer_benefit ?? "", brand_model: row?.brand_model ?? "",
     inclusion: row?.inclusion ?? "undecided", status: row?.status ?? "draft", source_reference: row?.source_reference ?? "" };
   const fields: EditField[] = [
     { name: "category", label: "Category", kind: "select", options: categories },
-    { name: "title", label: "Specification item", hint: "For example: bathroom floor tiles" },
+    { name: "title", label: "Feature", hint: "For example: bathroom floor tiles" },
     { name: "scope", label: "Where it applies", kind: "select", options: scopes },
     { name: "applies_to", label: "Applicable areas or unit types", hint: "State the exact coverage, such as all units, 2-bedroom kitchens, or main entrance.", width: "full" },
-    { name: "description", label: "What will be delivered", kind: "textarea", width: "full", hint: "Use plain language. Include material, size, finish and any exceptions. Distinguish installed equipment from provision only." },
+    { name: "description", label: "Technical specification", kind: "textarea", width: "full", hint: "Use plain language. Include material, size, finish and any exceptions. Distinguish installed equipment from provision only." },
+    { name: "buyer_benefit", label: "Buyer benefit (optional)", kind: "textarea", width: "full", hint: "Explain what this feature means for the buyer. Keep it supported by the specification; retain any qualifications." },
     { name: "brand_model", label: "Brand / model / range (optional)" },
     { name: "inclusion", label: "Included in delivery?", kind: "select", options: inclusions },
     { name: "status", label: "Confirmation", kind: "select", options: statuses },
@@ -64,7 +72,7 @@ export function TechnicalSpecifications({ projectId, roles }: { projectId: strin
   ];
   const needle = search.trim().toLowerCase();
   const shown = (rows ?? []).filter(item => (!scope || item.scope === scope) && (!status || item.status === status) &&
-    (!needle || [item.title, item.description, item.applies_to, item.brand_model, item.source_reference, categories.find(category => category.value === item.category)?.label].join(" ").toLowerCase().includes(needle)));
+    (!needle || [item.title, item.description, item.buyer_benefit, item.applies_to, item.brand_model, item.source_reference, categories.find(category => category.value === item.category)?.label].join(" ").toLowerCase().includes(needle)));
   if (editing) return <RecordPage title={row ? `Edit ${row.title}` : "Add technical specification"} onClose={() => setEditing(null)}>
     <EditForm fields={fields} initial={initial} columns={2} submitLabel="Save specification" onCancel={() => setEditing(null)} onSave={async changes => {
       const values: Record<string, unknown> = { ...initial, ...changes, version: row?.version ?? 1 };
@@ -74,27 +82,32 @@ export function TechnicalSpecifications({ projectId, roles }: { projectId: strin
     }} />
   </RecordPage>;
   return <section className="stack">
-    <SectionHeader title="Technical Specifications" description="A simple guide to what the project and its units will include." actions={canWrite ? <Button variant="primary" disabled={rows === null || !!error} onClick={() => setEditing("new")}>Add specification</Button> : undefined} />
-    <Notice tone="info">Check the applicable areas and confirmation on each item. Drafts are still being decided; confirmed items describe the recorded delivery specification, not completed construction.</Notice>
+    <SectionHeader title="Technical Specifications" description="The project specification in plain language: each feature, what is specified and why it matters to the buyer." actions={canWrite ? <Button variant="primary" disabled={rows === null || !!error} onClick={() => setEditing("new")}>Add specification</Button> : undefined} />
+    <Disclosure title="Reading the specification"><p className="footnote">Use the stated coverage and source when explaining a feature. “Provision only”, “selected areas” and approval conditions remain part of the specification. Confirmation describes the recorded specification, not completed work.</p></Disclosure>
     {error ? <Notice tone="error">{error}<Button onClick={() => void load()}>Retry</Button></Notice> : rows === null ? <Loading label="Loading technical specifications" /> : <>
-      <DataToolbar search={{ value: search, onChange: setSearch, placeholder: "Find tiles, hot water, doors or a unit type" }} count={{ shown: shown.length, total: rows.length, noun: "specification" }} onReset={search || scope || status ? () => { setSearch(""); setScope(""); setStatus(""); } : undefined}>
+      <DataToolbar search={{ value: search, onChange: setSearch, placeholder: "Search a feature, brand, buyer benefit or unit type" }} count={{ shown: shown.length, total: rows.length, noun: "specification" }} onReset={search || scope || status !== defaultStatus ? () => { setSearch(""); setScope(""); setStatus(canWrite ? "" : "confirmed"); } : undefined}>
         <ToolbarFilter label="Applies to" active={!!scope}><select className="input" value={scope} onChange={event => setScope(event.target.value)}><option value="">Project & units</option>{scopes.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></ToolbarFilter>
         <ToolbarFilter label="Confirmation" active={!!status}><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All items</option>{statuses.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></ToolbarFilter>
       </DataToolbar>
-      {rows.length === 0 ? <EmptyState title="No specifications recorded yet" hint="The categories below are a checklist, not a statement of what is included. Add the project's verified specifications to build the sales guide." /> : shown.length === 0 ? <EmptyState title="No matching specifications" hint="Change the search or filters to see more items." /> : null}
-      {categories.map(category => {
-        const items = shown.filter(item => item.category === category.value);
-        if (!items.length && (search || scope || status)) return null;
-        return <Card key={category.value} title={category.label} description={category.hint}>
-          {items.length ? <div className="stack">{items.map(item => <article key={item.id} className="stack stack-tight">
+      {rows.length === 0 ? <EmptyState title="No specifications recorded yet" hint="Add the project’s sourced specifications to build a clear reference for Sales." /> : shown.length === 0 ? <EmptyState title="No matching specifications" hint="Change the search or filters to see more items." /> : null}
+      {guideSections.map(group => {
+        const items = shown.filter(item => group.categories.includes(item.category));
+        if (!items.length) return null;
+        return <Card key={group.title} title={group.title} description={group.description}>
+          <div className="specification-guide">{items.map(item => <article key={item.id} className="specification-item">
             <SectionHeader title={item.title} actions={canWrite ? <Button onClick={() => setEditing(item)}>Edit</Button> : undefined} />
             <div><Badge tone={item.status === "confirmed" ? "success" : "warning"}>{item.status === "confirmed" ? "Confirmed" : "Draft — not confirmed"}</Badge>{" "}<Badge tone={item.inclusion === "included" && item.status === "confirmed" ? "success" : "neutral"}>{inclusions.find(value => value.value === item.inclusion)?.label}</Badge></div>
-            <p><strong>{scopes.find(value => value.value === item.scope)?.label}:</strong> {item.applies_to}</p>
-            <p className="specification-description">{item.description}</p>
-            {item.brand_model ? <p><strong>Brand / model:</strong> {item.brand_model}</p> : null}
-            <p className="footnote">Source: {item.source_reference || "Not recorded"} · Updated {businessDate(item.updated_at.slice(0, 10))}</p>
+            <p className="footnote">{scopes.find(value => value.value === item.scope)?.label} · {item.applies_to}</p>
+            <dl className="specification-comparison">
+              <div><dt>Technical specification</dt><dd className="specification-description">{item.description}</dd>{item.brand_model ? <dd><strong>Brand / model:</strong> {item.brand_model}</dd> : null}</div>
+              <div><dt>Buyer benefit</dt><dd className="specification-description">{item.buyer_benefit || "No buyer benefit recorded. Use the technical specification."}</dd></div>
+            </dl>
+            <Disclosure title="Source & record details">
+              <p className="footnote">Source: {item.source_reference || "Not recorded"} · Updated {businessDate(item.updated_at.slice(0, 10))}</p>
+              <p className="footnote">Category: {categories.find(category => category.value === item.category)?.label}</p>
+            </Disclosure>
             {canWrite ? <DeleteRecordButton label={item.title} confirmLabel="Delete specification" description="Removes this item from the guide. Confirmed specifications and the audit history are retained." onDelete={reason => technicalSpecifications.remove(projectId, item.id, reason)} onDeleted={load} /> : null}
-          </article>)}</div> : <p className="footnote">Not yet specified</p>}
+          </article>)}</div>
         </Card>;
       })}
     </>}

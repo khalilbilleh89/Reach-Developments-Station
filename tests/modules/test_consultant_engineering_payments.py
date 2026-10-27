@@ -376,7 +376,7 @@ def test_migration_roundtrip_and_retained_evidence(
 ) -> None:
     main = agreement(manager_member_client, project_id)
     db.rollback()
-    command.downgrade(alembic_config(), "0050_project_matrices")
+    command.downgrade(alembic_config(), "0051_specification_benefit")
     command.upgrade(alembic_config(), "head")
     row = db.execute(
         text("SELECT engagement_type, consultant_name FROM consultant_engagements WHERE id=:id"),
@@ -386,4 +386,4 @@ def test_migration_roundtrip_and_retained_evidence(
     db.rollback()
     agreement(manager_member_client, project_id, "New Sub", "subconsultant")
     with pytest.raises(RuntimeError, match="Retained Design"):
-        command.downgrade(alembic_config(), "0050_project_matrices")
+        command.downgrade(alembic_config(), "0051_specification_benefit")

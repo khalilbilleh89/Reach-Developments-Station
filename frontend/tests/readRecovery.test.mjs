@@ -26,7 +26,7 @@ test("sales opens only Technical Specifications and never requests construction 
 });
 
 test("specification guide searches applicability and saves a complete versioned record", async () => {
-  const row = { id: "spec", project_id: "project", category: "water", title: "Hot water", scope: "units", applies_to: "All 2-bedroom units", description: "Synthetic heater", brand_model: "", inclusion: "included", status: "confirmed", source_reference: "Schedule A", version: 4, updated_at: "2026-09-14T10:00:00Z" };
+  const row = { id: "spec", project_id: "project", category: "water", title: "Hot water", scope: "units", applies_to: "All 2-bedroom units", description: "Synthetic heater", buyer_benefit: "Lower energy use", brand_model: "", inclusion: "included", status: "confirmed", source_reference: "Schedule A", version: 4, updated_at: "2026-09-14T10:00:00Z" };
   let saved;
   const render = mount("projects/construction/TechnicalSpecifications", "TechnicalSpecifications", {
     "@/lib/api/technicalSpecifications": { technicalSpecifications: { list: async () => [row], update: async (...args) => { saved = args; } } },
@@ -42,8 +42,33 @@ test("specification guide searches applicability and saves a complete versioned 
   assert.ok(nodes(render()).some(node => node.type === "RecordPage"));
   await form.props.onSave({ description: "Updated heater", brand_model: null });
   assert.equal(saved[0], "project"); assert.equal(saved[1], "spec");
+  assert.equal(saved[2].buyer_benefit, "Lower energy use");
   assert.equal(saved[2].version, 4); assert.equal(saved[2].description, "Updated heater");
   assert.equal(saved[2].applies_to, "All 2-bedroom units"); assert.equal(saved[2].brand_model, "");
+});
+
+test("Sales guide separates confirmed specification and buyer value without empty checklist cards", async () => {
+  const rows = [
+    { id: "confirmed", category: "heating_cooling", title: "AC provision", scope: "units", applies_to: "Selected units", description: "Provision only, subject to approved mechanical design.", buyer_benefit: "Comfortable indoor temperatures.", brand_model: "", inclusion: "included", status: "confirmed", source_reference: "Synthetic mechanical schedule", updated_at: "2026-10-20", version: 1 },
+    { id: "draft", category: "finishes", title: "Unconfirmed tile", scope: "units", applies_to: "All units", description: "Draft selection", buyer_benefit: "", brand_model: "", inclusion: "undecided", status: "draft", source_reference: "", updated_at: "2026-10-20", version: 1 },
+  ];
+  const render = mount("projects/construction/TechnicalSpecifications", "TechnicalSpecifications", {
+    "@/lib/api/technicalSpecifications": { technicalSpecifications: { list: async () => rows } },
+    "@/lib/roles": { hasAnyRole: () => false }, "@/lib/format": { businessDate: value => value },
+    "../EditForm": { EditForm: "EditForm" }, "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
+  }, { projectId: "project", roles: new Set(["sales_advisor"]) });
+  render(); await settle();
+  let tree = nodes(render());
+  assert.equal(tree.filter(n => n.type === "Card").length, 1);
+  assert.ok(tree.some(n => n.type === "Card" && n.props.title === "Comfort, efficiency & clean design"));
+  assert.ok(tree.some(n => n.type === "dd" && n.props.children === rows[0].description));
+  assert.ok(tree.some(n => n.type === "dd" && n.props.children === rows[0].buyer_benefit));
+  assert.ok(!tree.some(n => n.type === "SectionHeader" && n.props.title === "Unconfirmed tile"));
+  assert.ok(!tree.some(n => n.type === "DeleteRecordButton"));
+  tree.find(n => n.type === "DataToolbar").props.search.onChange("indoor temperatures");
+  assert.ok(nodes(render()).some(n => n.type === "SectionHeader" && n.props.title === "AC provision"));
+  nodes(render()).find(n => n.type === "DataToolbar").props.search.onChange("unknown feature");
+  assert.ok(nodes(render()).some(n => n.type === "EmptyState" && n.props.title === "No matching specifications"));
 });
 
 test("Issued permits offer Completed and submit without a mandatory reason", async () => {

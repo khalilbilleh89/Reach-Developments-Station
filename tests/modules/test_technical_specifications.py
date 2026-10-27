@@ -149,6 +149,8 @@ def test_wrong_project_and_phase_scope_are_refused(
         {"category": "invented"},
         {"unexpected": True},
         {"description": None},
+        {"buyer_benefit": None},
+        {"buyer_benefit": "x" * 2001},
     ],
 )
 def test_invalid_specification_refused(
@@ -162,3 +164,73 @@ def test_specification_migration_roundtrip(db: Session) -> None:
     command.downgrade(alembic_config(), "0030_unit_removal")
     command.upgrade(alembic_config(), "head")
     assert db.scalar(text("SELECT count(*) FROM technical_specifications")) == 0
+
+
+def test_buyer_benefit_is_versioned_audited_and_preserved_for_old_clients(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    created = admin_client.post(
+        url(project_id), json=payload(buyer_benefit="  Easier daily maintenance.  ")
+    ).json()
+    assert created["buyer_benefit"] == "Easier daily maintenance."
+    path = f"{url(project_id)}/{created['id']}"
+    legacy = admin_client.put(path, json=payload(version=1))
+    assert legacy.status_code == 200
+    assert legacy.json()["buyer_benefit"] == "Easier daily maintenance."
+    updated = admin_client.put(
+        path, json=payload(version=2, buyer_benefit="A revised explanation.")
+    )
+    assert updated.status_code == 200
+    assert updated.json()["buyer_benefit"] == "A revised explanation."
+    assert admin_client.put(path, json=payload(version=1, buyer_benefit="Stale")).status_code == 409
+    event = db.scalar(
+        select(AuditEvent)
+        .where(
+            AuditEvent.entity_id == uuid.UUID(created["id"]),
+            AuditEvent.action == "technical_specification.updated",
+        )
+        .order_by(AuditEvent.occurred_at.desc())
+    )
+    assert event.before_data["buyer_benefit"] == "Easier daily maintenance."
+    assert event.after_data["buyer_benefit"] == "A revised explanation."
+    assert admin_client.delete(path, params={"reason": "Duplicate"}).status_code == 204
+    db.expire_all()
+    removed = db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.entity_id == uuid.UUID(created["id"]),
+            AuditEvent.action == "technical_specification.deleted",
+        )
+    )
+    assert removed.before_data["buyer_benefit"] == "A revised explanation."
+
+
+def test_buyer_benefit_migration_preserves_records_and_blocks_loss(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    created = admin_client.post(url(project_id), json=payload()).json()
+    db.rollback()
+    command.downgrade(alembic_config(), "0050_project_matrices")
+    command.upgrade(alembic_config(), "head")
+    row = admin_client.get(url(project_id)).json()[0]
+    assert row["id"] == created["id"] and row["description"] == created["description"]
+    assert row["buyer_benefit"] == ""
+    result = admin_client.put(
+        f"{url(project_id)}/{row['id']}",
+        json=payload(
+            version=1,
+            buyer_benefit="Retain this explanation.",
+            status="confirmed",
+            inclusion="included",
+            source_reference="Synthetic schedule A",
+        ),
+    )
+    assert result.status_code == 200
+    assert (
+        admin_client.delete(
+            f"{url(project_id)}/{row['id']}", params={"reason": "Replaced"}
+        ).status_code
+        == 204
+    )
+    db.rollback()
+    with pytest.raises(RuntimeError, match="Buyer benefits exist"):
+        command.downgrade(alembic_config(), "0050_project_matrices")
