@@ -2421,6 +2421,19 @@ export const prelaunch = {
 
 const consultantRoot = (projectId: string) => `/projects/${projectId}/consultant-engineering`;
 export const consultantEngineering = {
+  payments: (projectId: string) => get<import("./types").DesignPaymentsWorkspace>(`${consultantRoot(projectId)}/payments`),
+  recordPayment: (projectId: string, stageId: string, body: Record<string, unknown>) => post<import("./types").DesignStagePayment>(`${consultantRoot(projectId)}/stages/${stageId}/payments`, body),
+  editPayment: (projectId: string, paymentId: string, body: Record<string, unknown>) => patch<import("./types").DesignStagePayment>(`${consultantRoot(projectId)}/payments/${paymentId}`, body),
+  confirmPayment: (projectId: string, paymentId: string, expected: Record<string, unknown>) => post<import("./types").DesignStagePayment>(`${consultantRoot(projectId)}/payments/${paymentId}/confirm`, { expected }),
+  removePayment: (projectId: string, paymentId: string, expected: Record<string, unknown>, reason: string) => post<import("./types").DesignStagePayment>(`${consultantRoot(projectId)}/payments/${paymentId}/remove`, { expected, reason }),
+  reversePayment: (projectId: string, paymentId: string, reason: string) => post<import("./types").DesignStagePayment>(`${consultantRoot(projectId)}/payments/${paymentId}/reverse`, { reason }),
+  uploadPaymentProof: async (projectId: string, paymentId: string, file: File) => {
+    if (!file.size || file.size > 10 * 1024 * 1024 || !file.name.toLowerCase().endsWith(".pdf")) throw new Error("Choose a non-empty PDF up to 10 MB.");
+    return postBinary<import("./types").DesignPaymentProof>(`${consultantRoot(projectId)}/payments/${paymentId}/proofs?${new URLSearchParams({filename: file.name})}`, await file.arrayBuffer());
+  },
+  downloadPaymentProof: (projectId: string, paymentId: string, proof: import("./types").DesignPaymentProof) => download(`${consultantRoot(projectId)}/payments/${paymentId}/proofs/${proof.id}/file`, proof.filename),
+  deletePaymentProof: (projectId: string, paymentId: string, proofId: string, reason: string) => post<void>(`${consultantRoot(projectId)}/payments/${paymentId}/proofs/${proofId}/delete`, { reason }),
+  deleteEngagement: (projectId: string, agreement: import("./types").ConsultantEngagement, reason: string) => post<void>(`${consultantRoot(projectId)}/engagements/${agreement.id}/delete`, { expected_updated_at: agreement.updated_at, reason }),
   updateEngagement: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements/${id}`, body),
   updateDiscipline: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantDiscipline>(`${consultantRoot(projectId)}/disciplines/${id}`, body),
   updateDeliverable: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantDeliverable>(`${consultantRoot(projectId)}/deliverables/${id}`, body),

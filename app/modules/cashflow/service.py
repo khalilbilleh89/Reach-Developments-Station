@@ -45,6 +45,7 @@ from itertools import pairwise
 from typing import Any
 
 from sqlalchemy import ColumnElement, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -158,7 +159,18 @@ _RELEASE_FIELDS = ("id", "restriction_id", "amount", "release_date", "status")
 
 def _flush(session: Session) -> None:
     """Push pending changes so the database's own constraints answer first."""
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        if getattr(getattr(exc.orig, "diag", None), "constraint_name", None) != (
+            "design_payment_movement_guard"
+        ):
+            raise
+        session.rollback()
+        raise ConflictError(
+            "This payment is linked to a completed Design stage. Keep the Consultants "
+            "category and a payment date on or after stage completion."
+        ) from exc
 
 
 def _now() -> datetime:

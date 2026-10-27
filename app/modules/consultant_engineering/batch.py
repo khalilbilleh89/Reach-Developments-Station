@@ -50,7 +50,9 @@ class DesignFact:
 def reporting_design(session: Session, scope: Select) -> list[DesignFact]:
     """Management dates and statuses for the active engagement only."""
     active = select(ConsultantEngagement.id).where(
-        ConsultantEngagement.project_id.in_(scope), ConsultantEngagement.status == "active"
+        ConsultantEngagement.project_id.in_(scope),
+        ConsultantEngagement.status == "active",
+        ConsultantEngagement.engagement_type == "main",
     )
     facts = [
         DesignFact(
@@ -99,7 +101,9 @@ def positions(
     session: Session, project_ids: Select, as_of: date
 ) -> dict[uuid.UUID, DesignPosition]:
     active = select(ConsultantEngagement.id).where(
-        ConsultantEngagement.project_id.in_(project_ids), ConsultantEngagement.status == "active"
+        ConsultantEngagement.project_id.in_(project_ids),
+        ConsultantEngagement.status == "active",
+        ConsultantEngagement.engagement_type == "main",
     )
     result = {
         row.project_id: DesignPosition(row.id, row.consultant_name)

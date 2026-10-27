@@ -3051,13 +3051,19 @@ export interface CashflowManagement {
 }
 
 export interface ConsultantEngagement {
+  engagement_type: "main" | "subconsultant";
   id: string; project_id: string; consultant_name: string; agreement_reference: string;
   agreement_date: string | null; planned_start_date: string | null; planned_completion_date: string | null;
   status: string; scope_summary: string | null; notes: string | null; created_by_user_id: string;
   created_at: string; updated_at: string;
 }
+
+export interface DesignPaymentProof { id: string; payment_id: string; filename: string; created_at: string; }
+export interface DesignStagePayment { id: string; stage_id: string; expense: PreLaunchExpense; proofs: DesignPaymentProof[]; }
+export interface DesignPaymentPosition { stage_id: string; agreed_payment_amount: MoneyStr | null; recorded_amount: MoneyStr; confirmed_paid_amount: MoneyStr; remaining_amount: MoneyStr | null; }
+export interface DesignPaymentsWorkspace { currency_id: string; currency_code: string | null; payments: DesignStagePayment[]; stages: DesignPaymentPosition[]; }
 export interface ConsultantDiscipline { id: string; engagement_id: string; name: string; lead_name: string | null; status: string; notes: string | null; created_at: string; updated_at: string; }
-export interface ConsultantStage { id: string; engagement_id: string; name: string; sequence: number; planned_date: string | null; forecast_date: string | null; actual_completion_date: string | null; status: string; notes: string | null; created_at: string; updated_at: string; }
+export interface ConsultantStage { agreed_payment_amount: MoneyStr | null; id: string; engagement_id: string; name: string; sequence: number; planned_date: string | null; forecast_date: string | null; actual_completion_date: string | null; status: string; notes: string | null; created_at: string; updated_at: string; }
 export interface ConsultantDeliverable { id: string; engagement_id: string; stage_id: string; discipline_id: string | null; name: string; category: string | null; revision_reference: string | null; document_reference: string | null; due_date: string | null; submitted_date: string | null; accepted_date: string | null; status: string; notes: string | null; created_at: string; updated_at: string; }
 export interface ConsultantWorkspace { active_engagement: ConsultantEngagement | null; engagements: ConsultantEngagement[]; disciplines: ConsultantDiscipline[]; stages: ConsultantStage[]; deliverables: ConsultantDeliverable[]; total_disciplines: number; completed_disciplines: number; current_design_stage: ConsultantStage | null; completed_stages: number; total_stages: number; outstanding_deliverables: number; accepted_deliverables: number; }
 

@@ -4,21 +4,22 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ApiError, consultantEngineering as api } from "@/lib/api";
 import type { ConsultantWorkspace, ConsultantEngagement, ConsultantDiscipline, ConsultantStage, ConsultantDeliverable } from "@/lib/api";
+import { DesignPayments } from "./design/DesignPayments";
 import { businessDate } from "@/lib/format";
 import { CONSULTANT_EDITORS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import type { Tone } from "@/components/ui";
 const designTone = (status: string): Tone => ["completed", "accepted"].includes(status) ? "success" : ["cancelled", "terminated", "superseded"].includes(status) ? "muted" : ["active", "in_progress", "submitted"].includes(status) ? "info" : "neutral";
-import { Icon, Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, DraftBoundary, RecordPage, FormActions, Tabs, TabPanel, FormSection, IdentityCell, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, Position, PositionFigure, SubPanel, TableScroll } from "@/components/ui";
+import { Icon, Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, DraftBoundary, RecordPage, FormActions, MoneyInput, PromptDialog, Tabs, TabPanel, FormSection, IdentityCell, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, Position, PositionFigure, SubPanel, TableScroll } from "@/components/ui";
 
 type Kind = "engagement" | "discipline" | "stage" | "deliverable";
 type RecordRow = ConsultantEngagement | ConsultantDiscipline | ConsultantStage | ConsultantDeliverable;
-type Editor = { kind: Kind; row?: RecordRow };
+type Editor = { kind: Kind; row?: RecordRow; engagementType?: "main" | "subconsultant" };
 const labels = (value: string) => value.replaceAll("_", " ");
 const fieldNames: Record<Kind, string[]> = {
-  engagement: ["consultant_name", "agreement_reference", "agreement_date", "planned_start_date", "planned_completion_date", "scope_summary", "notes"],
+  engagement: ["engagement_type", "consultant_name", "agreement_reference", "agreement_date", "planned_start_date", "planned_completion_date", "scope_summary", "notes"],
   discipline: ["name", "lead_name", "status", "notes"],
-  stage: ["name", "planned_date", "forecast_date", "actual_completion_date", "status", "notes"],
+  stage: ["agreed_payment_amount", "name", "planned_date", "forecast_date", "actual_completion_date", "status", "notes"],
   deliverable: ["name", "stage_id", "discipline_id", "category", "revision_reference", "document_reference", "due_date", "submitted_date", "accepted_date", "status", "notes"],
 };
 const statuses: Record<Kind, string[]> = {
@@ -29,7 +30,7 @@ const statuses: Record<Kind, string[]> = {
 };
 function values(kind: Kind, row?: RecordRow): Record<string, unknown> {
   const source = row as unknown as Record<string, unknown> | undefined;
-  return Object.fromEntries(fieldNames[kind].map((key) => [key, source?.[key] ?? (key === "status" ? "not_started" : null)]));
+  return Object.fromEntries(fieldNames[kind].map((key) => [key, source?.[key] ?? (key === "status" ? "not_started" : key === "engagement_type" ? "main" : null)]));
 }
 
 export function ConsultantEngineerTab({ projectId, roles }: { projectId: string; roles: Roles }) {
@@ -40,6 +41,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<ConsultantEngagement | null>(null);
   const [terminating, setTerminating] = useState<ConsultantEngagement | null>(null);
   const canEdit = hasAnyRole(roles, CONSULTANT_EDITORS);
   const [readError, setReadError] = useState<string | null>(null);
@@ -47,11 +49,11 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
   const load = useCallback(async () => {
     setRetrying(true);
     try { setData(await api.workspace(projectId)); setReadError(null); }
-    catch (e) { setReadError(e instanceof ApiError ? e.message : "Could not load Consultant Engineer."); }
+    catch (e) { setReadError(e instanceof ApiError ? e.message : "Could not load Design."); }
     finally { setRetrying(false); }
   }, [projectId]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]);
-  const current = data?.active_engagement ?? data?.engagements.find((x) => x.status === "draft");
+  const current = data?.active_engagement ?? data?.engagements.find((x) => x.status === "draft" && x.engagement_type === "main") ?? data?.engagements.find((x) => ["draft", "active"].includes(x.status));
   const selected = data?.engagements.find((x) => x.id === selectedId) ?? current;
   const editable = canEdit && !!selected && ["draft", "active"].includes(selected.status);
   const disciplines = data?.disciplines.filter((x) => x.engagement_id === selected?.id) ?? [];
@@ -86,9 +88,9 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
     }
   });
   return <div className="stack consultant-workspace">
-    <PageHeader icon="building" title="Consultant Engineer" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement" })}>Add consultant agreement</Button> : undefined} />
+    <PageHeader icon="building" title="Design" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <ButtonRow><Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement", engagementType: "main" })}>Add main consultant</Button><Button disabled={busy} onClick={() => setEditor({ kind: "engagement", engagementType: "subconsultant" })}>Add sub-consultant</Button></ButtonRow> : undefined} />
     {error && !editor ? <Notice tone="error">{error}</Notice> : null}
-    {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Consultant Engineer"}</Button></> : null}
+    {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Design"}</Button></> : null}
     {data ? <Card tone="command" title="Design position across agreements">
       <Position compact>
         <PositionFigure lead={data.deliverables.length > 0} label="Outstanding deliverables" value={data.deliverables.length ? data.outstanding_deliverables : "Not registered"} note={data.deliverables.length ? undefined : "Add deliverables to establish the delivery position"} />
@@ -98,11 +100,13 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
       </Position>
     </Card> : !readError ? <Loading label="Loading consultant agreement" shape="page" /> : null}
     {data && !current ? <EmptyState title="No active or draft agreement" hint="A consultant agreement establishes the appointment and its design programme. Previous agreements remain in the history below." /> : null}
+    {data?.engagements.length ? <Field label="Consultant company / agreement"><select className="input" value={selected?.id ?? ""} onChange={event => setSelectedId(event.target.value)}>{data.engagements.map(agreement => <option key={agreement.id} value={agreement.id}>{agreement.engagement_type === "subconsultant" ? "Sub-consultant" : "Main consultant"} · {agreement.consultant_name} · {agreement.agreement_reference} · {labels(agreement.status)}</option>)}</select></Field> : null}
     {data ? <Tabs label="Consultant views" tabs={[{key:"agreement",icon:"documents",label:"Agreement"},{key:"programme",icon:"calendar",label:"Programme"},{key:"disciplines",icon:"layers",label:"Disciplines"},{key:"deliverables",icon:"blueprint",label:"Deliverables"},{key:"history",icon:"history",label:"History"}]} active={section} onSelect={setSection} /> : null}
     <TabPanel group="Consultant views" tab={section}>
     {selected && section !== "history" ? <>
       <Card title={selected.consultant_name} description="Consultant agreement and design programme" actions={current && selected.id !== current.id ? <Button small onClick={() => setSelectedId(current.id)}>Return to current agreement</Button> : undefined}>
         <InlineMeta>
+          <InlineMetaItem label="Appointment">{selected.engagement_type === "subconsultant" ? "Sub-consultant · separate company agreement" : "Main consultant"}</InlineMetaItem>
           <InlineMetaItem label="Agreement"><span className="mono">{selected.agreement_reference}</span></InlineMetaItem>
           <InlineMetaItem label="Status"><Badge>{labels(selected.status)}</Badge></InlineMetaItem>
         </InlineMeta>
@@ -116,8 +120,9 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
         {!editable ? <p className="footnote">Read-only agreement. Its programme and delivery records remain available in their tabs.</p> : null}
         <ButtonRow>
           {editable ? <Button disabled={busy} onClick={() => { setError(null); setEditor({ kind: "engagement", row: selected }); }}>Edit agreement</Button> : null}
-          {canEdit && selected.status === "draft" ? <>{!data?.active_engagement ? <Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "activate"))}>Activate</Button> : null}</> : null}
+          {canEdit && selected.status === "draft" ? <>{selected.engagement_type === "subconsultant" || !data?.active_engagement ? <Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "activate"))}>Activate</Button> : null}</> : null}
           {canEdit && selected.status === "active" ? <><Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "complete"))}>Complete agreement</Button><Button variant="danger" disabled={busy} onClick={() => setTerminating(selected)}>Terminate agreement</Button></> : null}
+          {canEdit && selected.status === "draft" ? <Button variant="danger" disabled={busy} onClick={() => setDeleting(selected)}>Delete draft agreement</Button> : null}
         </ButtonRow></> : null}
       {section === "disciplines" ? <Register nested title="Disciplines" action={editable ? <Button onClick={() => setEditor({ kind: "discipline" })}>Add discipline</Button> : undefined} headers={["Discipline", "Lead", "Status", "Notes", "Actions"]} rows={disciplines.map((x) => [x.name, x.lead_name ?? "—", <Badge key={x.id + "-status"} tone={designTone(x.status)}>{labels(x.status)}</Badge>, x.notes ?? "—", editable ? <Button key={x.id} small variant="quiet" onClick={() => setEditor({ kind: "discipline", row: x })}>Edit discipline</Button> : "Read only"])} /> : null}
       {section === "programme" ? <SubPanel title="Design programme" actions={editable ? <ButtonRow><Button onClick={() => setEditor({kind:"stage"})}>Add design stage</Button><Button disabled={busy || stages.length < 2} aria-pressed={reordering} onClick={() => setReordering(!reordering)}>{reordering ? "Finish reordering" : "Reorder stages"}</Button></ButtonRow> : undefined}>
@@ -130,6 +135,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
             {editable ? <ButtonRow><Button small disabled={busy} onClick={() => setEditor({kind:"stage",row:stage})}>Edit stage</Button>{reordering ? <><Button small aria-label={`Move ${stage.name} up`} disabled={busy || index===0} onClick={() => void move(stage,-1)}>Move up</Button><Button small aria-label={`Move ${stage.name} down`} disabled={busy || index===stages.length-1} onClick={() => void move(stage,1)}>Move down</Button></> : null}</ButtonRow> : null}
           </div>
         </li>)}</ol> : <EmptyState compact title="No design stages" hint="Record the agreed stages before assigning deliverables."/>}
+        <DesignPayments projectId={projectId} roles={roles} stages={stages} agreement={selected} />
       </SubPanel> : null}
       {section === "deliverables" ? <Register nested title="Deliverables" action={editable && stages.length ? <Button onClick={() => setEditor({ kind: "deliverable" })}>Add deliverable</Button> : undefined} headers={["Deliverable", "Stage / discipline", "Due", "Submitted", "Accepted", "Status", "Revision / document", "Actions"]} rows={deliverables.map((x) => [x.name, `${stages.find((s) => s.id === x.stage_id)?.name ?? "—"} / ${disciplines.find((d) => d.id === x.discipline_id)?.name ?? "Cross-disciplinary"}`, businessDate(x.due_date), businessDate(x.submitted_date), businessDate(x.accepted_date), <Badge key={x.id + "-status"} tone={designTone(x.status)}>{labels(x.status)}</Badge>, <div key={x.id + "-references"} className="document-references"><span><Icon name="history" />Revision: {x.revision_reference ?? "Not recorded"}</span><span><Icon name="documents" />Document: {x.document_reference ?? "Not recorded"}</span></div>, editable && !["accepted", "superseded", "cancelled"].includes(x.status) ? <Button key={x.id} small variant="quiet" onClick={() => setEditor({ kind: "deliverable", row: x })}>Update deliverable</Button> : "Historical / read only"])} /> : null}
       </Card>
@@ -137,6 +143,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
     {data && section === "history" ? <Register title="Agreement register and history" headers={["Consultant", "Agreement reference", "Status", "Agreement date", "Planned completion", "Details"]} rows={(data?.engagements ?? []).map((x) => [<Button key={x.id} variant="link" onClick={() => { setSelectedId(x.id); setSection("agreement"); }}><IdentityCell name={x.consultant_name} /></Button>, x.agreement_reference, <Badge key={x.id + "-status"} tone={designTone(x.status)}>{labels(x.status)}</Badge>, businessDate(x.agreement_date), businessDate(x.planned_completion_date), <Button key={x.id} small variant="quiet" onClick={() => { setSelectedId(x.id); setSection("agreement"); }}>View {x.status === "draft" ? "draft" : x.status === "active" ? "active agreement" : "history"}</Button>])} /> : null}
     </TabPanel>
     {terminating ? <ConfirmDialog title="Terminate consultant agreement" body={`Terminate ${terminating.agreement_reference} — ${terminating.consultant_name}? Recorded stages and deliverables remain in history; this agreement will no longer be editable as active work.`} confirmLabel="Terminate agreement" busy={busy} onCancel={() => { if (!busy) setTerminating(null); }} onConfirm={() => void run(() => api.transitionEngagement(projectId, terminating.id, "terminate"))} /> : null}
+    {deleting ? <PromptDialog title={`Delete draft ${deleting.consultant_name}`} label="Reason" hint="Only an unused draft can be deleted. Recorded programme, deliverables or payments block deletion. Audit history is retained." confirmLabel="Delete draft agreement" error={error} busy={busy} onCancel={() => { if (!busy) setDeleting(null); }} onSubmit={reason => { void run(async () => { await api.deleteEngagement(projectId, deleting, reason); setDeleting(null); setSelectedId(null); }); }} /> : null}
     {editor ? <ConsultantDialog editor={editor} stages={stages} disciplines={disciplines} busy={busy} error={error} onCancel={() => { if (!busy) { setEditor(null); setError(null); } }} onSubmit={(body) => void save(body)} /> : null}
   </div>;
 }
@@ -153,22 +160,22 @@ function Register({ title, action, headers, rows, nested }: { title: string; act
 
 function ConsultantDialog({ editor, stages, disciplines, busy, error, onCancel, onSubmit }: { editor: Editor; stages: ConsultantStage[]; disciplines: ConsultantDiscipline[]; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
   const { kind, row } = editor;
-  const [body, setBody] = useState<Record<string, unknown>>(() => ({ ...values(kind, row), ...(kind === "deliverable" && !row ? { stage_id: stages[0]?.id ?? "" } : {}) }));
+  const [body, setBody] = useState<Record<string, unknown>>(() => ({ ...values(kind, row), ...(kind === "engagement" && !row ? { engagement_type: editor.engagementType ?? "main" } : {}), ...(kind === "deliverable" && !row ? { stage_id: stages[0]?.id ?? "" } : {}) }));
   const set = (key: string, value: string) => setBody((old) => ({ ...old, [key]: value || null }));
   const title = `${row ? "Edit" : "Add"} ${kind === "engagement" ? "consultant agreement" : kind === "stage" ? "design stage" : kind}`;
-  const baseline = { ...values(kind, row), ...(kind === "deliverable" && !row ? { stage_id: stages[0]?.id ?? "" } : {}) };
-  return <RecordPage title={title} eyebrow="Consultant Engineer" onClose={onCancel}><DraftBoundary dirty={JSON.stringify(body) !== JSON.stringify(baseline)} busy={busy}><form onSubmit={event => { event.preventDefault(); onSubmit(body); }}>
+  const baseline = { ...values(kind, row), ...(kind === "engagement" && !row ? { engagement_type: editor.engagementType ?? "main" } : {}), ...(kind === "deliverable" && !row ? { stage_id: stages[0]?.id ?? "" } : {}) };
+  return <RecordPage title={title} eyebrow="Design" onClose={onCancel}><DraftBoundary dirty={JSON.stringify(body) !== JSON.stringify(baseline)} busy={busy}><form onSubmit={event => { event.preventDefault(); onSubmit(body); }}>
     {error ? <Notice tone="error">{error}</Notice> : null}
     {[
-      { title: "Identity and assignment", keys: ["consultant_name", "agreement_reference", "name", "lead_name", "stage_id", "discipline_id", "category", "revision_reference", "document_reference"] },
-      { title: "Programme and status", keys: ["agreement_date", "planned_start_date", "planned_completion_date", "planned_date", "forecast_date", "actual_completion_date", "due_date", "submitted_date", "accepted_date", "status"] },
+      { title: "Identity and assignment", keys: ["engagement_type", "consultant_name", "agreement_reference", "name", "lead_name", "stage_id", "discipline_id", "category", "revision_reference", "document_reference"] },
+      { title: "Programme and status", keys: ["agreed_payment_amount", "agreement_date", "planned_start_date", "planned_completion_date", "planned_date", "forecast_date", "actual_completion_date", "due_date", "submitted_date", "accepted_date", "status"] },
       { title: "Scope and notes", keys: ["scope_summary", "notes"] },
     ].map((group) => {
       const keys = fieldNames[kind].filter((key) => group.keys.includes(key));
       return keys.length ? <FormSection key={group.title} title={group.title}><FieldRow columns={group.title === "Scope and notes" ? 1 : 2}>{keys.map((key) => {
       const value = String(body[key] ?? "");
-      const options = key === "status" ? statuses[kind].map((x) => ({ id: x, name: labels(x) })) : key === "stage_id" ? stages : key === "discipline_id" ? [{ id: "", name: "Cross-disciplinary" }, ...disciplines] : null;
-      return <Field key={key} optional={!["name", "consultant_name", "agreement_reference", "stage_id", "status"].includes(key)} label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)}>{options ? <select className="input" aria-label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)} value={value} onChange={(e) => set(key, e.target.value)}>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : key === "notes" || key === "scope_summary" ? <textarea className="input" value={value} onChange={(e) => set(key, e.target.value)} /> : <input className="input" type={key.endsWith("_date") ? "date" : "text"} required={["name", "consultant_name", "agreement_reference"].includes(key)} value={value} onChange={(e) => set(key, e.target.value)} />}</Field>;
+      const options = key === "engagement_type" ? [{id:"main", name:"Main consultant"},{id:"subconsultant", name:"Sub-consultant (separate company)"}] : key === "status" ? statuses[kind].map((x) => ({ id: x, name: labels(x) })) : key === "stage_id" ? stages : key === "discipline_id" ? [{ id: "", name: "Cross-disciplinary" }, ...disciplines] : null;
+      return <Field key={key} optional={!["name", "consultant_name", "agreement_reference", "stage_id", "status"].includes(key)} label={key === "agreed_payment_amount" ? "Agreed stage payment (including VAT, project currency)" : key === "consultant_name" ? "Consultant company" : key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)}>{key === "agreed_payment_amount" ? <MoneyInput code={null} value={value} onChange={v => set(key, v)} /> : options ? <select disabled={key === "engagement_type" && !!row} className="input" aria-label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)} value={value} onChange={(e) => set(key, e.target.value)}>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : key === "notes" || key === "scope_summary" ? <textarea className="input" value={value} onChange={(e) => set(key, e.target.value)} /> : <input className="input" type={key.endsWith("_date") ? "date" : "text"} required={["name", "consultant_name", "agreement_reference"].includes(key)} value={value} onChange={(e) => set(key, e.target.value)} />}</Field>;
     })}</FieldRow></FormSection> : null;
     })}
     {kind === "discipline" ? <p>Examples: Architecture, MEP, Structural, QS, Supervision. Other discipline names are welcome.</p> : null}

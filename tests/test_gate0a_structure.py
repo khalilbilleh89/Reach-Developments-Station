@@ -36,7 +36,7 @@ def test_final_gate0a_navigation_contains_implemented_destinations() -> None:
         'label: "Permits"',
         'label: "Pre-Launch"',
         'label: "Inventory"',
-        'label: "Consultant Engineer"',
+        'label: "Design"',
     ):
         assert label in development
     for label in (

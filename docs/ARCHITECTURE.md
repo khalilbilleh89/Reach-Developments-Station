@@ -1400,3 +1400,12 @@ optimistic versions and immutable audit snapshots. See [Commercial FAQs](COMMERC
 Commercial > Agreements uses the projects domain for final client purchase drafts,
 with bounded PostgreSQL document storage and authorized downloads. It creates no
 sale or signature state. See [AGREEMENTS.md](AGREEMENTS.md) for scope and retention.
+
+### Design stage payments
+
+Consultant Engineering presents as Design and owns independent main/sub-consultant
+appointments, agreed stage fees, stage-to-cash attribution and optional PDF proof.
+It calls Cashflow's public services for cash changes and reads its movement model
+for attribution. Cashflow owns amounts, VAT and cash state; it does not import
+Design. A named database constraint protects linked cash edits from other entry
+points. See [Design payments](DESIGN_PAYMENTS.md).

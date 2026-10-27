@@ -217,7 +217,7 @@ function mount(file, name, dependencies, props) {
   const source = readFileSync(new URL(`../src/components/${file}.tsx`, import.meta.url), "utf8") + `\nexport { ${name} as TestedComponent };`;
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const ui = new Proxy({}, { get: (_, key) => key });
-  runInNewContext(`(function(require, exports) { ${code}\n})`, { setTimeout, clearTimeout })(key => {
+  runInNewContext(`(function(require, exports) { ${code}\n})`, { setTimeout, clearTimeout, crypto: globalThis.crypto })(key => {
     if (key === "react") return react;
     if (key in dependencies) return dependencies[key];
     if (key === "@/lib/api") return { ApiError: class extends Error { fieldErrors = []; } };
@@ -236,6 +236,45 @@ function mount(file, name, dependencies, props) {
   }, exports);
   return () => { cursor = 0; effects = []; const tree = exports.TestedComponent(props); effects.forEach(fn => fn()); return tree; };
 }
+test("Design payment retries a failed optional PDF without recording the payment twice", async () => {
+  const records = [], uploads = []; let fail = true, done = 0;
+  const currencyId = "74e15285-fd35-46dc-a3d1-d377459f8bbc";
+  const saved = { id: "payment", expense: {} };
+  const render = mount("projects/design/DesignPayments", "PaymentForm", {
+    "@/lib/api": { ApiError: class extends Error {}, consultantEngineering: {
+      recordPayment: async (...args) => { records.push(args); return saved; },
+      uploadPaymentProof: async (...args) => { uploads.push(args); if (fail) throw new Error("Connection lost"); },
+    } },
+    "@/lib/answer": { useAnswer: () => ({ status: "ready", data: { amount: "105.00", vat_amount: "5.00" } }) },
+    "@/lib/format": { todayISO: () => "2026-10-26", businessDate: value => value, money: value => value },
+  }, { projectId: "0fdbd0e1-90fc-4a24-b535-561b0bd67d77", stage: { id: "023e4172-7c6c-49dd-be1f-78bf4e5ea1ba", name: "Lighting", actual_completion_date: "2026-10-01", updated_at: "2026-10-01T10:00:00Z" }, agreement: { consultant_name: "Lighting Ltd" }, currencyId, currencyCode: "EUR", onDone() { done++; }, onCancel() {} });
+  const field = label => nodes(render()).find(n => n.type === "Field" && n.props.label === label).props.children;
+  field("Amount excluding VAT").props.onChange("100.00");
+  field("VAT (%)").props.onChange({ target: { value: "5" } });
+  const file = { name: "proof.pdf", size: 40 };
+  field("PDF proof of payment").props.onChange({ target: { files: [file] } });
+  nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} }); await settle();
+  assert.equal(records.length, 1); assert.equal(done, 0);
+  assert.equal(records[0][2].currency_id, currencyId);
+  assert.equal(records[0][2].expected_stage_updated_at, "2026-10-01T10:00:00Z");
+  assert.equal(records[0][2].amount_ex_vat, "100.00");
+  assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children.includes("Payment saved")));
+  assert.equal(field("Amount excluding VAT").props.disabled, true);
+  fail = false;
+  nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} }); await settle();
+  assert.equal(records.length, 1); assert.equal(uploads.length, 2);
+  assert.equal(uploads[1][2], file); assert.equal(done, 1);
+});
+
+test("Design actual payment reads are gated before loading for engineering-only users", () => {
+  let allowed;
+  const render = mount("projects/design/DesignPayments", "DesignPayments", {
+    "@/lib/answer": { useAnswer: gate => { allowed = gate; return { status: "off" }; } },
+    "@/lib/roles": { hasAnyRole: () => false },
+  }, { projectId: "project", roles: new Set(["engineer"]), stages: [], agreement: { id: "agreement" } });
+  render(); assert.equal(allowed, false);
+});
+
 function nodes(tree) {
   if (!tree || typeof tree !== "object") return [];
   if (Array.isArray(tree)) return tree.flatMap(nodes);
@@ -407,7 +446,7 @@ for (const component of ["ContractsSection", "VariationsSection", "CertificatesS
 for (const [component, dependency, readyData, label] of [
   ["DocumentsTab", "projects", [], "Retry documents"],
   ["PreLaunchTab", "prelaunch", { expenses: [], categories: [], recorded_amount: "0", confirmed_paid_amount: "0" }, "Retry Pre-Launch expenses"],
-  ["ConsultantEngineerTab", "consultantEngineering", { engagements: [], disciplines: [], stages: [], deliverables: [] }, "Retry Consultant Engineer"],
+  ["ConsultantEngineerTab", "consultantEngineering", { engagements: [], disciplines: [], stages: [], deliverables: [] }, "Retry Design"],
 ]) {
   test(`${component}: retry clears the read error without calling a write`, async () => {
     let failed = true; const calls = [];
