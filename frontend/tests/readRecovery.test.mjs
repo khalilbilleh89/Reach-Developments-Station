@@ -390,7 +390,7 @@ test("Pre-Launch VAT input sends net and percentage strings and waits for the ma
   }, { projectId: "project", currencyId: "currency", currencyCode: "USD", busy: false, error: null,
     onCancel() {}, onSubmit(body) { submitted = body; } });
   const change = (label, value) => nodes(render()).find(n => n.type === "Field" && n.props.label === label).props.children.props.onChange({ target: { value } });
-  change("Description / notes", "Design expense"); change("Payment / movement date", "2026-10-18");
+  change("Notes", "Design expense"); change("Payment / movement date", "2026-10-18");
   nodes(render()).find(n => n.type === "MoneyInput").props.onChange("1000.00");
   change("VAT (%)", "5"); render();
   await new Promise(resolve => setTimeout(resolve, 300));
@@ -406,6 +406,34 @@ test("Pre-Launch VAT input sends net and percentage strings and waits for the ma
   nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(submitted.amount_ex_vat, "1000.00"); assert.equal(submitted.vat_rate_percent, "10");
   assert.ok(!("amount" in submitted)); assert.equal(submitted.currency_id, "currency");
+});
+
+test("Authorities expense Notes are optional, retained after failure and clearable", async () => {
+  const submissions = [];
+  const props = { projectId: "fa058b5d-5300-473c-80ca-e4fd340d635d", currencyId: "0bea5f65-7f36-4473-bca7-351a226fda15", currencyCode: "USD", busy: false, error: null,
+    onCancel() {}, onSubmit(body) { submissions.push(body); } };
+  const render = mount("projects/PreLaunchTab", "ExpenseDialog", {
+    "@/lib/api": { prelaunch: { preview: async () => ({ amount: "100.00", vat_amount: "0.00" }) } },
+    "@/lib/format": landFormat,
+  }, props);
+  const notes = () => nodes(render()).find(n => n.type === "Field" && n.props.label === "Notes");
+  assert.equal(notes().props.optional, true);
+  assert.equal(notes().props.children.type, "textarea");
+  assert.ok(!notes().props.children.props.required);
+  assert.equal(nodes(render()).find(n => n.type === "RecordPage").props.title, "Add Authorities expense");
+  nodes(render()).find(n => n.type === "Field" && n.props.label === "Payment / movement date").props.children.props.onChange({ target: { value: "2026-10-29" } });
+  nodes(render()).find(n => n.type === "MoneyInput").props.onChange("100.00");
+  render(); await new Promise(resolve => setTimeout(resolve, 300));
+  const save = () => nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(nodes(render()).find(n => n.type === "Button" && n.props.type === "submit").props.disabled, false);
+  save(); assert.equal(submissions[0].notes, null);
+  notes().props.children.props.onChange({ target: { value: "Utility connection\nReceipt to follow" } });
+  save(); assert.equal(submissions[1].notes, "Utility connection\nReceipt to follow");
+  props.error = "Save refused";
+  assert.equal(notes().props.children.props.value, "Utility connection\nReceipt to follow");
+  assert.ok(nodes(render()).some(n => n.type === "Notice" && n.props.children === "Save refused"));
+  notes().props.children.props.onChange({ target: { value: "   " } });
+  save(); assert.equal(submissions[2].notes, null);
 });
 
 test("legacy VAT conversion clears the unknown total and failed previews retain the entered rate", async () => {
@@ -445,7 +473,7 @@ for (const component of ["ContractsSection", "VariationsSection", "CertificatesS
 
 for (const [component, dependency, readyData, label] of [
   ["DocumentsTab", "projects", [], "Retry documents"],
-  ["PreLaunchTab", "prelaunch", { expenses: [], categories: [], recorded_amount: "0", confirmed_paid_amount: "0" }, "Retry Pre-Launch expenses"],
+  ["PreLaunchTab", "prelaunch", { expenses: [], categories: [], recorded_amount: "0", confirmed_paid_amount: "0" }, "Retry Authorities expenses"],
   ["ConsultantEngineerTab", "consultantEngineering", { engagements: [], disciplines: [], stages: [], deliverables: [] }, "Retry Design"],
 ]) {
   test(`${component}: retry clears the read error without calling a write`, async () => {
