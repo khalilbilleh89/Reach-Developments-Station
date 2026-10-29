@@ -1,6 +1,7 @@
 """Five-year unlevered projections. Never changes asking prices or recorded cash."""
 
 from decimal import ROUND_HALF_UP, Decimal, localcontext
+from itertools import pairwise
 
 from app.modules.marketing.schemas import Projection, ProjectionYear, ScenarioWrite
 
@@ -15,7 +16,8 @@ def rounded(value: Decimal) -> Decimal:
 
 def annual_irr(flows: list[Decimal]) -> Decimal | None:
     """Unique annual IRR for conventional cash flows only; no guessed roots."""
-    if flows[0] >= 0 or any(value < 0 for value in flows[1:]) or not any(flows[1:]):
+    signs = [value > 0 for value in flows if value != 0]
+    if not signs or signs[0] or sum(a != b for a, b in pairwise(signs)) != 1:
         return None
 
     def residual(rate: Decimal) -> Decimal:
@@ -44,10 +46,13 @@ def calculate(s: ScenarioWrite, area: Decimal, price: Decimal) -> Projection:
         initial = rounded(price * (ONE + s.acquisition_cost_percent / HUNDRED) + s.setup_cost)
         rows = []
         for year in range(1, 7):
+            rental_months = min(12, max(0, year * 12 - s.rental_delay_months))
             gross = rounded(
                 area
                 * s.annual_rent_per_sqm
                 * (ONE + s.income_growth_percent / HUNDRED) ** (year - 1)
+                * Decimal(rental_months)
+                / 12
             )
             vacancy = rounded(gross * s.vacancy_percent / HUNDRED)
             effective = gross - vacancy
@@ -59,22 +64,36 @@ def calculate(s: ScenarioWrite, area: Decimal, price: Decimal) -> Projection:
             rows.append(
                 ProjectionYear(
                     year=year,
+                    rental_months=rental_months,
                     gross_revenue=gross,
                     vacancy_amount=vacancy,
                     effective_revenue=effective,
                     expenses=expense,
                     noi=effective - expense,
                     property_value=rounded(
-                        price * (ONE + s.appreciation_percent / HUNDRED) ** year
+                        (s.current_value or price)
+                        * (ONE + s.appreciation_percent / HUNDRED) ** year
                     ),
                     cashflow=effective - expense,
+                    gross_yield_percent=rounded(gross / price * HUNDRED),
+                    net_yield_percent=rounded((effective - expense) / initial * HUNDRED),
+                    cumulative_noi=ZERO,
+                    cumulative_cashflow=ZERO,
+                    discounted_cashflow=ZERO,
                 )
             )
-        cap_value = rounded(max(ZERO, rows[5].noi) / (s.exit_cap_percent / HUNDRED))
+        cap_value = (
+            rounded(rows[5].noi / (s.exit_cap_percent / HUNDRED)) if rows[5].noi > 0 else None
+        )
         years = rows[:5]
         appreciation_value = years[-1].property_value
         exit_value = appreciation_value if s.exit_method == "appreciation" else cap_value
-        proceeds = rounded(exit_value * (ONE - s.selling_cost_percent / HUNDRED))
+        if exit_value is None:
+            raise ValueError(
+                "Cap-rate resale requires positive year-six NOI; zero is not a valuation."
+            )
+        selling_costs = rounded(exit_value * s.selling_cost_percent / HUNDRED)
+        proceeds = exit_value - selling_costs
         years[-1].cashflow += proceeds
         flows = [-initial, *(row.cashflow for row in years)]
         irr = annual_irr(flows)
@@ -82,18 +101,53 @@ def calculate(s: ScenarioWrite, area: Decimal, price: Decimal) -> Projection:
         total_payback = None
         rental_sum = ZERO
         total_sum = ZERO
+        discounted_sum = -initial
+        discounted_payback = None
         for row in years:
             if (
                 rental_payback is None
                 and row.noi > 0
                 and rental_sum < initial <= rental_sum + row.noi
             ):
-                rental_payback = rounded(Decimal(row.year - 1) + (initial - rental_sum) / row.noi)
+                rental_payback = Decimal(row.year)
             rental_sum += row.noi
             total_sum += row.cashflow
+            row.cumulative_noi = rental_sum
+            row.cumulative_cashflow = total_sum - initial
+            row.discounted_cashflow = rounded(
+                row.cashflow / (ONE + s.discount_percent / HUNDRED) ** row.year
+            )
+            discounted_sum += row.discounted_cashflow
+            if discounted_payback is None and discounted_sum >= 0:
+                discounted_payback = row.year
             if total_payback is None and total_sum >= initial:
                 total_payback = row.year
         return Projection(
+            valuation_basis="Recorded unit valuation"
+            if s.current_value
+            else "Purchase price proxy; no current valuation supplied",
+            resale_value=exit_value,
+            selling_costs=selling_costs,
+            acquisition_costs=initial - price - s.setup_cost,
+            total_rental_income=sum((r.effective_revenue for r in years), ZERO),
+            total_operating_expenses=sum((r.expenses for r in years), ZERO),
+            total_noi=rental_sum,
+            rental_return_percent=rounded(rental_sum / initial * HUNDRED),
+            total_profit=total_sum - initial,
+            present_value_of_future_cashflows=discounted_sum + initial,
+            discounted_payback_year=discounted_payback,
+            warnings=[
+                "Projection from assumptions, not an independently verified market valuation.",
+                f"Purchase paid at inception; {s.rental_delay_months} months before rent starts; "
+                "annual receipts at year end.",
+                "Operating costs apply during rental delay; growth runs from year one.",
+                "No financing, instalment schedule, personal income or capital gains tax modelled.",
+                *(
+                    ["Income capitalisation unavailable: year-six NOI is non-positive."]
+                    if cap_value is None
+                    else []
+                ),
+            ],
             simple_payback_years=rounded(initial / years[0].noi) if years[0].noi > 0 else None,
             initial_investment=initial,
             gross_yield_percent=rounded(years[0].gross_revenue / price * HUNDRED),
@@ -108,15 +162,7 @@ def calculate(s: ScenarioWrite, area: Decimal, price: Decimal) -> Projection:
             irr_reason=None
             if irr is not None
             else "No unique conventional annual IRR within the solver range.",
-            npv=rounded(
-                sum(
-                    (
-                        value / (ONE + s.discount_percent / HUNDRED) ** year
-                        for year, value in enumerate(flows)
-                    ),
-                    ZERO,
-                )
-            ),
+            npv=discounted_sum,
             rental_payback_years=rental_payback,
             total_payback_year=total_payback,
             years=years,

@@ -66,3 +66,27 @@ test("missing projection is an explicit unavailable state", () => {
   assert.equal(tree.props.children, "No approved area");
   assert.equal(find(tree, "KeyValue").length, 0);
 });
+
+test("unit analysis renders server resale, yield and unavailable cap valuation exactly", () => {
+  const h = harness("MarketingEconomicsTab", {
+    "@/lib/format": { money: (value, code) => value == null ? "Unavailable" : `${code ?? ""} ${value}`, businessDate: value => value },
+  });
+  const result = {
+    currency_id: "00000000-0000-0000-0000-000000000001", scenario_version: 4,
+    source_scope: "Unit override", assumptions: null,
+    projection: {
+      resale_value: "1234567890123.45", net_yield_percent: "-1.25", cap_value: null,
+      valuation_basis: "Recorded unit valuation", warnings: ["Synthetic projection"],
+      irr_percent: null, irr_reason: "Multiple sign transitions", rental_payback_years: null,
+      total_payback_year: null, discounted_payback_year: null, simple_payback_years: null,
+      years: [{ year: 1, rental_months: 6, gross_yield_percent: "2.50", net_yield_percent: "-1.25", cumulative_cashflow: "-101250.00" }],
+    },
+  };
+  const tree = h.render("RentalProjection", { result });
+  const serialized = JSON.stringify(tree);
+  assert.ok(serialized.includes("EUR 1234567890123.45"));
+  assert.ok(serialized.includes("-1.25%"));
+  assert.ok(serialized.includes("Unavailable: non-positive year-six NOI"));
+  assert.ok(serialized.includes("Multiple sign transitions"));
+  assert.ok(!serialized.includes(result.currency_id));
+});

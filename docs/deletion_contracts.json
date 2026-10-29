@@ -733,7 +733,7 @@
     "status": "implemented",
     "removal_route": "POST /scenarios/{record_id}/delete",
     "ui_file": "frontend/src/components/projects/marketing/MarketingEconomicsTab.tsx",
-    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor."
+    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor. Valuation evidence and rental delay remain in retained scenario/audit history; optional valuation fields clear together in the editor."
   },
   {
     "handler": "marketing.create_indicator",
