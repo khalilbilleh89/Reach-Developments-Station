@@ -6037,6 +6037,22 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
   overflow-wrap: anywhere;
 }
 
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
+  gap: var(--space-4);
+  align-items: stretch;
+}
+.faq-card { min-width: 0; display: flex; }
+.faq-card > .card { width: 100%; display: flex; flex-direction: column; }
+.faq-card .card-header { background: var(--surface-secondary); border-bottom: 1px solid var(--line-soft); }
+.faq-card .card-title { overflow-wrap: anywhere; }
+.faq-card .card-body { flex: 1; display: flex; }
+.faq-card-content { width: 100%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.faq-answer-preview { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.faq-copy-status { min-height: 1.5em; color: var(--text-secondary); font-size: var(--text-sm); }
+.faq-card-actions { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--line-soft); width: 100%; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
 /* Marketing content and rental comparisons. */
 .marketing-prose { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
 .marketing-bullets { padding-inline-start: var(--space-6); display: grid; gap: var(--space-2); }
