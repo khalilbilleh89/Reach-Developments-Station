@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
-from app.modules.construction.models import TechnicalSpecification
+from app.modules.construction.models import SpecificationImage, TechnicalSpecification
 from app.modules.construction.permissions import CONSTRUCTION_READER_ROLES
 from app.modules.inventory.permissions import visible_phase_ids
 from app.modules.projects.permissions import require_project_access, require_project_role
@@ -38,8 +38,8 @@ class SpecificationInput(StrictRequest):
         "other",
     ]
     title: str = Field(min_length=1, max_length=200)
-    scope: Literal["project", "units"]
-    applies_to: str = Field(min_length=1, max_length=300)
+    scope: Literal["project", "units", "buildable"]
+    applies_to: str = Field(default="", max_length=300)
     description: str = Field(min_length=1, max_length=4000)
     buyer_benefit: str = Field(default="", max_length=2000)
     brand_model: str = Field(default="", max_length=300)
@@ -57,15 +57,18 @@ class SpecificationInput(StrictRequest):
 
     @model_validator(mode="after")
     def validate_text(self) -> "SpecificationInput":
-        if not self.title or not self.applies_to or not self.description:
-            raise ValueError("Item, applicability and specification must not be blank.")
-        if self.status == "confirmed" and (
-            not self.source_reference or self.inclusion == "undecided"
-        ):
-            raise ValueError(
-                "Confirmed specifications need a source reference and a decided inclusion status."
-            )
+        if not self.title or not self.description:
+            raise ValueError("Item and specification must not be blank.")
+        if self.status == "confirmed" and self.inclusion == "undecided":
+            raise ValueError("Confirmed specifications need a decided inclusion status.")
         return self
+
+
+class SpecificationImageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    filename: str
+    created_at: datetime
 
 
 class SpecificationRead(BaseModel):
@@ -84,6 +87,7 @@ class SpecificationRead(BaseModel):
     source_reference: str
     version: int
     updated_at: datetime
+    images: list[SpecificationImageRead] = Field(default_factory=list)
 
 
 def authorize(
@@ -191,7 +195,15 @@ def delete(
     row = _row(session, project_id, specification_id)
     before = SpecificationRead.model_validate(row).model_dump(mode="json")
     # Confirmed content remains recoverable evidence; drafts have no dependents.
-    if row.status == "confirmed":
+    has_images = (
+        session.scalar(
+            select(SpecificationImage.id)
+            .where(SpecificationImage.specification_id == row.id)
+            .limit(1)
+        )
+        is not None
+    )
+    if row.status == "confirmed" or has_images:
         row.removed_at = datetime.now(UTC)
     else:
         session.delete(row)

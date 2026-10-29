@@ -492,4 +492,5 @@ class TestFinancialHistoryIsNotDeletable:
             "/api/v1/projects/{project_id}/construction/variations/{variation_id}",
             "/api/v1/projects/{project_id}/construction/certificates/{certificate_id}",
             "/api/v1/projects/{project_id}/construction/technical-specifications/{specification_id}",
+            "/api/v1/projects/{project_id}/construction/technical-specifications/{specification_id}/images/{image_id}",
         }

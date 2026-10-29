@@ -78,15 +78,9 @@ def test_sales_reads_specs_without_cost_access(
     assert reader.get(url(uuid.uuid4())).status_code == 404
 
 
-def test_confirmed_specs_require_evidence_and_retain_deleted_history(
+def test_confirmed_specs_require_decided_inclusion_and_retain_deleted_history(
     admin_client: TestClient, project_id: str, db: Session
 ) -> None:
-    assert (
-        admin_client.post(
-            url(project_id), json=payload(status="confirmed", inclusion="included")
-        ).status_code
-        == 422
-    )
     assert (
         admin_client.post(
             url(project_id), json=payload(status="confirmed", source_reference="Drawing A1")
@@ -144,7 +138,6 @@ def test_wrong_project_and_phase_scope_are_refused(
     "changes",
     [
         {"title": " "},
-        {"applies_to": " "},
         {"description": " "},
         {"category": "invented"},
         {"unexpected": True},
@@ -234,3 +227,204 @@ def test_buyer_benefit_migration_preserves_records_and_blocks_loss(
     db.rollback()
     with pytest.raises(RuntimeError, match="Buyer benefits exist"):
         command.downgrade(alembic_config(), "0050_project_matrices")
+
+
+def image_bytes() -> bytes:
+    import io
+
+    from PIL import Image
+
+    output = io.BytesIO()
+    Image.new("RGB", (3, 2), "blue").save(output, format="PNG")
+    return output.getvalue()
+
+
+def test_optional_images_roundtrip_access_removal_and_parent_retention(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    from app.modules.construction.models import SpecificationImage, TechnicalSpecification
+
+    created = admin_client.post(url(project_id), json=payload()).json()
+    assert created["images"] == []
+    path = f"{url(project_id)}/{created['id']}"
+    uploaded = admin_client.post(
+        path + "/images", params={"filename": "folder/tile.png"}, content=image_bytes()
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    image = uploaded.json()
+    assert image["filename"] == "tile.png"
+    assert "image_data" not in image
+    assert admin_client.get(url(project_id)).json()[0]["images"][0]["id"] == image["id"]
+    file_path = path + "/images/" + image["id"] + "/file"
+    reader_user = make_user(db, email="image-sales@example.test", roles=("sales_advisor",))
+    grant_access(admin_client, project_id, reader_user)
+    reader = client_for(reader_user.email)
+    response = reader.get(file_path)
+    assert response.status_code == 200 and response.headers["content-type"] == "image/png"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert (
+        reader.post(
+            path + "/images", params={"filename": "no.png"}, content=image_bytes()
+        ).status_code
+        == 403
+    )
+    assert (
+        reader.delete(path + "/images/" + image["id"], params={"reason": "No"}).status_code == 403
+    )
+    assert (
+        admin_client.delete(path + "/images/" + image["id"], params={"reason": " "}).status_code
+        == 422
+    )
+    assert (
+        admin_client.delete(
+            path + "/images/" + image["id"], params={"reason": "Replaced sample"}
+        ).status_code
+        == 204
+    )
+    assert admin_client.get(file_path).status_code == 404
+    assert admin_client.get(url(project_id)).json()[0]["images"] == []
+    assert (
+        admin_client.delete(path + "/images/" + image["id"], params={"reason": "Again"}).status_code
+        == 404
+    )
+    assert (
+        admin_client.delete(path, params={"reason": "Remove draft with image history"}).status_code
+        == 204
+    )
+    assert admin_client.get(url(project_id)).json() == []
+    stored = db.get(SpecificationImage, uuid.UUID(image["id"]))
+    assert stored.removed_at and stored.image_data
+    assert db.get(TechnicalSpecification, uuid.UUID(created["id"])).removed_at
+    assert (
+        db.scalar(
+            select(AuditEvent).where(
+                AuditEvent.entity_type == "specification_image",
+                AuditEvent.action == "specification_image.deleted",
+            )
+        ).reason
+        == "Replaced sample"
+    )
+
+
+def test_images_enforce_parent_project_and_phase_scope(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    from app.modules.projects.models import UserProjectAccess
+
+    created = admin_client.post(url(project_id), json=payload()).json()
+    other = admin_client.post(url(project_id), json=payload(title="Other item")).json()
+    path = f"{url(project_id)}/{created['id']}"
+    image = admin_client.post(
+        path + "/images", params={"filename": "image.png"}, content=image_bytes()
+    ).json()
+    wrong_parent = f"{url(project_id)}/{other['id']}/images/{image['id']}"
+    assert admin_client.get(wrong_parent + "/file").status_code == 404
+    assert admin_client.delete(wrong_parent, params={"reason": "Wrong parent"}).status_code == 404
+    wrong_project = f"{url(uuid.uuid4())}/{created['id']}/images/{image['id']}"
+    assert admin_client.get(wrong_project + "/file").status_code == 404
+    actor = make_user(db, email="phase-images@example.test", roles=("design_engineering",))
+    grant_access(admin_client, project_id, actor)
+    access = db.scalar(select(UserProjectAccess).where(UserProjectAccess.user_id == actor.id))
+    access.phase_scope = "selected"
+    db.commit()
+    limited = client_for(actor.email)
+    assert limited.get(path + "/images/" + image["id"] + "/file").status_code == 403
+    assert (
+        limited.post(
+            path + "/images", params={"filename": "image.png"}, content=image_bytes()
+        ).status_code
+        == 403
+    )
+    assert admin_client.delete(path, params={"reason": "Remove parent"}).status_code == 204
+    assert admin_client.get(path + "/images/" + image["id"] + "/file").status_code == 404
+    assert (
+        admin_client.post(
+            path + "/images", params={"filename": "image.png"}, content=image_bytes()
+        ).status_code
+        == 404
+    )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"not an image",
+        b'<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+        b"\x89PNG\r\n\x1a\n",
+        b"x" * (10 * 1024 * 1024 + 1),
+    ],
+    ids=["invalid", "svg", "truncated", "too-large"],
+)
+def test_invalid_images_never_create_a_record(
+    admin_client: TestClient, project_id: str, db: Session, data: bytes
+) -> None:
+    created = admin_client.post(url(project_id), json=payload()).json()
+    response = admin_client.post(
+        f"{url(project_id)}/{created['id']}/images", params={"filename": "image.png"}, content=data
+    )
+    assert response.status_code == 422, response.text
+    assert db.scalar(text("SELECT count(*) FROM specification_images")) == 0
+
+
+def test_image_processing_discards_metadata_and_enforces_limit(
+    admin_client: TestClient, project_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import io
+
+    from PIL import Image, PngImagePlugin
+
+    from app.modules.construction import specification_images
+
+    created = admin_client.post(url(project_id), json=payload()).json()
+    path = f"{url(project_id)}/{created['id']}/images"
+    source = io.BytesIO()
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text("private-note", "Remove this metadata")
+    Image.new("RGB", (2, 2), "red").save(source, format="PNG", pnginfo=metadata)
+    monkeypatch.setattr(specification_images, "MAX_IMAGES", 1)
+    first = admin_client.post(path, params={"filename": "sample.png"}, content=source.getvalue())
+    assert first.status_code == 201
+    body = admin_client.get(path + "/" + first.json()["id"] + "/file").content
+    assert b"Remove this metadata" not in body
+    assert (
+        admin_client.post(
+            path, params={"filename": "second.png"}, content=image_bytes()
+        ).status_code
+        == 422
+    )
+
+
+def test_image_migration_roundtrip_and_retention(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    db.rollback()
+    command.downgrade(alembic_config(), "0052_design_payments")
+    command.upgrade(alembic_config(), "head")
+    created = admin_client.post(url(project_id), json=payload()).json()
+    response = admin_client.post(
+        f"{url(project_id)}/{created['id']}/images",
+        params={"filename": "image.png"},
+        content=image_bytes(),
+    )
+    assert response.status_code == 201
+    db.rollback()
+    with pytest.raises(RuntimeError, match="retained evidence"):
+        command.downgrade(alembic_config(), "0052_design_payments")
+
+
+def test_optional_fields_and_buildable_area_persist_without_source(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    values = payload(scope="buildable", status="confirmed", inclusion="included")
+    values.pop("applies_to")
+    response = admin_client.post(url(project_id), json=values)
+    assert response.status_code == 201, response.text
+    row = response.json()
+    assert row["scope"] == "buildable" and row["applies_to"] == "" and row["source_reference"] == ""
+    assert row["images"] == []
+    saved = admin_client.get(url(project_id)).json()[0]
+    assert saved["id"] == row["id"] and saved["source_reference"] == ""
+    db.rollback()
+    with pytest.raises(RuntimeError, match="cannot be represented"):
+        command.downgrade(alembic_config(), "0052_design_payments")
