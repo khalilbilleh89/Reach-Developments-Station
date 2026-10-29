@@ -349,6 +349,13 @@ def read(session: Session, project: Project, actor: ActorContext) -> OperationsR
                 milestones=milestones,
                 completed_count=sum(row.completed is True for row in applicable_rows),
                 applicable_count=len(applicable_rows),
+                completion_percent=(
+                    100
+                    * sum(row.completed is True for row in applicable_rows)
+                    // len(applicable_rows)
+                )
+                if applicable_rows
+                else 0,
                 next_stage=next(
                     (
                         active[row.stage_id].label
@@ -374,6 +381,11 @@ def read(session: Session, project: Project, actor: ActorContext) -> OperationsR
                 not_applicable=sum(row.applicable is False for row in rows),
                 purpose_unknown=sum(row.applicable is None for row in rows),
                 applicable=len(applicable),
+                completion_percent=(
+                    100 * sum(row.completed is True for row in applicable) // len(applicable)
+                )
+                if applicable
+                else 0,
                 missing_dates=sum(
                     row.completed is True and row.completed_date is None for row in applicable
                 ),
@@ -404,6 +416,20 @@ def save_buyer(
     permissions.require_visible_client(session, project=project, actor=actor, client_id=client_id)
     answer = read(session, project, actor)
     buyer = next(row for row in answer.buyers if row.id == client_id)
+    apply_buyer_update(session, project, actor, answer, buyer, payload)
+    session.commit()
+
+
+def apply_buyer_update(
+    session: Session,
+    project: Project,
+    actor: ActorContext,
+    answer: OperationsRead,
+    buyer: BuyerRead,
+    payload: BuyerInput,
+) -> None:
+    """Stage one authorized update under the caller-held project lock; never commit."""
+    client_id = buyer.id
     if (
         buyer.version != payload.expected_version
         or answer.pipeline_version != payload.pipeline_version
@@ -463,7 +489,7 @@ def save_buyer(
         after=payload.model_dump(mode="json"),
         reason=payload.reason.strip(),
     )
-    session.commit()
+    session.flush()
 
 
 def delete_buyer_progress(
