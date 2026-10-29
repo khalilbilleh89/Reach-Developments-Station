@@ -1,5 +1,11 @@
 # Pre-Launch expense VAT
 
+As of the 29 October 2026 amendment, this workspace is labelled **Authorities**.
+Expense entry/editing offers optional multiline **Notes** (up to 2,000 characters).
+Blank notes save as null and the register displays the movement reference instead.
+Existing notes remain editable. The internal `prelaunch` navigation key and
+`/pre-launch` API URLs remain stable; no schema or VAT calculation changes.
+
 Owner request: 18 October 2026. Governing policy: `ENGINEERING_RULES.md`.
 
 Add expense accepts **Amount excluding VAT** and optional **VAT (%)**. A blank

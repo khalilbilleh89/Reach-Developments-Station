@@ -42,7 +42,7 @@ const CATEGORIES = [
   ["developer_overhead", "Developer overhead"],
   ["marketing", "Marketing"],
   ["tax", "Tax"],
-  ["other", "Other pre-launch expense"],
+  ["other", "Other development expense"],
 ] as const;
 
 const categoryLabel = (key: string) => CATEGORIES.find(([value]) => value === key)?.[1] ?? key;
@@ -95,7 +95,7 @@ export function PreLaunchTab({
       setRegister(await prelaunch.register(projectId));
       setReadError(null);
     } catch (caught) {
-      setReadError(caught instanceof ApiError ? caught.message : "Could not load Pre-Launch expenses.");
+      setReadError(caught instanceof ApiError ? caught.message : "Could not load Authorities expenses.");
     } finally {
       setRetrying(false);
     }
@@ -146,12 +146,12 @@ export function PreLaunchTab({
     <div className="stack">
       <PageHeader
         icon="money"
-        title="Pre-Launch"
+        title="Authorities"
         subtitle={sectionDescription("prelaunch")}
         actions={canRecord ? <Button variant="primary" onClick={() => setAdding(true)}>Add expense</Button> : undefined}
       />
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Pre-Launch expenses"}</Button></> : null}
+      {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Authorities expenses"}</Button></> : null}
       {register ? (
         <Card tone="command" title="Expense position"><Position compact>
           <PositionFigure label="Recorded amount" value={money(register.recorded_amount, currencyCode)} note="Not confirmed cash" />
@@ -159,14 +159,14 @@ export function PreLaunchTab({
         </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment. Master Administrator / Boss can confirm their own expenses.</p></Card>
       ) : null}
       <div className="prelaunch-ledger-layout">
-      <Card title="Expense register" description="Search descriptions, counterparties, references or categories. Filters apply to the register; position totals remain project-wide." actions={<Button small aria-pressed={schedule} onClick={() => setSchedule(!schedule)}>{schedule ? "Show entries" : "Show schedule"}</Button>}>
+      <Card title="Expense register" description="Search notes, counterparties, references or categories. Filters apply to the register; position totals remain project-wide." actions={<Button small aria-pressed={schedule} onClick={() => setSchedule(!schedule)}>{schedule ? "Show entries" : "Show schedule"}</Button>}>
         <FieldRow><Field label="Search expenses"><input className="input" type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field><Field label="Expense status"><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option><option value="recorded">Recorded</option><option value="confirmed">Confirmed</option><option value="reversed">Reversed</option><option value="removed">Removed</option></select></Field></FieldRow>
         {register ? <p className="register-result-count">{expenses.length} matching {expenses.length === 1 ? "entry" : "entries"}{search || status ? <Button small variant="link" onClick={() => { setSearch(""); setStatus(""); }}>Clear filters</Button> : null}</p> : null}
-        {register === null ? readError ? null : <Loading label="Loading Pre-Launch expenses" shape="rows" /> : register.expenses.length === 0 ? (
-          <div className="card-body"><EmptyState title="No Pre-Launch expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
+        {register === null ? readError ? null : <Loading label="Loading Authorities expenses" shape="rows" /> : register.expenses.length === 0 ? (
+          <div className="card-body"><EmptyState title="No Authorities expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : expenses.length === 0 ? <EmptyState title="No matching expenses" actions={<Button onClick={() => { setSearch(""); setStatus(""); }}>Reset filters</Button>} /> : (
-          schedule ? <TableScroll label="Pre-Launch expense register" fixedFirst>
-            <thead><tr><th scope="col">Description</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Total including VAT</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
+          schedule ? <TableScroll label="Authorities expense register" fixedFirst>
+            <thead><tr><th scope="col">Notes / reference</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Total including VAT</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
             <tbody>{expenses.map((row) => (
               <tr key={row.id}>
                 <th scope="row" className="cell-prose">{row.notes ?? row.movement_reference}</th>
@@ -205,7 +205,7 @@ function ExpenseVat({ row, currencyCode }: { row: PreLaunchExpense; currencyCode
 
 function ExpenseDialog({ projectId, initial, currencyId, currencyCode, busy, error, onCancel, onSubmit }: { projectId: string; initial?: PreLaunchExpense; currencyId: string; currencyCode: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
   const [category, setCategory] = useState<string>(initial?.category ?? "permits");
-  const [description, setDescription] = useState(initial?.notes ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [amount, setAmount] = useState(initial?.amount_ex_vat ?? initial?.amount ?? "");
   const [vatRate, setVatRate] = useState(initial?.vat_rate_percent ?? "");
   const [legacyTotal, setLegacyTotal] = useState(!!initial && initial.amount_ex_vat == null);
@@ -229,18 +229,18 @@ function ExpenseDialog({ projectId, initial, currencyId, currencyCode, busy, err
   const [counterparty, setCounterparty] = useState(initial?.counterparty_reference ?? "");
   const [reference, setReference] = useState(initial?.invoice_reference ?? "");
   const [evidence, setEvidence] = useState(initial?.evidence_reference ?? "");
-  const dirty = category !== (initial?.category ?? "permits") || description !== (initial?.notes ?? "") || amount !== (initial?.amount_ex_vat ?? initial?.amount ?? "") || vatRate !== (initial?.vat_rate_percent ?? "") || legacyTotal !== (!!initial && initial.amount_ex_vat == null) || date !== (initial?.movement_date ?? "") || counterparty !== (initial?.counterparty_reference ?? "") || reference !== (initial?.invoice_reference ?? "") || evidence !== (initial?.evidence_reference ?? "");
-  const submit = () => onSubmit({ category, ...(legacyTotal ? { amount } : { amount_ex_vat: amount, vat_rate_percent: vatRate || "0" }), movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: description });
-  return <RecordPage title={initial ? "Edit Pre-Launch expense" : "Add Pre-Launch expense"} eyebrow="Pre-Launch" subtitle="Record an expense and its payment evidence" onClose={onCancel}><DraftBoundary dirty={dirty} busy={busy}><form onSubmit={event => { event.preventDefault(); if (!busy && description.trim() && amount && date && preview) submit(); }}>
+  const dirty = category !== (initial?.category ?? "permits") || notes !== (initial?.notes ?? "") || amount !== (initial?.amount_ex_vat ?? initial?.amount ?? "") || vatRate !== (initial?.vat_rate_percent ?? "") || legacyTotal !== (!!initial && initial.amount_ex_vat == null) || date !== (initial?.movement_date ?? "") || counterparty !== (initial?.counterparty_reference ?? "") || reference !== (initial?.invoice_reference ?? "") || evidence !== (initial?.evidence_reference ?? "");
+  const submit = () => onSubmit({ category, ...(legacyTotal ? { amount } : { amount_ex_vat: amount, vat_rate_percent: vatRate || "0" }), movement_date: date, ...(initial ? {} : { currency_id: currencyId }), counterparty_reference: counterparty || null, invoice_reference: reference || null, evidence_reference: evidence || null, notes: notes.trim() || null });
+  return <RecordPage title={initial ? "Edit Authorities expense" : "Add Authorities expense"} eyebrow="Authorities" subtitle="Record an expense and its payment evidence" onClose={onCancel}><DraftBoundary dirty={dirty} busy={busy}><form onSubmit={event => { event.preventDefault(); if (!busy && amount && date && preview) submit(); }}>
     <p className="footnote">This records an entry. It becomes cash after confirmation. Master Administrator / Boss may self-confirm; other users need a different authorised confirmer.</p>
     {error ? <Notice tone="error">{error}</Notice> : null}
-    <FormSection title="Expense"><Field label="Description / notes"><input className="input" required maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
+    <FormSection title="Expense"><Field label="Notes" optional hint="Add any extra details about this expense, or leave blank."><textarea className="input" maxLength={2000} value={notes} onChange={(event) => setNotes(event.target.value)} /></Field>
     <FieldRow><Field label="Category"><select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label={legacyTotal ? "Existing total (VAT breakdown unknown)" : "Amount excluding VAT"}><MoneyInput code={currencyCode} value={amount} onChange={setAmount} /></Field></FieldRow>
     {legacyTotal ? <Notice tone="info">This entry has no recorded VAT breakdown. Its total is preserved. <Button onClick={() => { setLegacyTotal(false); setAmount(""); }}>Enter VAT breakdown</Button></Notice> : <Field label="VAT (%)" optional hint="Leave blank or enter 0 when VAT does not apply."><input className="input" type="number" min="0" max="100" step="0.0001" value={vatRate} onChange={event => setVatRate(event.target.value)} /></Field>}
     {previewError ? <Notice tone="error">{previewError} <Button onClick={() => setRetry(retry + 1)}>Retry total</Button></Notice> : preview ? <Position compact><PositionFigure label="VAT amount" value={preview.vat_amount == null ? "Not recorded" : money(preview.vat_amount, currencyCode)} /><PositionFigure lead label="Total including VAT" value={money(preview.amount, currencyCode)} /></Position> : amount ? <Loading label="Calculating expense total" /> : null}
     </FormSection><FormSection title="Payment and evidence"><FieldRow><Field label="Payment / movement date"><input className="input" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></Field><Field label="Counterparty / authority" optional><input className="input" value={counterparty} onChange={(event) => setCounterparty(event.target.value)} /></Field></FieldRow>
     <FieldRow><Field label="Reference" optional><input className="input" value={reference} onChange={(event) => setReference(event.target.value)} /></Field><Field label="Evidence / proof" optional><input className="input" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></Field></FieldRow>
     </FormSection>
-    <FormActions><Button variant="primary" type="submit" disabled={busy || !description.trim() || !amount || !date || !preview}>{busy ? "Saving…" : initial ? "Save changes" : "Record expense"}</Button><Button data-leaves-editor disabled={busy} onClick={onCancel}>Cancel</Button></FormActions>
+    <FormActions><Button variant="primary" type="submit" disabled={busy || !amount || !date || !preview}>{busy ? "Saving…" : initial ? "Save changes" : "Record expense"}</Button><Button data-leaves-editor disabled={busy} onClick={onCancel}>Cancel</Button></FormActions>
   </form></DraftBoundary></RecordPage>;
 }
