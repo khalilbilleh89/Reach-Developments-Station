@@ -6,7 +6,7 @@ import { emails } from "@/lib/api/emails";
 import type { Email, EmailCategory } from "@/lib/api/emails";
 import { useAnswer } from "@/lib/answer";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
-import { Button, Card, DataToolbar, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PageHeader, RecordPage, Tabs, TabPanel } from "@/components/ui";
+import { Button, Card, DataToolbar, Disclosure, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PageHeader, RecordPage, Tabs, TabPanel } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 const categories: {key: EmailCategory; label: string}[] = [
@@ -38,7 +38,7 @@ export function EmailsTab({projectId, roles}: {projectId: string; roles: Set<str
       {rows.length ? rows.map(row => <Card key={`${row.id}:${row.version}`} title={row.title} actions={<Button onClick={() => setComposer(row)}>Customize &amp; copy</Button>}>
         <div className="stack">
           <p className="faq-answer" dir="auto"><strong>Subject: </strong>{row.subject}</p>
-          <details><summary>Preview email</summary><p className="faq-answer" dir="auto">{row.body}</p></details>
+          <Disclosure title="Preview email"><p className="faq-answer" dir="auto">{row.body}</p></Disclosure>
           {answer.data.can_edit ? <FormActions>
             <Button onClick={() => setEditor(row)}>Edit template</Button>
             <DeleteRecordButton label="email template" recordName={row.title} description="This removes the saved template from this project's library. Its full audit history is retained." destructive onDelete={reason => emails.delete(projectId, row, reason)} onDeleted={changed} />
