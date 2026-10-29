@@ -1102,7 +1102,16 @@ class SalesImportIssueRead(BaseModel):
     message: str
 
 
+class SalesImportDuplicateRead(BaseModel):
+    row: int
+    source: Literal["existing", "file"]
+
+
 class SalesImportReportRead(BaseModel):
+    new_count: int | None = None
+    duplicate_count: int = 0
+    duplicates: list[SalesImportDuplicateRead] = Field(default_factory=list)
+    duplicates_truncated: bool = False
     total_rows: int
     created_count: int
     applied: bool
