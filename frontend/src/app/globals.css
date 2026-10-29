@@ -6197,7 +6197,7 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .drawing-facts dd { margin: 0; }
 .drawing-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
 .drawing-view-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
-.drawing-canvas { width: 100%; max-height: 75vh; overflow: auto; background: #e7e8e9; border: 1px solid var(--border); border-radius: .5rem; }
+.drawing-canvas { width: 100%; max-height: 75vh; overflow: auto; background: var(--surface-secondary); border: 1px solid var(--line-default); border-radius: .5rem; }
 .drawing-canvas img { display: block; max-width: none; height: auto; }
 .drawing-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
