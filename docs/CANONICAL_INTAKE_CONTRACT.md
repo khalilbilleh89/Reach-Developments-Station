@@ -198,6 +198,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `inventory_masterplans` | Application-authored drawing pages and calibration; excluded from legacy intake. |
 | `inventory_masterplan_mappings` | Project-scoped traced unit footprints; excluded from legacy intake. |
 | `commercial_faqs` | Project-authored reusable sales answers maintained in Reach; excluded from legacy import. |
+| `commercial_emails` | Project-authored reusable email templates maintained in Reach; excluded from legacy import. |
 | `project_price_escalations` | Owner-entered escalation strategy maintained in Finance; it never reprices units, and importing it would imply legacy prices followed it. Excluded from legacy intake. |
 
 
