@@ -34,7 +34,7 @@ def test_final_gate0a_navigation_contains_implemented_destinations() -> None:
     for label in (
         'label: "Land"',
         'label: "Permits"',
-        'label: "Pre-Launch"',
+        'label: "Authorities"',
         'label: "Inventory"',
         'label: "Design"',
     ):

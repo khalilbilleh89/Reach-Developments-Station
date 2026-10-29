@@ -696,12 +696,20 @@
     "handler": "sales.save_pipeline"
   },
   {
-    "notes": "Delete manual progress and purpose with before-values retained in audit. Buyer, purchases and linked signatures remain. Revision frontier retained against stale replay.",
+    "notes": "Delete manual progress and purpose, including Excel-imported entries, with before-values retained in audit. Import previews are transient; uploaded files are not stored. Buyer, purchases and linked signatures remain. Revision frontier retained against stale replay.",
     "ui_file": "frontend/src/components/projects/operations/BuyerOperations.tsx",
     "create_route": "PUT /buyers/{client_id}",
     "removal_route": "DELETE /projects/{project_id}/operations/buyers/{client_id}",
     "status": "implemented",
     "handler": "sales.save_buyer"
+  },
+  {
+    "handler": "sales.create_faq_import",
+    "create_route": "POST /import/{operation}",
+    "status": "implemented",
+    "removal_route": "DELETE /{faq_id}",
+    "ui_file": "frontend/src/components/projects/FaqTab.tsx",
+    "notes": "Atomic import creates ordinary FAQs. Each imported card has named, reasoned Delete; writer authorization, project scope, version checks and full audit retention are unchanged. Validation creates no records."
   },
   {
     "handler": "sales.create_faq",

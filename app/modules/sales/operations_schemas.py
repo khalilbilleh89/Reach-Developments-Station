@@ -90,6 +90,7 @@ class BuyerRead(BaseModel):
     completed_count: int
     applicable_count: int
     next_stage: str | None
+    completion_percent: int = 0
 
 
 class StageSummary(BaseModel):
@@ -101,6 +102,7 @@ class StageSummary(BaseModel):
     purpose_unknown: int
     applicable: int
     missing_dates: int
+    completion_percent: int = 0
 
 
 class OperationsRead(BaseModel):
@@ -114,3 +116,26 @@ class OperationsRead(BaseModel):
     purpose_unknown_count: int
     can_configure: bool
     can_edit: bool
+
+
+class OperationsImportChange(BaseModel):
+    row: int
+    client: str
+    field: str
+    before: str
+    after: str
+
+
+class OperationsImportIssue(BaseModel):
+    row: int
+    message: str
+
+
+class OperationsImportReport(BaseModel):
+    total_rows: int
+    changed_clients: int
+    unchanged_clients: int
+    change_count: int
+    changes: list[OperationsImportChange]
+    issues: list[OperationsImportIssue]
+    applied: bool

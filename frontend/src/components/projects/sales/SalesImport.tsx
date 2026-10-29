@@ -27,16 +27,17 @@ export function SalesImport({projectId, kind, onClose, onImported}: {
     } catch (caught) { showError(caught); }
     finally { setBusy(false); }
   };
-  return <RecordPage title={`Import ${kind} from Excel`} onClose={onClose}>
+  const label = kind === "faqs" ? "FAQs" : kind;
+  return <RecordPage title={`Import ${label} from Excel`} onClose={onClose}>
     <DraftBoundary dirty={Boolean(file) && !completed} busy={busy}>
       <div className="stack">
-        <p>Download the template, fill one record per row, then upload it here. Up to 1,000 records and 5 MB per file. The fields match registration; existing records are never updated.</p>
+        <p>Download the template, fill one record per row, then upload it here. Up to 1,000 records and 5 MB per file. {kind === "faqs" ? "Enter a Question and Answer for each FAQ. Duplicate questions are flagged; existing answers are never overwritten." : "The fields match registration; existing records are never updated."}</p>
         <Button disabled={busy} onClick={async () => {
           setBusy(true); setError(null);
           try { await salesImport.template(projectId, kind); } catch (caught) { showError(caught); }
           finally { setBusy(false); }
         }}>Download Excel template</Button>
-        <Field label="Completed Excel template" hint="Use .xlsx. Keep phone numbers as Text to preserve leading zeros.">
+        <Field label="Completed Excel template" hint={kind === "faqs" ? "Use .xlsx with plain text. Line breaks and all languages are supported. Keep the template's sheet names and headers." : "Use .xlsx. Keep phone numbers as Text to preserve leading zeros."}>
           <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={busy} onChange={async event => {
             const chosen = event.target.files?.[0];
             setFile(null); setReport(null); setValidated(false); setCompleted(false); setError(null);
@@ -54,14 +55,14 @@ export function SalesImport({projectId, kind, onClose, onImported}: {
         {error ? <Notice tone="error">{error}</Notice> : null}
         {report ? <div aria-live="polite" className="stack">
           <Notice tone={report.applied ? "success" : report.error_count ? "error" : "info"}>
-            {report.applied ? `Imported ${report.created_count} ${kind}.` : report.error_count ? `${report.error_count} issues found. No records imported. Fix the file and upload it again.` : `${report.total_rows} rows validated. Ready to import.`}
+            {report.applied ? `Imported ${report.created_count} ${label}.` : report.error_count ? `${report.error_count} issues found. No records imported. Fix the file and upload it again.` : `${report.total_rows} rows validated. Ready to import.`}
           </Notice>
           {report.issues.length ? <TableScroll label="Import issues"><thead><tr><th>Excel row</th><th>Field</th><th>Issue</th></tr></thead><tbody>{report.issues.map((issue, index) => <tr key={index}><td>{issue.row}</td><td>{issue.column ?? "Record"}</td><td>{issue.message}</td></tr>)}</tbody></TableScroll> : null}
           {report.issues_truncated ? <p>Showing the first 200 issues. Fix these and validate again.</p> : null}
         </div> : null}
         <FormActions>
           <Button disabled={busy || !file || completed} onClick={() => run("validate")}>{busy ? "Working…" : "Validate file"}</Button>
-          <Button variant="primary" disabled={busy || !validated || completed} onClick={() => run("apply")}>Import {report?.total_rows ?? ""} {kind}</Button>
+          <Button variant="primary" disabled={busy || !validated || completed} onClick={() => run("apply")}>Import {report?.total_rows ?? ""} {label}</Button>
           <Button disabled={busy} data-leaves-editor onClick={onClose}>{completed ? "Back to register" : "Cancel"}</Button>
         </FormActions>
       </div>

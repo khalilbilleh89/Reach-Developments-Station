@@ -10,7 +10,7 @@ function mount(path, name, dependencies, props) {
   const jsx = {jsx: (type, props) => ({type, props}), jsxs: (type, props) => ({type, props})};
   const source = readFileSync(new URL(`../src/components/projects/${path}.tsx`, import.meta.url), "utf8");
   const exports = {};
-  runInNewContext(ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS, jsx:ts.JsxEmit.ReactJSX}}).outputText, {exports, URLSearchParams, require: key => key === "react" ? react : key === "react/jsx-runtime" ? jsx : dependencies[key] ?? new Proxy({}, {get:(_, name) => name})});
+  runInNewContext(ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS, jsx:ts.JsxEmit.ReactJSX}}).outputText, {exports, Error, URLSearchParams, require: key => key === "react" ? react : key === "react/jsx-runtime" ? jsx : dependencies[key] ?? new Proxy({}, {get:(_, name) => name})});
   return () => {cursor = 0; return exports[name](props);};
 }
 const nodes = tree => !tree || typeof tree !== "object" ? [] : Array.isArray(tree) ? tree.flatMap(nodes) : [tree, ...nodes(tree.props?.children)];
@@ -60,4 +60,32 @@ test("denied and failed reads do not display zero-buyer analysis", () => {
     assert.doesNotMatch(text(render()), /0 buyers/);
     assert.match(text(render()), /not available|Unavailable/);
   }
+});
+
+test("Excel import requires validation and reason; conflicts preserve the file", async () => {
+  const calls = [];
+  const report = {total_rows:2,changed_clients:1,unchanged_clients:1,change_count:1,changes:[{row:3,client:"Demo",field:"EOI",before:"No",after:"Yes"}],issues:[],applied:false};
+  const render = mount("operations/OperationsImport", "OperationsImport", {"@/lib/api/operations":{operations:{import:async (...args) => {calls.push(args); if (args[1] === "apply") throw Error("Client progress changed"); return report;}}}}, {projectId:"p",onClose(){},onImported(){}});
+  const button = name => nodes(render()).find(n => n.type === "Button" && text(n).includes(name));
+  assert.equal(button("Import").props.disabled,true);
+  await nodes(render()).find(n=>n.type === "input" && n.props.type === "file").props.onChange({target:{files:[{name:"clients.xlsx",size:100,arrayBuffer:async()=>new ArrayBuffer(1)}]}});
+  assert.equal(button("Import").props.disabled,true);
+  await button("Validate and preview").props.onClick();
+  assert.equal(button("Import").props.disabled,true);
+  nodes(render()).find(n=>n.type === "input" && n.props.maxLength === 1000).props.onChange({target:{value:"Checked originals"}});
+  assert.equal(button("Import").props.disabled,false);
+  await button("Import").props.onClick();
+  assert.match(text(render()),/Client progress changed/);
+  assert.match(text(render()),/clients.xlsx/);
+  assert.equal(button("Import").props.disabled,true);
+  assert.equal(calls[1][3],"Checked originals");
+});
+
+test("Operations starts compact and stage cards filter clients", () => {
+  const complete = {...buyer, active:true, purchases:[], completed_count:1,applicable_count:2,completion_percent:50,next_stage:"Visa",milestones:[{...buyer.milestones[0],applicable:true,completed:true},buyer.milestones[1]]};
+  const loaded = {...data,buyers:[complete],buyer_count:1,summaries:data.stages.map(s=>({stage_id:s.id,yes:1,no:0,unrecorded:0,missing_dates:0,applicable:1,completion_percent:100}))};
+  const render=mount("OperationsTab","OperationsTab",{"@/lib/answer":{useAnswer:()=>({status:"ready",data:loaded})},"@/lib/roles":{hasAnyRole:()=>true},"@/lib/format":{businessDate:v=>v}}, {projectId:"p",roles:new Set()});
+  assert.match(text(render()),/Show every stage/);
+  nodes(render()).find(n=>n.type === "Button" && /0\s+No/.test(text(n))).props.onClick();
+  assert.ok(nodes(render()).some(n=>n.type === "EmptyState" && n.props.title === "No buyers match these filters"));
 });

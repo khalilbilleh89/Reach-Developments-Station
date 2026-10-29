@@ -102,3 +102,20 @@ test("successful import refreshes register and prevents repeat submission", asyn
   assert.equal(button(tree, "Import").props.disabled, true);
   assert.equal(find(tree, "DraftBoundary")[0].props.dirty, false);
 });
+
+test("FAQ upload validates the same bytes before importing and uses FAQ guidance", async () => {
+  const calls = [];
+  const render = setup(async (...args) => { calls.push(args); return {...report, applied: args[2]==="apply", created_count: args[2]==="apply" ? 2 : 0}; });
+  const p = {...props, kind:"faqs"};
+  let tree = render("SalesImport", p);
+  assert.equal(tree.props.title,"Import FAQs from Excel");
+  assert.match(find(tree,"Field")[0].props.hint,/plain text/);
+  const bytes = new ArrayBuffer(10);
+  await choose(tree,bytes);
+  await button(render("SalesImport",p),"Validate").props.onClick();
+  await button(render("SalesImport",p),"Import").props.onClick();
+  assert.deepEqual(calls.map(args => args.slice(1,3)),[["faqs","validate"],["faqs","apply"]]);
+  assert.ok(calls.every(args => args[3] === bytes));
+  tree = render("SalesImport", p);
+  assert.equal(find(tree,"Notice")[0].props.children,"Imported 2 FAQs.");
+});
