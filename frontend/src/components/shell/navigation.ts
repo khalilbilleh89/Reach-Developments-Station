@@ -66,6 +66,7 @@ export type ProjectSection =
   | "commissions"
   | "operations"
   | "faqs"
+  | "emails"
   | "construction"
   | "economics"
   | "cashflow"
@@ -238,6 +239,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
       {
         key: "faqs", label: "FAQs", icon: "documents",
         description: "Clear answers to common questions, ready to copy and share.",
+        visible: (roles) => hasAnyRole(roles, SALES_READERS),
+      },
+      {
+        key: "emails", label: "Emails", icon: "documents",
+        description: "Create reusable email templates and customize responses to copy and paste.",
         visible: (roles) => hasAnyRole(roles, SALES_READERS),
       },
       {

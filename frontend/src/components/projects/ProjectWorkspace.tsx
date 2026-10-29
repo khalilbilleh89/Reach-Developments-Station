@@ -31,6 +31,7 @@ import { ProjectCommandCenter } from "@/components/dashboard/ProjectCommandCente
 import { AccessTab } from "@/components/projects/AccessTab";
 import { CashflowTab } from "@/components/projects/CashflowTab";
 import { CollectionsTab } from "@/components/projects/CollectionsTab";
+import { EmailsTab } from "@/components/projects/EmailsTab";
 import { FaqTab } from "@/components/projects/FaqTab";
 import { OperationsTab } from "@/components/projects/OperationsTab";
 import { CommissionsTab } from "@/components/projects/CommissionsTab";
@@ -299,6 +300,7 @@ export function ProjectWorkspace({
           <PaymentPlansTab projectId={projectId} projectStatus={project.status} roles={roles} />
         ) : null}
         {section === "collections" ? <CollectionsTab projectId={projectId} roles={roles} /> : null}
+        {section === "emails" ? <EmailsTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "faqs" ? <FaqTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "operations" ? <OperationsTab projectId={projectId} roles={roles} /> : null}
         {section === "commissions" ? <CommissionsTab projectId={projectId} roles={roles} userId={user.id} currencyCodes={currencyCodes} /> : null}

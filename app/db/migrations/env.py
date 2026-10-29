@@ -48,6 +48,7 @@ from app.modules.projects import (  # noqa: E402
 )
 from app.modules.projects import models as projects_models  # noqa: E402,F401
 from app.modules.sales import (  # noqa: E402
+    email_models,  # noqa: F401
     faq_models,  # noqa: F401
     operations_models,  # noqa: F401
 )
