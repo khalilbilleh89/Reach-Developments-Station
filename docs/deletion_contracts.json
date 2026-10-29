@@ -704,6 +704,14 @@
     "handler": "sales.save_buyer"
   },
   {
+    "handler": "sales.create_faq_import",
+    "create_route": "POST /import/{operation}",
+    "status": "implemented",
+    "removal_route": "DELETE /{faq_id}",
+    "ui_file": "frontend/src/components/projects/FaqTab.tsx",
+    "notes": "Atomic import creates ordinary FAQs. Each imported card has named, reasoned Delete; writer authorization, project scope, version checks and full audit retention are unchanged. Validation creates no records."
+  },
+  {
     "handler": "sales.create_faq",
     "create_route": "POST ",
     "status": "implemented",

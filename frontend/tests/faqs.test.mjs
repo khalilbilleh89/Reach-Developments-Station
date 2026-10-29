@@ -21,14 +21,26 @@ const row = {id:"faq-1", question:"When can I visit?", answer:"First line\nSecon
 test("copy sends only the exact saved answer and reports failure honestly", async () => {
   let copied;
   const render = mount("FaqTab", "FaqCard", {}, {row, projectId:"p", canEdit:false, onEdit(){}, onChanged(){}}, {navigator:{clipboard:{writeText:async value => {copied=value;}}}});
-  await render().props.actions.props.onClick();
+  await nodes(render()).find(n => n.type === "Button" && text(n) === "Copy answer").props.onClick();
   assert.equal(copied,row.answer);
   assert.match(text(render()),/Answer copied/);
   assert.ok(!nodes(render()).some(n=>n.type==="DeleteRecordButton"));
   const failed = mount("FaqTab", "FaqCard", {}, {row, canEdit:false}, {navigator:{clipboard:{writeText:async()=>{throw Error("denied");}}}});
-  await failed().props.actions.props.onClick();
+  await nodes(failed()).find(n => n.type === "Button" && text(n) === "Copy answer").props.onClick();
   assert.match(text(failed()),/copy it manually/);
   assert.doesNotMatch(text(failed()),/Answer copied/);
+});
+
+test("long answers expand without changing the copied answer or writer controls", async () => {
+  let copied;
+  const long = {...row, answer: "A long answer\n".repeat(30)};
+  const render = mount("FaqTab", "FaqCard", {}, {row:long, canEdit:true}, {navigator:{clipboard:{writeText:async value => {copied=value;}}}});
+  assert.ok(nodes(render()).find(n => n.props?.className?.includes("faq-answer-preview")));
+  nodes(render()).find(n => text(n)==="Read full answer" && n.type==="Button").props.onClick();
+  assert.ok(!nodes(render()).find(n => n.props?.className?.includes("faq-answer-preview")));
+  await nodes(render()).find(n => text(n)==="Copy answer" && n.type==="Button").props.onClick();
+  assert.equal(copied,long.answer);
+  assert.ok(nodes(render()).find(n => n.type==="DeleteRecordButton"));
 });
 
 test("search finds answer text and editing retains the row version", () => {
