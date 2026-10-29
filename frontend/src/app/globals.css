@@ -6184,3 +6184,21 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .specification-comparison dd { margin: 0; }
 .specification-comparison dd + dd { margin-top: var(--space-2); }
 @media (max-width: 768px) { .specification-comparison { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); } }
+
+
+/* Project drawing library and contained, keyboard-scrollable review surface. */
+.drawing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--space-4, 1rem); }
+.drawing-card { height: 100%; overflow-wrap: anywhere; }
+.drawing-card h3 { margin: 0; }
+.drawing-card h3 button { text-align: start; white-space: normal; }
+.drawing-facts { display: grid; gap: .5rem; margin: 0; }
+.drawing-facts > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: .75rem; }
+.drawing-facts dt { color: var(--text-muted); font-size: .8rem; }
+.drawing-facts dd { margin: 0; }
+.drawing-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.drawing-view-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
+.drawing-canvas { width: 100%; max-height: 75vh; overflow: auto; background: #e7e8e9; border: 1px solid var(--border); border-radius: .5rem; }
+.drawing-canvas img { display: block; max-width: none; height: auto; }
+.drawing-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.drawing-grid > section + section { margin-top: 0; }
