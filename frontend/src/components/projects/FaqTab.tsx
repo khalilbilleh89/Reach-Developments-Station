@@ -8,23 +8,27 @@ import { useAnswer } from "@/lib/answer";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
 import { Button, Card, DataToolbar, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PageHeader, RecordPage } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
+import { SalesImport } from "./sales/SalesImport";
 
 export function FaqTab({projectId, roles}: {projectId: string; roles: Set<string>}) {
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<Faq | "new" | null>(null);
+  const [importing, setImporting] = useState(false);
   const answer = useAnswer(hasAnyRole(roles, SALES_READERS), () => faqs.list(projectId), [projectId]);
   const changed = async () => { setEditor(null); answer.retry(); };
   if (answer.status === "off") return null;
   if (answer.status === "loading") return <Loading label="Loading FAQs" />;
   if (answer.status === "denied") return <Notice tone="info">FAQs are not available to your role.</Notice>;
   if (answer.status === "failed") return <Notice tone="error">{answer.message} <Button onClick={answer.retry}>Retry</Button></Notice>;
+  if (importing) return <SalesImport projectId={projectId} kind="faqs" onClose={() => { setImporting(false); answer.retry(); }} onImported={() => {}} />;
   if (editor !== null) return <FaqEditor projectId={projectId} row={editor === "new" ? null : editor} onClose={() => setEditor(null)} onSaved={changed} />;
   const needle = search.trim().toLocaleLowerCase();
   const rows = answer.data.items.filter(row => `${row.question}\n${row.answer}`.toLocaleLowerCase().includes(needle));
   return <div className="stack">
-    <PageHeader title="FAQs" subtitle="Save clear answers to common questions, ready to copy and share." compact actions={answer.data.can_edit ? <Button variant="primary" onClick={() => setEditor("new")}>Add FAQ</Button> : undefined} />
+    <PageHeader title="FAQs" subtitle="Save clear answers to common questions, ready to copy and share." compact actions={answer.data.can_edit ? <><Button onClick={() => setImporting(true)}>Import from Excel</Button><Button variant="primary" onClick={() => setEditor("new")}>Add FAQ</Button></> : undefined} />
     <DataToolbar search={{value: search, onChange: setSearch, label: "Search questions and answers", placeholder: "Search questions and answers…"}} onReset={search ? () => setSearch("") : undefined} />
-    {rows.length ? rows.map(row => <FaqCard key={`${row.id}:${row.version}`} row={row} projectId={projectId} canEdit={answer.data.can_edit} onEdit={() => setEditor(row)} onChanged={changed} />) : <EmptyState title={needle ? "No matching FAQs" : "No FAQs yet"} hint={needle ? "Try another word or clear your search." : "Add your first question and answer to build this project's FAQ library."} />}
+    <p className="subtle" role="status">{rows.length} of {answer.data.items.length} FAQs{needle ? " match your search" : " · ordered by question"}</p>
+    {rows.length ? <div className="faq-grid">{rows.map(row => <FaqCard key={`${row.id}:${row.version}`} row={row} projectId={projectId} canEdit={answer.data.can_edit} onEdit={() => setEditor(row)} onChanged={changed} />)}</div> : <EmptyState title={needle ? "No matching FAQs" : "No FAQs yet"} hint={needle ? "Try another word or clear your search." : "Add your first question and answer, or import a completed Excel template."} />}
   </div>;
 }
 
@@ -33,21 +37,26 @@ export function FaqCard({row, projectId, canEdit, onEdit, onChanged}: {
 }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
-  return <Card title={row.question} actions={<Button onClick={async () => {
-    setCopied(false); setCopyError(false);
-    try { await navigator.clipboard.writeText(row.answer); setCopied(true); }
-    catch { setCopyError(true); }
-  }}>Copy answer</Button>}>
-    <div className="stack">
-      <p className="faq-answer" dir="auto">{row.answer}</p>
-      <span role="status">{copied ? "Answer copied." : ""}</span>
+  const [expanded, setExpanded] = useState(false);
+  const longAnswer = row.answer.length > 280 || row.answer.split("\n").length > 5;
+  return <div className="faq-card"><Card title={row.question}>
+    <div className="faq-card-content">
+      <p id={`faq-answer-${row.id}`} className={`faq-answer${longAnswer && !expanded ? " faq-answer-preview" : ""}`} dir="auto">{row.answer}</p>
+      {longAnswer ? <Button variant="link" aria-expanded={expanded} aria-controls={`faq-answer-${row.id}`} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : "Read full answer"}</Button> : null}
+      <span className="faq-copy-status" role="status">{copied ? "Answer copied." : ""}</span>
       {copyError ? <Notice tone="info">Copy is unavailable in this browser. Select the answer above and copy it manually.</Notice> : null}
-      {canEdit ? <FormActions>
-        <Button onClick={onEdit}>Edit</Button>
+      <div className="faq-card-actions">
+        <Button onClick={async () => {
+          setCopied(false); setCopyError(false);
+          try { await navigator.clipboard.writeText(row.answer); setCopied(true); }
+          catch { setCopyError(true); setExpanded(true); }
+        }}>Copy answer</Button>
+        {canEdit ? <><Button onClick={onEdit}>Edit</Button>
         <DeleteRecordButton label="FAQ" recordName={row.question} description="This removes the question and answer from the FAQ library. Its audit history is retained." destructive onDelete={reason => faqs.delete(projectId, row, reason)} onDeleted={onChanged} />
-      </FormActions> : null}
+        </> : null}
+      </div>
     </div>
-  </Card>;
+  </Card></div>;
 }
 
 export function FaqEditor({projectId, row, onClose, onSaved}: {

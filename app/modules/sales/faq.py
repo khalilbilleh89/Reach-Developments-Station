@@ -24,11 +24,10 @@ def can_edit(session: Session, project: Project, actor: ActorContext) -> bool:
     ) is not None
 
 
-def _write(session: Session, project: Project, actor: ActorContext) -> None:
+def require_writer(session: Session, project: Project, actor: ActorContext) -> None:
     require_sales_reader(actor)
     if not can_edit(session, project, actor):
         raise PermissionDeniedError("You do not have permission to change project FAQs.")
-    lock_project(session, project.id)
 
 
 def _read(row: CommercialFaq) -> FaqRead:
@@ -83,14 +82,23 @@ def _audit(
     )
 
 
-def create(session: Session, project: Project, actor: ActorContext, payload: FaqInput) -> FaqRead:
-    _write(session, project, actor)
+def create(
+    session: Session,
+    project: Project,
+    actor: ActorContext,
+    payload: FaqInput,
+    *,
+    commit: bool = True,
+) -> FaqRead:
+    require_writer(session, project, actor)
+    lock_project(session, project.id)
     row = CommercialFaq(project_id=project.id, **payload.model_dump())
     session.add(row)
     session.flush()
     _audit(session, project, actor, "created", row)
     result = _read(row)
-    session.commit()
+    if commit:
+        session.commit()
     return result
 
 
@@ -101,7 +109,8 @@ def update(
     faq_id: uuid.UUID,
     payload: FaqUpdate,
 ) -> FaqRead:
-    _write(session, project, actor)
+    require_writer(session, project, actor)
+    lock_project(session, project.id)
     row = _row(session, project, faq_id, payload.expected_version)
     before = _read(row).model_dump(mode="json")
     row.question, row.answer = payload.question, payload.answer
@@ -120,7 +129,8 @@ def delete(
     version: int,
     reason: str,
 ) -> None:
-    _write(session, project, actor)
+    require_writer(session, project, actor)
+    lock_project(session, project.id)
     if not reason.strip():
         raise ValidationError("Enter a reason for deletion.")
     row = _row(session, project, faq_id, version)
