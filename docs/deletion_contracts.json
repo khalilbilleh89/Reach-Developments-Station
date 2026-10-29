@@ -696,7 +696,7 @@
     "handler": "sales.save_pipeline"
   },
   {
-    "notes": "Delete manual progress and purpose with before-values retained in audit. Buyer, purchases and linked signatures remain. Revision frontier retained against stale replay.",
+    "notes": "Delete manual progress and purpose, including Excel-imported entries, with before-values retained in audit. Import previews are transient; uploaded files are not stored. Buyer, purchases and linked signatures remain. Revision frontier retained against stale replay.",
     "ui_file": "frontend/src/components/projects/operations/BuyerOperations.tsx",
     "create_route": "PUT /buyers/{client_id}",
     "removal_route": "DELETE /projects/{project_id}/operations/buyers/{client_id}",

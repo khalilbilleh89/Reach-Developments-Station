@@ -71,3 +71,29 @@ separately reviewed cleanup are required before any destructive rollback.
 No dependency, production environment, deployment branch or connection is changed.
 Governing policy: [Engineering Rules](ENGINEERING_RULES.md) and
 [Deletion Policy](DELETION_POLICY.md).
+
+
+## Excel updates and register
+
+Update from Excel opens a full-page download/upload/review flow for Operations writers.
+The template contains every accessible client (up to 5,000), current purpose and
+status/date pairs for the active project stages. Client identity/version and stage IDs
+remain stable; visible client references, names and purchases are context, never keys.
+Blue values are inputs and grey values are reference or linked Sales evidence.
+
+Blank cells preserve existing values. Not recorded explicitly clears purpose/status;
+CLEAR removes a date. No/Not recorded clears its date, and a supplied date requires
+Yes. Dates accept Excel calendar dates or ISO YYYY-MM-DD; formulas are never evaluated.
+Visa edits require Golden Visa purpose. Linked SPA changes are rejected.
+
+Validation shows each proposed field change and row errors without persistence.
+Apply rechecks the entire file under the same project lock and saves all changes plus
+per-client audit reasons in one transaction. Any invalid/stale row prevents the batch.
+A changed pipeline or client revision requires a fresh download. Unchanged clients
+produce no new revision or audit event. Files and previews are never stored; imported
+progress uses the existing buyer page's Delete/manual correction path.
+
+The analysis uses server-reported completion percentages and stage cards with
+clickable status/missing-date counts. The compact register leads with client identity,
+purpose, overall progress and next step; Show every stage exposes the detailed matrix.
+No new dependency, database table or migration is required.
