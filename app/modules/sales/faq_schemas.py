@@ -14,6 +14,8 @@ class FaqInput(StrictRequest):
     @field_validator("question", "answer")
     @classmethod
     def nonblank(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("Remove null characters from the text.")
         if not value.strip():
             raise ValueError("Enter both a question and an answer.")
         return value.strip()
