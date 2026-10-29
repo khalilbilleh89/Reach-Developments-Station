@@ -39,6 +39,12 @@ class EngagementRemoval(BaseModel):
     reason: str = Field(min_length=1, max_length=1000)
 
 
+class EngagementReopen(BaseModel):
+    model_config = Strict
+    expected_updated_at: datetime
+    reason: str = Field(min_length=1, max_length=1000)
+
+
 class EngagementOut(EngagementCreate):
     model_config = Read
     id: uuid.UUID

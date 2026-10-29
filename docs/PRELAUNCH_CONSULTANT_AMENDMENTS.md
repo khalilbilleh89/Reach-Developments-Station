@@ -29,8 +29,20 @@ Consultant agreements in draft or active status expose Edit agreement. The
 existing update endpoint accepts the same identity, reference, date, scope and
 notes fields for active agreements. It keeps agreement ID, status, programme and
 deliverables, checks `expected_updated_at` under the project lock, validates dates,
-and records before/after audit data. Completed and terminated agreements stay
-read-only. Existing editor permissions and project scope still apply.
+and records before/after audit data. As of the 29 October 2026 correction,
+completed agreements also permit these metadata edits while retaining completed
+status. Terminated agreements remain read-only. The latest agreement is displayed
+even when every agreement is completed, so details stay reachable after reload.
+
+Editors may reopen a completed agreement through a reason prompt and
+`POST /engagements/{id}/reopen`, supplying `expected_updated_at` and `reason`.
+The server validates the saved version and completed state under the project lock,
+returns the same agreement to active, and retains the completion and reopening
+audit events. A second active main agreement blocks reopening; sub-consultants
+remain independent. Reopening changes no stage, deliverable, payment, PDF or cash
+status. Programme records remain read-only until reopening; standing payment guards
+still apply afterwards. Existing editor permissions and whole-project scope apply.
+There is no new record, migration or change to draft deletion/financial retention.
 
 ## Migration and rollback
 
