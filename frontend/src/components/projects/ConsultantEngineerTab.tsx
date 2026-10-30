@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ApiError, consultantEngineering as api } from "@/lib/api";
 import type { ConsultantWorkspace, ConsultantEngagement, ConsultantDiscipline, ConsultantStage, ConsultantDeliverable } from "@/lib/api";
+import { Drawings } from "./design/Drawings";
 import { DesignPayments } from "./design/DesignPayments";
 import { businessDate } from "@/lib/format";
 import { CONSULTANT_EDITORS, hasAnyRole } from "@/lib/roles";
@@ -91,22 +92,23 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
     }
   });
   return <div className="stack consultant-workspace">
-    <PageHeader icon="building" title="Design" subtitle="Consultant appointment, design programme and delivery." actions={canEdit ? <ButtonRow><Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement", engagementType: "main" })}>Add main consultant</Button><Button disabled={busy} onClick={() => setEditor({ kind: "engagement", engagementType: "subconsultant" })}>Add sub-consultant</Button></ButtonRow> : undefined} />
+    <PageHeader icon="building" title="Design" subtitle="Consultant appointment, design programme and delivery." actions={canEdit && section !== "drawings" ? <ButtonRow><Button variant="primary" disabled={busy} onClick={() => setEditor({ kind: "engagement", engagementType: "main" })}>Add main consultant</Button><Button disabled={busy} onClick={() => setEditor({ kind: "engagement", engagementType: "subconsultant" })}>Add sub-consultant</Button></ButtonRow> : undefined} />
     {error && !editor ? <Notice tone="error">{error}</Notice> : null}
     {readError ? <><Notice tone="error">{readError}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry Design"}</Button></> : null}
-    {data ? <Card tone="command" title="Design position across agreements">
+    {data && section !== "drawings" ? <Card tone="command" title="Design position across agreements">
       <Position compact>
         <PositionFigure lead={data.deliverables.length > 0} label="Outstanding deliverables" value={data.deliverables.length ? data.outstanding_deliverables : "Not registered"} note={data.deliverables.length ? undefined : "Add deliverables to establish the delivery position"} />
         <PositionFigure label="Accepted deliverables" value={data.accepted_deliverables} />
         <PositionFigure label="Disciplines complete" value={data.completed_disciplines} note={`Of ${data.total_disciplines} disciplines`} />
         <PositionFigure label="Design stages complete" value={data.completed_stages} note={`Of ${data.total_stages} stages`} />
       </Position>
-    </Card> : !readError ? <Loading label="Loading consultant agreement" shape="page" /> : null}
-    {data && !current ? <EmptyState title="No active or draft agreement" hint="A consultant agreement establishes the appointment and its design programme. Previous agreements remain in the history below." /> : null}
-    {data?.engagements.length ? <Field label="Consultant company / agreement"><select className="input" value={selected?.id ?? ""} onChange={event => setSelectedId(event.target.value)}>{data.engagements.map(agreement => <option key={agreement.id} value={agreement.id}>{agreement.engagement_type === "subconsultant" ? "Sub-consultant" : "Main consultant"} · {agreement.consultant_name} · {agreement.agreement_reference} · {labels(agreement.status)}</option>)}</select></Field> : null}
-    {data ? <Tabs label="Consultant views" tabs={[{key:"agreement",icon:"documents",label:"Agreement"},{key:"programme",icon:"calendar",label:"Programme"},{key:"disciplines",icon:"layers",label:"Disciplines"},{key:"deliverables",icon:"blueprint",label:"Deliverables"},{key:"history",icon:"history",label:"History"}]} active={section} onSelect={setSection} /> : null}
+    </Card> : !data && !readError ? <Loading label="Loading consultant agreement" shape="page" /> : null}
+    {data && !current && section !== "drawings" ? <EmptyState title="No active or draft agreement" hint="A consultant agreement establishes the appointment and its design programme. Previous agreements remain in the history below." /> : null}
+    {data?.engagements.length && section !== "drawings" ? <Field label="Consultant company / agreement"><select className="input" value={selected?.id ?? ""} onChange={event => setSelectedId(event.target.value)}>{data.engagements.map(agreement => <option key={agreement.id} value={agreement.id}>{agreement.engagement_type === "subconsultant" ? "Sub-consultant" : "Main consultant"} · {agreement.consultant_name} · {agreement.agreement_reference} · {labels(agreement.status)}</option>)}</select></Field> : null}
+    <Tabs label="Consultant views" tabs={[{key:"agreement",icon:"documents",label:"Agreement"},{key:"programme",icon:"calendar",label:"Programme"},{key:"disciplines",icon:"layers",label:"Disciplines"},{key:"deliverables",icon:"blueprint",label:"Deliverables"},{key:"drawings",icon:"blueprint",label:"Drawings"},{key:"history",icon:"history",label:"History"}]} active={section} onSelect={setSection} />
     <TabPanel group="Consultant views" tab={section}>
-    {selected && section !== "history" ? <>
+    {section === "drawings" ? <Drawings key={projectId} projectId={projectId} canWrite={canEdit} /> : null}
+    {selected && section !== "history" && section !== "drawings" ? <>
       <Card title={selected.consultant_name} description="Consultant agreement and design programme" actions={current && selected.id !== current.id ? <Button small onClick={() => setSelectedId(current.id)}>Return to current agreement</Button> : undefined}>
         <InlineMeta>
           <InlineMetaItem label="Appointment">{selected.engagement_type === "subconsultant" ? "Sub-consultant · separate company agreement" : "Main consultant"}</InlineMetaItem>

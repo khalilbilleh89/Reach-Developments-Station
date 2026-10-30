@@ -872,6 +872,14 @@
     "notes": "Reasoned retained deletion; payment reversal preserves cash and optional PDF evidence."
   },
   {
+    "handler": "consultant_engineering.create_drawing",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/drawings/{drawing_id}/delete",
+    "ui_file": "frontend/src/components/projects/design/Drawings.tsx",
+    "notes": "Design > Drawings: project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes, metadata and audit. No downstream records reference drawings."
+  },
+  {
     "handler": "construction.add_specification_image",
     "create_route": "POST /technical-specifications/{specification_id}/images",
     "status": "implemented",

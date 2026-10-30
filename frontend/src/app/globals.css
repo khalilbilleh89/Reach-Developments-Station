@@ -6213,6 +6213,23 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .specification-images img { display: block; width: 100%; height: 12rem; object-fit: contain; background: var(--surface-secondary); border-radius: var(--radius-card); }
 .specification-images figcaption { margin-block: var(--space-2); font-size: var(--text-sm); }
 .specification-image-full { display: block; max-width: 100%; height: auto; margin: auto; }
+
+/* Project drawing library and contained, keyboard-scrollable review surface. */
+.drawing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--space-4, 1rem); }
+.drawing-card { height: 100%; overflow-wrap: anywhere; }
+.drawing-card h3 { margin: 0; }
+.drawing-card h3 button { text-align: start; white-space: normal; }
+.drawing-facts { display: grid; gap: .5rem; margin: 0; }
+.drawing-facts > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: .75rem; }
+.drawing-facts dt { color: var(--text-muted); font-size: .8rem; }
+.drawing-facts dd { margin: 0; }
+.drawing-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.drawing-view-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
+.drawing-canvas { width: 100%; max-height: 75vh; overflow: auto; background: var(--surface-secondary); border: 1px solid var(--line-default); border-radius: .5rem; }
+.drawing-canvas img { display: block; max-width: none; height: auto; }
+.drawing-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.drawing-grid > section + section { margin-top: 0; }
 .operations-stage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: var(--space-4); }
 .operations-lead { display: block; margin: var(--space-2) 0; font-size: var(--title-page); font-variant-numeric: tabular-nums; }
 .operations-stage { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); }

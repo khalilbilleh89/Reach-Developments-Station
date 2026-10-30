@@ -272,3 +272,48 @@ class ConsultantDeliverable(Base):
             "status <> 'accepted' OR accepted_date IS NOT NULL", name="accepted_has_date"
         ),
     )
+
+
+class ProjectDrawing(Base):
+    __tablename__ = "project_drawings"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) > 0", name="name_present"),
+        CheckConstraint(
+            "category IN ('general','architecture','structure','mep','landscape','interiors')",
+            name="valid_category",
+        ),
+        CheckConstraint(
+            "status IN ('reference','for_review','issued','superseded')", name="valid_status"
+        ),
+        CheckConstraint("octet_length(document) BETWEEN 1 AND 10485760", name="document_size"),
+        CheckConstraint("version > 0", name="positive_version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(320), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    drawing_number: Mapped[str] = mapped_column(String(120), nullable=False)
+    location: Mapped[str] = mapped_column(String(200), nullable=False)
+    revision: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    notes: Mapped[str] = mapped_column(String(2000), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    document: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
