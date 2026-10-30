@@ -68,13 +68,13 @@ export function MarketingEconomicsTab({ projectId, roles, currencyId }: { projec
     <MarketIndicators projectId={projectId} roles={roles} />
     {selected ? <RecordPage title={`${selected.reference} · Rental Returns`} onClose={() => setSelectedId(null)}>
       <div className="stack"><Notice tone="info">Year-one net yield is NOI / initial investment. Five-year ROI includes one resale, using the selected exit method.</Notice>
-        <div className="marketing-comparison">{selected.scenarios.map(result => {
+        <div className="stack">{selected.scenarios.map(result => {
           const row = settings.find(s => s.id === result.scenario_id);
           const mode = result.mode as ScenarioFields["mode"];
           return <Card key={result.mode}><SectionHeader level={2} title={modeName(result.mode)} actions={canWrite && scenarios.status === "ready" ? <Button variant="default" onClick={() => edit(mode, selected.unit_id, selected.reference)}>{row?.unit_id ? "Edit unit assumptions" : "Customize this unit"}</Button> : undefined} />
             <Badge>{result.source_scope || "No assumptions"}</Badge>
             <RentalProjection result={result} />
-            {row ? <Assumptions row={row} /> : null}
+            {result.assumptions ? <Assumptions row={result.assumptions} /> : null}
             {row?.unit_id && canWrite ? <DeleteRecordButton label="unit assumptions" recordName={`${selected.reference} · ${modeName(mode)}`} confirmLabel="Delete unit override" description="Remove this unit override and return to project defaults where available. Audit history is retained." onDelete={reason => marketing.remove(projectId, `scenarios/${row.id}`, row.version, reason)} onDeleted={async () => refresh()} /> : null}
           </Card>;
         })}</div><ProjectionBasis />
@@ -90,29 +90,47 @@ export function RentalProjection({ result }: { result: UnitScenario }) {
   if (!p) return <Notice tone="info">{result.unavailable || "Projection unavailable."}</Notice>;
   const first = p.years[0];
   return <div className="stack">
-    <div className="marketing-lead"><span>Year-one net rental yield</span><strong>{p.net_yield_percent}%</strong><span>NOI / initial investment</span></div>
+    <div className="marketing-lead"><span>Estimated resale / end of year five</span><strong>{money(p.resale_value, code)}</strong><span>Before selling costs; selected valuation method</span></div>
+    {p.warnings.map(warning => <Notice key={warning} tone="info">{warning}</Notice>)}
     <KeyValueGrid>
-      <KeyValue label="Purchase price basis" value={result.price_basis} /><KeyValue label="Purchase price" value={money(result.price, code)} />
+      <KeyValue label="Recorded current valuation" value={result.assumptions?.current_value ? money(result.assumptions.current_value, code) : "Not supplied; purchase-price proxy used"} /><KeyValue label="Appreciation valuation basis" value={p.valuation_basis} /><KeyValue label="Purchase price basis" value={result.price_basis} /><KeyValue label="Purchase price" value={money(result.price, code)} />
       <KeyValue label="Selected area (m²)" value={money(result.area_sqm)} /><KeyValue label="Initial investment (including costs)" value={money(p.initial_investment, code)} />
-      <KeyValue label="Gross potential revenue / year 1" value={money(first.gross_revenue, code)} /><KeyValue label="Monthly potential revenue" value={money(p.monthly_potential_revenue, code)} />
+      <KeyValue label="Gross potential revenue / year 1" value={money(first.gross_revenue, code)} /><KeyValue label="Average monthly potential / year one" value={money(p.monthly_potential_revenue, code)} />
       <KeyValue label="Vacancy deduction / year 1" value={money(first.vacancy_amount, code)} /><KeyValue label="Effective gross revenue / year 1" value={money(first.effective_revenue, code)} />
       <KeyValue label="Operating expenses / year 1" value={money(first.expenses, code)} /><KeyValue label="NOI / year 1" value={money(first.noi, code)} />
-      <KeyValue label="Gross rental yield / price" value={`${p.gross_yield_percent}%`} /><KeyValue label="ROI / five years including sale" value={`${p.roi_percent}%`} />
+      <KeyValue label="Year-one net yield / initial investment" value={`${p.net_yield_percent}%`} /><KeyValue label="Gross rental yield / price" value={`${p.gross_yield_percent}%`} /><KeyValue label="ROI / five years including sale" value={`${p.roi_percent}%`} />
       <KeyValue label="IRR / annual" value={p.irr_percent === null ? p.irr_reason : `${p.irr_percent}%`} /><KeyValue label="Net present value" value={money(p.npv, code)} />
-      <KeyValue label="Appreciation-based value / year 5" value={money(p.appreciation_value, code)} /><KeyValue label="Cap-rate value / year 5 (year-six NOI)" value={money(p.cap_value, code)} />
+      <KeyValue label="Appreciation-based value / year 5" value={money(p.appreciation_value, code)} /><KeyValue label="Cap-rate value / year 5 (year-six NOI)" value={p.cap_value === null ? "Unavailable: non-positive year-six NOI" : money(p.cap_value, code)} />
       <KeyValue label="Capital gain / selected exit method" value={money(p.capital_gain, code)} /><KeyValue label="Net sale proceeds / selected exit method" value={money(p.sale_proceeds, code)} />
       <KeyValue label="Simple payback / constant year-one NOI" value={p.simple_payback_years === null ? "Unavailable: non-positive NOI" : `${p.simple_payback_years} years`} />
       <KeyValue label="Rental-only payback" value={p.rental_payback_years === null ? "Not reached within five years" : `${p.rental_payback_years} years`} /><KeyValue label="Payback including sale" value={p.total_payback_year === null ? "Not reached within five years" : `Year ${p.total_payback_year}`} />
     </KeyValueGrid>
-    <TableScroll label="Marketing economics"><table><caption>Five-year annual projection ({code || "currency unavailable"})</caption><thead><tr><th scope="col">Year</th><th scope="col">Rent after vacancy</th><th scope="col">Expenses</th><th scope="col">NOI</th><th scope="col">Cash flow*</th></tr></thead><tbody>{p.years.map(row => <tr key={row.year}><th scope="row">{row.year}</th><td>{money(row.effective_revenue, code)}</td><td>{money(row.expenses, code)}</td><td>{money(row.noi, code)}</td><td>{money(row.cashflow, code)}</td></tr>)}</tbody></table></TableScroll>
-    <p className="muted">*Year five includes net sale proceeds. Year zero is the initial investment outflow.</p>
+    <SectionHeader title="Five-year investment reconciliation" />
+    <KeyValueGrid>
+      <KeyValue label="Acquisition costs / taxes" value={money(p.acquisition_costs, code)} />
+      <KeyValue label="Total rent after vacancy" value={money(p.total_rental_income, code)} />
+      <KeyValue label="Total operating expenses" value={money(p.total_operating_expenses, code)} />
+      <KeyValue label="Total rental NOI" value={money(p.total_noi, code)} />
+      <KeyValue label="Five-year rental return / initial investment" value={`${p.rental_return_percent}%`} />
+      <KeyValue label="Selling costs" value={money(p.selling_costs, code)} />
+      <KeyValue label="Total profit / rent plus net sale less investment" value={money(p.total_profit, code)} />
+      <KeyValue label="Present value of future cash flows / investment value" value={money(p.present_value_of_future_cashflows, code)} />
+      <KeyValue label="Discounted payback including sale" value={p.discounted_payback_year === null ? "Not reached within five years" : `End of year ${p.discounted_payback_year}`} />
+    </KeyValueGrid>
+    <TableScroll label="Marketing economics"><table><caption>Five-year annual projection ({code || "currency unavailable"})</caption><thead><tr><th scope="col">Year</th><th scope="col">Rental months</th><th scope="col">Rent after vacancy</th><th scope="col">Expenses</th><th scope="col">NOI</th><th scope="col">Gross yield / purchase price</th><th scope="col">Net yield / initial investment</th><th scope="col">Cumulative rental NOI</th><th scope="col">Appreciation value</th><th scope="col">Cash flow*</th><th scope="col">Cumulative cash / after investment</th><th scope="col">Discounted cash flow</th></tr></thead><tbody>{p.years.map(row => <tr key={row.year}><th scope="row">{row.year}</th><td>{row.rental_months}</td><td>{money(row.effective_revenue, code)}</td><td>{money(row.expenses, code)}</td><td>{money(row.noi, code)}</td><td>{row.gross_yield_percent}%</td><td>{row.net_yield_percent}%</td><td>{money(row.cumulative_noi, code)}</td><td>{money(row.property_value, code)}</td><td>{money(row.cashflow, code)}</td><td>{money(row.cumulative_cashflow, code)}</td><td>{money(row.discounted_cashflow, code)}</td></tr>)}</tbody></table></TableScroll>
+    <p className="muted">*Year five includes one net sale. Year zero is the initial investment outflow. Annual yields exclude resale. Appreciation values are a separate price-growth illustration when the selected exit method is capitalisation.</p>
+    <Disclosure title="Calculation evidence and reproducibility">
+      <p>Assumption version {result.scenario_version}; {result.source_scope}. Source references are supplied by the author and require independent verification. Project defaults are shared assumptions, not unit-specific market evidence.</p>
+      {result.assumptions ? <KeyValueGrid><KeyValue label="Source / evidence" value={result.assumptions.source} /><KeyValue label="Assumptions as at" value={businessDate(result.assumptions.as_of)} /><KeyValue label="Area basis" value={result.assumptions.area_basis} /></KeyValueGrid> : null}
+      <p className="muted">The response includes the exact assumptions, scenario version, approved area schedule reference and asking-price version reference used for this unit. Changing an input recalculates the forecast; no market evidence is inferred from macroeconomic indicators.</p>
+    </Disclosure>
   </div>;
 }
 
-function Assumptions({ row }: { row: Scenario }) {
+function Assumptions({ row }: { row: ScenarioFields }) {
   const codeOf = useCurrencyCode();
   return <Disclosure title="Assumptions and source"><KeyValueGrid>
-    <KeyValue label="Area basis" value={row.area_basis} /><KeyValue label="Annual rent per m²" value={money(row.annual_rent_per_sqm, codeOf(row.currency_id))} /><KeyValue label="Annual expenses per m²" value={money(row.annual_expense_per_sqm, codeOf(row.currency_id))} />
+    <KeyValue label="Rental delay" value={`${row.rental_delay_months} months`} /><KeyValue label="Recorded current valuation" value={row.current_value === null ? "Not supplied" : money(row.current_value, codeOf(row.currency_id))} /><KeyValue label="Valuation source" value={row.valuation_source} /><KeyValue label="Valuation as at" value={row.valuation_as_of ? businessDate(row.valuation_as_of) : "Not supplied"} /><KeyValue label="Area basis" value={row.area_basis} /><KeyValue label="Annual rent per m²" value={money(row.annual_rent_per_sqm, codeOf(row.currency_id))} /><KeyValue label="Annual expenses per m²" value={money(row.annual_expense_per_sqm, codeOf(row.currency_id))} />
     <KeyValue label="Vacancy" value={`${row.vacancy_percent}%`} /><KeyValue label="Income growth / year" value={`${row.income_growth_percent}%`} /><KeyValue label="Expense growth / year" value={`${row.expense_growth_percent}%`} />
     <KeyValue label="Capital appreciation / year" value={`${row.appreciation_percent}%`} /><KeyValue label="Exit cap rate" value={`${row.exit_cap_percent}%`} /><KeyValue label="Discount rate" value={`${row.discount_percent}%`} />
     <KeyValue label="Acquisition costs" value={`${row.acquisition_cost_percent}%`} /><KeyValue label="Selling costs" value={`${row.selling_cost_percent}%`} /><KeyValue label="Setup / furnishing" value={money(row.setup_cost, codeOf(row.currency_id))} />
@@ -124,7 +142,7 @@ function ProjectionBasis() {
   return <Disclosure title="Calculation basis and limitations"><div className="stack">
     <p>Annual potential rent = selected approved area × annual rent per m². Vacancy reduces rent, while operating expenses apply to the full selected area. Income and expenses grow independently each year.</p>
     <p>Initial investment = purchase price + acquisition costs + setup costs. Rental yield uses year-one NOI. Five-year ROI = (five annual NOIs + net sale proceeds − initial investment) / initial investment. NPV discounts end-year cash flows and subtracts the year-zero investment. IRR uses the same cash flows.</p>
-    <p>The selected resale method uses either compounded appreciation or year-six NOI divided by the exit cap rate, less selling costs. Negative terminal NOI produces a zero cap-based value. The two valuations are alternatives and are never added together.</p>
-    <p>Rental payback interpolates within the first five years; no extrapolated payback is implied. This is an unlevered model before personal income and capital gains tax. Include all expected operating costs, acquisition taxes and disposal costs in the assumptions. Current asking price is a reference, not an executed purchase price.</p>
+    <p>The selected resale method uses either compounded appreciation or year-six NOI divided by the exit cap rate, less selling costs. Non-positive terminal NOI makes cap-based valuation unavailable; it does not prove the asset is worthless. The two valuations are alternatives and are never added together.</p>
+    <p>Rental and total payback use end-year receipts, consistently with annual IRR and NPV. Simple payback is a separate constant-income illustration, not the five-year recovery forecast. Present value is the discounted future cash flows under these assumptions, not an independent current market appraisal. This is an unlevered model before personal income and capital gains tax. Include all expected operating costs, acquisition taxes and disposal costs in the assumptions. Current asking price is a reference, not an executed purchase price.</p>
   </div></Disclosure>;
 }

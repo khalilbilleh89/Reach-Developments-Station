@@ -101,6 +101,10 @@ class ScenarioWrite(Request):
     selling_cost_percent: Percent
     setup_cost: Money
     price_override: Money | None = None
+    rental_delay_months: int = Field(default=0, ge=0, le=60)
+    current_value: Money | None = None
+    valuation_source: Label | None = None
+    valuation_as_of: date | None = None
     exit_method: Literal["appreciation", "cap_rate"] = "appreciation"
     source: Label
     as_of: date
@@ -109,6 +113,12 @@ class ScenarioWrite(Request):
     def specific_price(self) -> "ScenarioWrite":
         if self.price_override is not None and (not self.unit_id or self.price_override <= 0):
             raise ValueError("A positive purchase price override belongs to an individual unit.")
+        valuation = (self.current_value, self.valuation_source, self.valuation_as_of)
+        if any(value is not None for value in valuation):
+            if not all(value is not None for value in valuation) or not self.unit_id:
+                raise ValueError("A unit valuation requires amount, evidence and valuation date.")
+            if self.current_value <= 0:
+                raise ValueError("Current valuation must be positive.")
         return self
 
 
@@ -144,6 +154,7 @@ class Removal(Request):
 
 class ProjectionYear(BaseModel):
     year: int
+    rental_months: int
     gross_revenue: Decimal
     vacancy_amount: Decimal
     effective_revenue: Decimal
@@ -151,16 +162,34 @@ class ProjectionYear(BaseModel):
     noi: Decimal
     property_value: Decimal
     cashflow: Decimal
+    gross_yield_percent: Decimal
+    net_yield_percent: Decimal
+    cumulative_noi: Decimal
+    cumulative_cashflow: Decimal
+    discounted_cashflow: Decimal
 
 
 class Projection(BaseModel):
+    calculation_version: Literal["2"] = "2"
+    valuation_basis: str
     initial_investment: Decimal
     gross_yield_percent: Decimal
     net_yield_percent: Decimal
     monthly_potential_revenue: Decimal
     appreciation_value: Decimal
     capital_gain: Decimal
-    cap_value: Decimal
+    cap_value: Decimal | None
+    resale_value: Decimal
+    selling_costs: Decimal
+    acquisition_costs: Decimal
+    total_rental_income: Decimal
+    total_operating_expenses: Decimal
+    total_noi: Decimal
+    rental_return_percent: Decimal
+    total_profit: Decimal
+    present_value_of_future_cashflows: Decimal
+    discounted_payback_year: int | None
+    warnings: list[str]
     sale_proceeds: Decimal
     roi_percent: Decimal
     irr_percent: Decimal | None
@@ -175,6 +204,10 @@ class Projection(BaseModel):
 class UnitScenario(BaseModel):
     mode: str
     scenario_id: uuid.UUID | None = None
+    scenario_version: int | None = None
+    assumptions: ScenarioWrite | None = None
+    area_schedule_id: uuid.UUID | None = None
+    price_version_id: uuid.UUID | None = None
     source_scope: str | None = None
     area_sqm: Decimal | None = None
     price: Decimal | None = None

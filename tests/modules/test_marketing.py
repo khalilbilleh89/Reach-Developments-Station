@@ -12,7 +12,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.modules.audit.models import AuditEvent
-from app.modules.marketing.calculations import calculate
+from app.modules.marketing.calculations import annual_irr, calculate
 from app.modules.marketing.schemas import ScenarioWrite
 from app.modules.projects.models import UserProjectAccess
 from tests.factories import client_for, make_user
@@ -63,8 +63,68 @@ def test_calculation_reconciles_cashflows_and_single_exit() -> None:
     assert cap.roi_percent == D("125")
     loss = calculate(s.model_copy(update={"vacancy_percent": D("100")}), D("100"), D("100000"))
     assert loss.net_yield_percent == D("-3")
-    assert loss.irr_percent is None
+    assert loss.irr_percent == D("-3")
     assert loss.total_payback_year is None
+
+
+def test_economics_annual_yields_and_reconciliation() -> None:
+    p = calculate(ScenarioWrite(**scenario(str(uuid.uuid4()))), D("100"), D("100000"))
+    assert p.total_rental_income == D("60000")
+    assert p.total_operating_expenses == D("15000")
+    assert p.total_noi == D("45000")
+    assert p.rental_return_percent == D("45")
+    assert p.total_profit == p.total_noi + p.sale_proceeds - p.initial_investment
+    assert p.total_profit == p.npv == D("45000")
+    assert p.present_value_of_future_cashflows == D("145000")
+    assert p.discounted_payback_year == 5
+    for row in p.years:
+        assert row.gross_yield_percent == D("12")
+        assert row.net_yield_percent == D("9")
+        assert row.cumulative_noi == D("9000") * row.year
+        assert row.rental_months == 12
+    assert p.years[-1].cumulative_cashflow == p.total_profit
+
+
+def test_sourced_valuation_and_delay_do_not_change_purchase_cost() -> None:
+    s = ScenarioWrite(
+        **scenario(
+            str(uuid.uuid4()),
+            unit_id=uuid.uuid4(),
+            current_value="120000",
+            valuation_source="Synthetic appraisal",
+            valuation_as_of="2026-10-29",
+            rental_delay_months=18,
+            appreciation_percent="10",
+        )
+    )
+    p = calculate(s, D("100"), D("100000"))
+    assert p.initial_investment == D("100000")
+    assert p.appreciation_value == D("193261.20")
+    assert [row.rental_months for row in p.years] == [0, 6, 12, 12, 12]
+    assert [row.noi for row in p.years] == [D("-3000"), D("3000"), D("9000"), D("9000"), D("9000")]
+    assert p.irr_percent is not None
+
+
+def test_nonpositive_cap_income_is_unavailable_not_zero_value() -> None:
+    s = ScenarioWrite(**scenario(str(uuid.uuid4()), vacancy_percent="100"))
+    assert calculate(s, D("100"), D("100000")).cap_value is None
+    with pytest.raises(ValueError, match="positive year-six NOI"):
+        calculate(s.model_copy(update={"exit_method": "cap_rate"}), D("100"), D("100000"))
+
+
+def test_irr_handles_initial_losses_but_does_not_guess_multiple_roots() -> None:
+    # At 10%: -100 - 10/1.1 + 132/1.1**2 = 0.
+    assert annual_irr([D("-100"), D("-10"), D("132")]) == D("10")
+    assert annual_irr([D("-100"), D("230"), D("-132")]) is None
+    assert annual_irr([D("-100"), D("0"), D("0")]) is None
+
+
+def test_payback_uses_end_year_receipts_consistent_with_irr() -> None:
+    s = ScenarioWrite(**scenario(str(uuid.uuid4()), annual_rent_per_sqm="630"))
+    p = calculate(s, D("100"), D("100000"))
+    assert p.rental_payback_years == D("2")
+    assert p.simple_payback_years == D("1.67")
+    assert p.total_payback_year == 2
 
 
 def test_growth_fees_vacancy_and_discount() -> None:
@@ -216,6 +276,10 @@ def test_projections_and_override(
     assert result["source_scope"] == "Unit override"
     assert result["projection"]["net_yield_percent"] == "9.00"
     assert result["projection"]["sale_proceeds"] == "100000.00"
+    assert result["scenario_version"] == 1
+    assert result["area_schedule_id"] == area.json()["id"]
+    assert result["price_version_id"] is None
+    assert result["assumptions"]["source"] == "Synthetic test assumptions"
     assert admin_client.get(f"{base}/units?search=not-found").json()["total"] == 0
     record = unit.json()
     assert admin_client.put(f"{base}/scenarios/{record['id']}", json=body).status_code == 409
@@ -324,3 +388,58 @@ def test_migration_roundtrip_and_retention(
     with pytest.raises(RuntimeError, match="Marketing history"):
         command.downgrade(config, "0038_commission_beneficiaries")
     assert db.scalar(text("SELECT count(*) FROM marketing_content")) == 1
+
+
+def test_economics_migration_retention(
+    admin_client: TestClient, project_id: str, currency_id: str, unit_id: str, db: Session
+) -> None:
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    db.rollback()
+    command.downgrade(config, "0052_design_payments")
+    command.upgrade(config, "head")
+    command.check(config)
+    body = scenario(
+        currency_id,
+        unit_id=unit_id,
+        current_value="150000",
+        valuation_source="Synthetic report",
+        valuation_as_of="2026-10-29",
+        rental_delay_months=18,
+    )
+    row = admin_client.post(f"{root(project_id)}/scenarios", json=body)
+    assert row.status_code == 201, row.text
+    saved = row.json()
+    # A pre-change client must not silently erase evidence it does not understand.
+    old_body = scenario(currency_id, unit_id=unit_id, expected_version=1)
+    updated = admin_client.put(f"{root(project_id)}/scenarios/{saved['id']}", json=old_body)
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["current_value"] == "150000.00"
+    assert updated.json()["rental_delay_months"] == 18
+    assert (
+        admin_client.post(
+            f"{root(project_id)}/scenarios/{saved['id']}/delete",
+            json={"expected_version": 2, "reason": "Retain valuation evidence"},
+        ).status_code
+        == 204
+    )
+    db.rollback()
+    with pytest.raises(RuntimeError, match="valuation/delay history"):
+        command.downgrade(config, "0052_design_payments")
+    assert db.scalar(text("SELECT current_value FROM marketing_rental_scenarios")) == D("150000")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"current_value": "100000"},
+        {"rental_delay_months": 61},
+        {"current_value": "0", "valuation_source": "Test", "valuation_as_of": "2026-10-29"},
+    ],
+)
+def test_economics_invalid_evidence_rejected(
+    admin_client: TestClient, project_id: str, currency_id: str, unit_id: str, changes: dict
+) -> None:
+    response = admin_client.post(
+        f"{root(project_id)}/scenarios", json=scenario(currency_id, unit_id=unit_id, **changes)
+    )
+    assert response.status_code == 422
