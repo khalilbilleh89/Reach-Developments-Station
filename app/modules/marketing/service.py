@@ -2,6 +2,7 @@
 
 import uuid
 
+from pydantic import ValidationError as SchemaValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -156,6 +157,16 @@ def save_scenario(
         raise ConflictError(
             "This rental mode already has assumptions for this scope. Edit that record."
         )
+    if row is not None:
+        # Older clients omit these fields; absence must not erase a saved valuation.
+        added = {"rental_delay_months", "current_value", "valuation_source", "valuation_as_of"}
+        preserved = {key: getattr(row, key) for key in added - body.model_fields_set}
+        try:
+            body = ScenarioWrite.model_validate({**body.model_dump(), **preserved})
+        except SchemaValidationError as exc:
+            raise ValidationError(
+                "Saved valuation requires a unit, source and valuation date."
+            ) from exc
     before = snapshot(row) if row else None
     row = row or RentalScenario(project_id=project.id, version=0)
     for key, value in body.model_dump(exclude={"expected_version"}).items():
@@ -254,6 +265,9 @@ def projections(
                 result.unavailable = "Add project or unit rental assumptions."
             else:
                 result.scenario_id = s.id
+                result.scenario_version = s.version
+                result.area_schedule_id = schedule.id if schedule else None
+                result.price_version_id = price.id if price and s.price_override is None else None
                 result.source_scope = "Unit override" if s.unit_id else "Project default"
                 result.currency_id = s.currency_id
                 result.area_sqm = areas[f"{s.area_basis}_area"]
@@ -292,7 +306,11 @@ def projections(
                             if key != "expected_version"
                         }
                     )
-                    result.projection = calculate(inputs, result.area_sqm, result.price)
+                    result.assumptions = inputs
+                    try:
+                        result.projection = calculate(inputs, result.area_sqm, result.price)
+                    except ValueError as exc:
+                        result.unavailable = str(exc)
             modes.append(result)
         results.append(UnitResult(unit_id=unit.id, reference=unit.unit_reference, scenarios=modes))
     return UnitRegister(total=total, units=results)

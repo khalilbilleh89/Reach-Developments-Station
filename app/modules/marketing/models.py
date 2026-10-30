@@ -59,6 +59,13 @@ class MarketingContent(Base):
 class RentalScenario(Base):
     __tablename__ = "marketing_rental_scenarios"
     __table_args__ = (
+        CheckConstraint("rental_delay_months BETWEEN 0 AND 60", name="rental_delay"),
+        CheckConstraint(
+            "(current_value IS NULL AND valuation_source IS NULL AND valuation_as_of IS NULL) OR "
+            "(current_value > 0 AND current_value IS NOT NULL AND unit_id IS NOT NULL "
+            "AND valuation_source IS NOT NULL AND valuation_as_of IS NOT NULL)",
+            name="rental_valuation",
+        ),
         CheckConstraint("mode IN ('long_term', 'short_term')", name="rental_mode"),
         CheckConstraint("area_basis IN ('net', 'gross')", name="rental_area"),
         CheckConstraint("exit_method IN ('appreciation', 'cap_rate')", name="rental_exit"),
@@ -137,6 +144,12 @@ class RentalScenario(Base):
     area_basis: Mapped[str] = mapped_column(String(20), nullable=False)
     exit_method: Mapped[str] = mapped_column(String(20), nullable=False)
     price_override: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    rental_delay_months: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    current_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    valuation_source: Mapped[str | None] = mapped_column(String(320))
+    valuation_as_of: Mapped[date | None] = mapped_column(Date)
     annual_rent_per_sqm: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     annual_expense_per_sqm: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     setup_cost: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)

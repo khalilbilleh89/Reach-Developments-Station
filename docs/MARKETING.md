@@ -36,21 +36,21 @@ the calculation unavailable; there is no FX conversion.
 All calculations use backend Decimal values. Money crosses the API as strings;
 percentage inputs and outputs explicitly use percent, not fractional rates.
 
-- Annual gross rent: selected area × annual rent/sqm, compounded for annual growth.
+- Annual gross rent: selected area × annual rent/sqm, compounded and prorated for rental delay.
 - Vacancy deduction: gross rent × vacancy %. Effective revenue: rent less vacancy.
 - Expenses: selected area × annual expense/sqm, independently compounded.
 - NOI: effective revenue less operating expenses.
 - Initial investment: purchase price + acquisition costs/taxes + setup/furnishing.
 - Gross yield: year-one potential rent / purchase price. Net yield: year-one NOI / initial investment.
-- Appreciation value: purchase price compounded at annual appreciation for five years.
-- Alternative cap valuation: max(0, year-six NOI) / exit cap rate.
+- Appreciation value: sourced current unit valuation, or labelled purchase-price proxy, compounded for five years.
+- Alternative cap valuation: positive year-six NOI / exit cap rate; otherwise unavailable.
 - Sale proceeds: **one** selected exit valuation less selling costs.
 - Five-year ROI: (five annual NOIs + sale proceeds − initial investment) / initial investment.
 - NPV: discounted end-year cashflows, including sale in year five, less year-zero investment.
 - Annual IRR: Decimal bisection for conventional flows only; nonconventional or
   unbracketed cashflows return an explicit unavailable explanation.
 - Simple payback: initial investment / positive year-one NOI (constant-income basis).
-- Rental-only recovery: interpolated within five years; otherwise not reached.
+- Rental-only recovery: first year-end within five years; otherwise not reached.
 - Recovery including resale: first model year when cumulative inflows cover investment.
 
 Annual displayed money is rounded half-up to two places; totals reconcile to those
@@ -90,3 +90,5 @@ additive tables intact. Export and retain history before any destructive rollbac
 Local formula/API/security/migration and frontend behavior tests accompany the
 change. Browser walkthrough, independent review and exact-head Full CI remain
 separate release gates; a draft PR is not deployment evidence.
+
+Detailed current formulas, evidence, timing and migration 0053: [Unit investment analysis](MARKETING_ECONOMICS.md).
