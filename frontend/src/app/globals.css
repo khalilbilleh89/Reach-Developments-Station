@@ -60,13 +60,28 @@
    * canvas: canvas, working surface, stage. */
   --surface-stage: var(--accent-soft);
 
-  --command-bg: #ffffff;
-  --command-text: #1c1d20;
-  --command-muted: #54565c;
-  --command-line: #e2e2de;
-  --command-success: #0d7a62;
-  --command-warning: #925700;
-  --command-danger: #b3261e;
+  --command-bg: #1c1d20;
+  --command-text: #f3f3f1;
+  --command-muted: #a9abb0;
+  --command-line: #34363b;
+  --command-success: #5fc8a8;
+  --command-warning: #e7ad4f;
+  --command-danger: #f0857a;
+  /* The graphite command card's dark scope (see .card-command). */
+  --command-line-strong: #6a6c72;
+  --command-faint: #4a4c52;
+  --command-inverse: #17181b;
+  --command-accent-hover: #e8d488;
+  --command-accent-soft: rgb(220 194 99 / 14%);
+  --command-stage: rgb(220 194 99 / 10%);
+  --command-success-soft: rgb(95 200 168 / 14%);
+  --command-warning-soft: rgb(231 173 79 / 14%);
+  --command-danger-soft: rgb(240 133 122 / 14%);
+  --command-info: #8aa9f0;
+  --command-info-soft: rgb(138 169 240 / 14%);
+  --command-gold-text: #e3cc78;
+  --command-stock-reserved: #9c8540;
+  --command-stock-available: #4a4024;
 
   /* ---- Lines --------------------------------------------------------- */
   --line-soft: #ecece8;
@@ -104,18 +119,18 @@
 
   /* ---- Navigation rail ----------------------------------------------- */
   /* White navigation uses blue selection and dark readable labels. */
-  --nav-bg: #ffffff;
-  --nav-bg-hover: #f3f3f0;
-  --nav-bg-selected: #f7efd2;
-  --nav-line: #e6e6e2;
-  --nav-text: #4f5157;
-  --nav-text-strong: #1c1d20;
-  --nav-text-muted: #66686e;
-  --nav-accent: #9c7d22;
-  --nav-focus: #9c7d22;
-  --nav-glyph-bg: #f1f1ee;
-  --nav-glyph-bg-strong: #f7efd2;
-  --nav-scrollbar: #cfcfca;
+  --nav-bg: #17181b;
+  --nav-bg-hover: #222327;
+  --nav-bg-selected: #2a2b30;
+  --nav-line: #2a2b30;
+  --nav-text: #b5b6bb;
+  --nav-text-strong: #f3f3f1;
+  --nav-text-muted: #8b8c92;
+  --nav-accent: #dcc263;
+  --nav-focus: #dcc263;
+  --nav-glyph-bg: #222327;
+  --nav-glyph-bg-strong: #3b3524;
+  --nav-scrollbar: #3a3b40;
   --ink: #1c1d20;
 
   /* ---- Scrims -------------------------------------------------------- */
@@ -151,7 +166,7 @@
     arial, sans-serif;
   --font-mono:
     var(--font-geist-mono, ui-monospace), ui-monospace, sfmono-regular, "SF Mono", menlo, consolas, monospace;
-  --font-display: Georgia, "Times New Roman", serif;
+  --font-display: var(--font-sans);
 
   --text-2xs: 0.6875rem;
   --text-xs: 0.75rem;
@@ -460,7 +475,7 @@ textarea {
   height: 2.125rem;
   border-radius: 7px;
   background-color: transparent;
-  color: var(--nav-text-strong);
+  color: var(--brand-gold);
   font-size: var(--text-sm);
   font-weight: 750;
   letter-spacing: 0.02em;
@@ -555,7 +570,7 @@ textarea {
 
 .nav-item[aria-current="page"] {
   background-color: var(--nav-bg-selected);
-  color: var(--nav-accent);
+  color: var(--nav-text-strong);
   font-weight: 600;
 }
 
@@ -1430,7 +1445,10 @@ section + section {
 
 /* The rail's ink, two pixels of it: this block belongs to the same product as
  * the navigation, and it is the answer the page was opened for. */
-.card-command {
+/* The graphite command surfaces: the command card and the project's selling
+ * position. Each is a dark scope. */
+.card-command,
+.selling-position {
   --text-primary: var(--command-text);
   --text-secondary: var(--command-muted);
   --text-muted: var(--command-muted);
@@ -1442,12 +1460,36 @@ section + section {
   --success: var(--command-success);
   --warning: var(--command-warning);
   --danger: var(--command-danger);
-  position: relative;
-  overflow: hidden;
+  /* The graphite card is a dark scope: every pair a child may draw is
+   * remapped together, so a badge, button or meter inside stays legible. */
+  --line-strong: var(--command-line-strong);
+  --text-faint: var(--command-faint);
+  --text-inverse: var(--command-inverse);
+  --accent: var(--brand-gold);
+  --accent-hover: var(--command-accent-hover);
+  --accent-soft: var(--command-accent-soft);
+  --accent-contrast: var(--command-inverse);
+  --surface-selected: var(--command-accent-soft);
+  --surface-stage: var(--command-stage);
+  --success-soft: var(--command-success-soft);
+  --warning-soft: var(--command-warning-soft);
+  --danger-soft: var(--command-danger-soft);
+  --info: var(--command-info);
+  --info-soft: var(--command-info-soft);
+  --warning-mark: var(--command-warning);
+  --brand-gold-text: var(--command-gold-text);
+  --brand-gold-strong: var(--command-gold-text);
   background-color: var(--command-bg);
   color: var(--text-primary);
-  border: 1px solid var(--command-line);
-  box-shadow: none;
+  --stock-reserved: var(--command-stock-reserved);
+  --stock-available: var(--command-stock-available);
+}
+
+.card-command {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .card-command::before {
@@ -4328,14 +4370,13 @@ input[type="file"].input {
 
 /* The commercial position: the band an owner opens the page for.
  *
- * It takes the accent wash rather than a shadow, because this file's rule is
- * that hierarchy comes from spacing and rules and a shadow is reserved for
- * something that genuinely floats. The band is not floating; it is first. */
+ * It is the page's one graphite command surface, sharing the command card's
+ * dark scope, so the figure an owner opens the page for is read first. */
 .selling-position {
-  border: 1px solid var(--line-default);
+  border: 0;
   border-radius: var(--radius-card);
-  background: var(--surface);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .selling-headline {
@@ -4345,7 +4386,6 @@ input[type="file"].input {
   justify-content: space-between;
   gap: var(--space-5) var(--space-7);
   padding: var(--space-5) var(--space-6) var(--space-4);
-  background: var(--accent-soft);
 }
 
 .selling-lead {
@@ -4409,7 +4449,6 @@ input[type="file"].input {
   flex-direction: column;
   gap: var(--space-2);
   padding: 0 var(--space-6) var(--space-5);
-  background: var(--accent-soft);
 }
 
 /* The whole building, once, in lifecycle order. Proportion, not decoration. */
@@ -4417,8 +4456,8 @@ input[type="file"].input {
   display: flex;
   height: 0.875rem;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--workspace-blue-line);
-  background: var(--surface);
+  border: 1px solid var(--line-default);
+  background: var(--surface-secondary);
   overflow: hidden;
 }
 
@@ -4775,7 +4814,7 @@ input[type="file"].input {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 7px;
-  background-color: var(--nav-glyph-bg);
+  background-color: var(--surface-secondary);
   color: var(--accent);
 }
 

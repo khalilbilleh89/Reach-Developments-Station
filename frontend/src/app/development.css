@@ -83,7 +83,7 @@
 .development-workspace .field-label { line-height: 1.5; }
 .app:not(.app-narrow):not([data-rail="collapsed"]) .development-nav { display: none; }
 .development-workspace .plate { padding: 0 0 26px; border-bottom: 1px solid var(--line-default); margin-bottom: 28px; }
-.development-workspace .plate-title { font-family: var(--font-display); font-size: clamp(2.75rem, 4vw, 4rem); font-weight: 400; }
+.development-workspace .plate-title { font-family: var(--font-display); font-size: clamp(2.75rem, 4vw, 4rem); font-weight: 600; }
 .land-layout-controls { display: flex; gap: var(--space-2); }
 .land-register-surface { min-width: 0; }
 .land-schedule { border: 1px solid var(--line-default); border-radius: var(--dev-radius); overflow: hidden; background: var(--surface); }
@@ -93,7 +93,7 @@
 .parcel-estate-identity { padding: 24px 28px; background: var(--surface-secondary); border-bottom: 1px solid var(--line-default); }
 .parcel-estate-kicker { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: var(--text-xs); }
 .parcel-estate-title { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin: 22px 0 12px; }
-.parcel-estate-title h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(2.5rem, 4vw, 4rem); line-height: 1.05; letter-spacing: -.04em; overflow-wrap: anywhere; }
+.parcel-estate-title h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: clamp(2.5rem, 4vw, 4rem); line-height: 1.05; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .parcel-estate-area { text-align: right; min-width: 0; }
 .parcel-estate-area strong { display: block; font-size: clamp(1.5rem, 2.4vw, 2.25rem); font-weight: 500; letter-spacing: -.04em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .parcel-estate-area span,.parcel-estate-deed { font-size: var(--text-xs); color: var(--text-secondary); }
@@ -154,7 +154,7 @@
 /* White development workspaces: approvals, design records and expense entries. */
 .permit-approval-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr)); gap: 24px; }
 .permit-approval-grid .permit-register-card { padding: 28px; border: 1px solid var(--line-default); border-radius: var(--dev-radius); background: var(--surface); min-width: 0; }
-.permit-approval-grid .permit-register-card h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: 1.9rem; font-weight: 400; overflow-wrap: anywhere; }
+.permit-approval-grid .permit-register-card h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: 1.9rem; font-weight: 600; overflow-wrap: anywhere; }
 .permit-approval-grid .permit-register-card h2 button { font: inherit; text-align: left; }
 .permit-approval-grid .permit-next-action { margin: 24px 0; padding: 20px; border-left: 3px solid var(--accent); background: var(--surface-secondary); }
 .permit-approval-grid .permit-next-action p { margin-bottom: 0; }
@@ -166,7 +166,7 @@
 .consultant-workspace .consultant-stage-number { flex: 0 0 42px; width: 42px; height: 42px; border: 1px solid var(--line-default); background: var(--surface); color: var(--accent); font-size: 1rem; }
 .consultant-workspace .consultant-programme > li[data-status="completed"] .consultant-stage-number { background: var(--success-soft); color: var(--success); }
 .consultant-workspace .consultant-stage-body { padding: 24px; border: 1px solid var(--line-default); border-radius: var(--dev-radius); background: var(--surface-secondary); }
-.consultant-workspace .consultant-stage-heading h3 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 400; }
+.consultant-workspace .consultant-stage-heading h3 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; }
 .consultant-record-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 20px; }
 .consultant-record-card { min-width: 0; padding: 24px; border: 1px solid var(--line-default); border-radius: var(--dev-radius); }
 .consultant-record-card h3 { font-size: 1.35rem; font-weight: 500; margin: 10px 0 20px; overflow-wrap: anywhere; }
@@ -217,7 +217,7 @@
 .atlas-buildings { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,28rem),1fr)); align-items: start; gap: 24px; }
 .atlas-building { min-width: 0; margin: 0; border: 1px solid var(--line-default); border-radius: 10px; overflow: hidden; }
 .atlas-building > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--line-default); }
-.atlas-building h3 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; margin: 6px 0 0; }
+.atlas-building h3 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 600; margin: 6px 0 0; }
 .atlas-building > header > span,.atlas-building > footer { font-size: var(--text-xs); color: var(--text-secondary); }
 .atlas-floors { background: var(--surface-secondary); padding: 8px 24px; }
 .atlas-floor { display: grid; grid-template-columns: 60px minmax(0,1fr); gap: 20px; padding: 12px 0; align-items: center; }
@@ -250,7 +250,7 @@
 
 .development-workspace .page-head { border-bottom: 1px solid var(--line-default); padding-bottom: 16px; margin-bottom: 20px; gap: 12px; }
 
-.development-workspace .page-title { font-family: var(--font-display); font-weight: 400; letter-spacing: -.045em; font-size: clamp(2rem,2.8vw,2.6rem); }
+.development-workspace .page-title { font-family: var(--font-display); font-weight: 600; letter-spacing: -.045em; font-size: clamp(2rem,2.8vw,2.6rem); }
 
 .development-workspace .page-subtitle { max-width: 65ch; line-height: 1.6; font-size: .85rem; margin-top: 6px; }
 @media (max-width: 760px) {
@@ -285,7 +285,7 @@
 /* Development briefing and source-linked programme composition. */
 .briefing-dates { margin: 0; padding: 24px; background: var(--surface); border: 1px solid var(--line-default); border-radius: 6px; min-width: 0; }
 .briefing-dates > header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
-.briefing-dates h2 { margin: 7px 0 14px; font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; }
+.briefing-dates h2 { margin: 7px 0 14px; font-family: var(--font-display); font-size: 1.8rem; font-weight: 600; }
 .briefing-dates > header > span { font-size: var(--text-xs); color: var(--text-muted); }
 .briefing-dates ol { list-style: none; margin: 20px 0 0; padding: 0; }
 .briefing-dates li { display: grid; grid-template-columns: 105px minmax(0,1fr) auto; gap: 16px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line-soft); }
@@ -364,7 +364,7 @@
 .development-workspace .stock-property-card .stock-property-emblem { margin: 0 0 18px; padding: 16px 22px; background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
 .development-workspace .stock-property-identity { gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 
-.development-workspace .stock-property-identity a { letter-spacing: -.025em; font-family: var(--font-display); font-size: 1.8rem; font-weight: 400; color: var(--accent); }
+.development-workspace .stock-property-identity a { letter-spacing: -.025em; font-family: var(--font-display); font-size: 1.8rem; font-weight: 600; color: var(--accent); }
 .property-feature-row { display: flex; flex-wrap: wrap; gap: 10px 16px; padding-block: 18px 12px; }
 .property-feature-row > span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
 .property-feature-row .icon { color: var(--accent); width: 18px; height: 18px; }
