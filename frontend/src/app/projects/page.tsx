@@ -31,7 +31,8 @@ function ProjectsScreen() {
   // Agent & Buyer address lands in Buyers, where registering a purchaser now
   // lives; neither key is in the rail, so neither passes isProjectSection.
   const record = readRecord(params);
-  const section = record && !record.invalid ? recordModules[record.kind] : resolveProjectSection(requested);
+  const legacySpecifications = requested === "construction" && params.get("constructionTab") === "technical-specifications";
+  const section = record && !record.invalid ? recordModules[record.kind] : legacySpecifications ? "technical-specifications" : resolveProjectSection(requested);
 
   useEffect(() => {
     if (state.status === "anonymous") router.replace("/login/");

@@ -7,22 +7,22 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-test("sales opens only Technical Specifications and never requests construction costs", async () => {
+test("Sales has a separate specification page and Construction makes no cost request for Sales", async () => {
   let costs = 0;
   const render = mount("projects/ConstructionTab", "ConstructionTab", {
     "@/lib/api": { construction: { summary: async () => { costs++; } } },
     "@/lib/roles": { CONSTRUCTION_READERS: new Set(["finance"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) },
-    "@/components/shell/registerState": { useRegisterFields: () => [{ constructionTab: "budget" }, () => {}] },
-    "./construction/TechnicalSpecifications": { TechnicalSpecifications: "TechnicalSpecifications" },
+    "@/components/shell/registerState": { useRegisterFields: () => [{ constructionTab: "technical-specifications" }, () => {}] },
   }, { projectId: "project", roles: new Set(["sales_advisor"]) });
   render(); await settle();
-  const tree = nodes(render());
-  const tabs = tree.find(node => node.type === "Tabs").props;
-  assert.equal(tabs.active, "technical-specifications");
-  assert.equal(tabs.tabs.length, 1);
-  assert.equal(tabs.tabs[0].label, "Technical Specifications");
   assert.equal(costs, 0);
-  assert.ok(tree.some(node => node.type === "TechnicalSpecifications"));
+  assert.ok(!nodes(render()).some(node => node.type === "Tabs"));
+  const guide = mount("projects/TechnicalSpecificationsTab", "TechnicalSpecificationsTab", {
+    "@/lib/roles": { SPECIFICATION_READERS: new Set(["sales_advisor"]), hasAnyRole: () => true },
+    "./construction/TechnicalSpecifications": { TechnicalSpecifications: "TechnicalSpecifications" },
+  }, { projectId: "project", roles: new Set(["sales_advisor"]) });
+  assert.ok(nodes(guide()).some(node => node.type === "TechnicalSpecifications"));
+  assert.ok(nodes(guide()).some(node => node.type === "PageHeader" && node.props.title === "Technical Specifications"));
 });
 
 test("specification guide searches applicability and saves a complete versioned record", async () => {
@@ -31,7 +31,7 @@ test("specification guide searches applicability and saves a complete versioned 
   const render = mount("projects/construction/TechnicalSpecifications", "TechnicalSpecifications", {
     "@/lib/api/technicalSpecifications": { technicalSpecifications: { list: async () => [row], update: async (...args) => { saved = args; } } },
     "@/lib/roles": { hasAnyRole: () => true }, "@/lib/format": { businessDate: value => value },
-    "../EditForm": { EditForm: "EditForm" }, "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
+    "./SpecificationImages": { SpecificationImages: "SpecificationImages" }, "../EditForm": { EditForm: "EditForm" }, "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
   }, { projectId: "project", roles: new Set(["project_manager"]) });
   render(); await settle();
   nodes(render()).find(node => node.type === "DataToolbar").props.search.onChange("2-bedroom");
@@ -918,4 +918,51 @@ test("paid invoice selection is sent without recomputing its balance", async () 
   nodes(render()).find(n=>n.type==="MoneyInput").props.onChange("25.01");
   nodes(render()).find(n=>n.type==="form").props.onSubmit({preventDefault(){}}); await settle();
   assert.equal(payload.invoice_id,"invoice"); assert.equal(payload.amount,"25.01"); assert.equal(payload.direct_contract_payment,true);
+});
+
+
+test("Optional specification images retry against the saved record without duplicating successful uploads", async () => {
+  let created = 0, updated = 0, fail = true;
+  const uploaded = [];
+  const base = { id: "spec", category: "finishes", title: "Tiles", scope: "units", applies_to: "All", description: "Tiles", buyer_benefit: "", brand_model: "", inclusion: "undecided", status: "draft", source_reference: "", version: 1, images: [] };
+  const render = mount("projects/construction/TechnicalSpecifications", "TechnicalSpecifications", {
+    "@/lib/api/technicalSpecifications": { technicalSpecifications: {
+      list: async () => [], create: async () => { created++; return base; },
+      update: async () => { updated++; return { ...base, version: 2 }; },
+      addImage: async (_project, id, file) => { assert.equal(id, "spec"); if (file.name === "second.png" && fail) throw new Error("Upload refused"); uploaded.push(file.name); },
+    } },
+    "@/lib/roles": { hasAnyRole: () => true }, "@/lib/format": { businessDate: value => value },
+    "../EditForm": { EditForm: "EditForm" }, "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
+  }, { projectId: "project", roles: new Set(["project_manager"]) });
+  render(); await settle();
+  nodes(nodes(render()).find(n => n.type === "SectionHeader").props.actions)[0].props.onClick();
+  const input = () => nodes(render()).find(n => n.type === "input" && n.props.type === "file");
+  assert.ok(!input().props.required);
+  input().props.onChange({ target: { files: [{ name: "first.png", size: 40 }, { name: "second.png", size: 40 }] } });
+  let form = nodes(render()).find(n => n.type === "EditForm");
+  assert.equal(form.props.additionalDirty, true);
+  await assert.rejects(form.props.onSave({ title: "Tiles", applies_to: "All", description: "Tiles" }), /Upload refused/);
+  fail = false;
+  form = nodes(render()).find(n => n.type === "EditForm");
+  await form.props.onSave({});
+  assert.equal(created, 1); assert.equal(updated, 1);
+  assert.deepEqual(uploaded, ["first.png", "second.png"]);
+});
+
+
+test("Specification applicability and revision stay optional with an All buildable area choice", async () => {
+  let payload;
+  const render = mount("projects/construction/TechnicalSpecifications", "TechnicalSpecifications", {
+    "@/lib/api/technicalSpecifications": { technicalSpecifications: { list: async () => [], create: async (_project, values) => { payload = values; return { id: "spec", version: 1, ...values }; } } },
+    "@/lib/roles": { hasAnyRole: () => true }, "@/lib/format": { businessDate: value => value },
+    "../EditForm": { EditForm: "EditForm" }, "../DeleteRecordButton": { DeleteRecordButton: "DeleteRecordButton" },
+  }, { projectId: "project", roles: new Set(["project_manager"]) });
+  render(); await settle();
+  nodes(nodes(render()).find(n => n.type === "SectionHeader").props.actions)[0].props.onClick();
+  const form = nodes(render()).find(n => n.type === "EditForm");
+  assert.match(form.props.fields.find(f => f.name === "applies_to").label, /optional/);
+  assert.match(form.props.fields.find(f => f.name === "source_reference").label, /optional/);
+  assert.ok(form.props.fields.find(f => f.name === "scope").options.some(o => o.value === "buildable" && o.label === "All buildable area"));
+  await form.props.onSave({ title: "Shared insulation", description: "Synthetic specification", scope: "buildable", inclusion: "included", status: "confirmed" });
+  assert.equal(payload.applies_to, ""); assert.equal(payload.source_reference, ""); assert.equal(payload.scope, "buildable");
 });

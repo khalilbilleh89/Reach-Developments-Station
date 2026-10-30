@@ -6207,6 +6207,12 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .specification-comparison dd + dd { margin-top: var(--space-2); }
 @media (max-width: 768px) { .specification-comparison { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); } }
 
+.form-extra-fields { border: 0; padding: 0; margin: var(--space-4) 0; min-width: 0; }
+.specification-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: var(--space-4); }
+.specification-images figure { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.specification-images img { display: block; width: 100%; height: 12rem; object-fit: contain; background: var(--surface-secondary); border-radius: var(--radius-card); }
+.specification-images figcaption { margin-block: var(--space-2); font-size: var(--text-sm); }
+.specification-image-full { display: block; max-width: 100%; height: auto; margin: auto; }
 .operations-stage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: var(--space-4); }
 .operations-lead { display: block; margin: var(--space-2) 0; font-size: var(--title-page); font-variant-numeric: tabular-nums; }
 .operations-stage { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); }

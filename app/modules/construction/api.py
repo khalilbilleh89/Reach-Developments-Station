@@ -30,11 +30,17 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, Response, status
 
 from app.core.errors import ValidationError
 from app.modules.access.dependencies import ActiveActor, DbSession
-from app.modules.construction import permissions, schemas, service, specifications
+from app.modules.construction import (
+    permissions,
+    schemas,
+    service,
+    specification_images,
+    specifications,
+)
 from app.modules.construction import stages as stage_service
 from app.modules.construction.models import BudgetVersion
 from app.modules.construction.permissions import (
@@ -103,6 +109,63 @@ def delete_technical_specification(
     reason: str = Query(min_length=1, max_length=1000),
 ) -> None:
     specifications.delete(session, project.id, actor, specification_id, reason)
+
+
+@router.post(
+    "/technical-specifications/{specification_id}/images",
+    response_model=specifications.SpecificationImageRead,
+    status_code=201,
+)
+async def add_specification_image(
+    request: Request,
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    specification_id: uuid.UUID,
+    filename: str = Query(min_length=1, max_length=1024),
+) -> object:
+    specifications.authorize(session, project.id, actor, write=True)
+    specifications._row(session, project.id, specification_id)
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > specification_images.MAX_IMAGE_BYTES:
+            raise ValidationError("Choose an image no larger than 10 MB.")
+        body.extend(chunk)
+    return specification_images.add_image(
+        session, project.id, specification_id, actor, filename, bytes(body)
+    )
+
+
+@router.get(
+    "/technical-specifications/{specification_id}/images/{image_id}/file", response_class=Response
+)
+def read_specification_image(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    specification_id: uuid.UUID,
+    image_id: uuid.UUID,
+) -> Response:
+    image = specification_images.get_image(session, project.id, specification_id, image_id, actor)
+    return Response(
+        content=image.image_data,
+        media_type="image/png",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.delete("/technical-specifications/{specification_id}/images/{image_id}", status_code=204)
+def delete_specification_image(
+    project: InventoryProject,
+    session: DbSession,
+    actor: ActiveActor,
+    specification_id: uuid.UUID,
+    image_id: uuid.UUID,
+    reason: str = Query(min_length=1, max_length=1000),
+) -> None:
+    specification_images.remove_image(
+        session, project.id, specification_id, image_id, actor, reason
+    )
 
 
 @router.get("/stages", response_model=list[schemas.StageOut])
