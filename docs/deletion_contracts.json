@@ -870,5 +870,13 @@
     "removal_route": "POST /payments/{payment_id}/proofs/{proof_id}/delete",
     "ui_file": "frontend/src/components/projects/design/DesignPayments.tsx",
     "notes": "Reasoned retained deletion; payment reversal preserves cash and optional PDF evidence."
+  },
+  {
+    "handler": "construction.add_specification_image",
+    "create_route": "POST /technical-specifications/{specification_id}/images",
+    "status": "implemented",
+    "removal_route": "DELETE /technical-specifications/{specification_id}/images/{image_id}?reason=...",
+    "ui_file": "frontend/src/components/projects/construction/SpecificationImages.tsx",
+    "notes": "Whole-project specification writers; reasoned retained removal with audit. Parent specifications with any image history are retained, including drafts; removed parents/images cannot serve bytes. No cascading evidence deletion."
   }
 ]

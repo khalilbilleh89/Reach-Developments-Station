@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
 import { ContractHeaderEditor } from "./construction/ContractWorkflow";
 import { CONSTRUCTION_READERS, ECONOMICS_READERS, hasAnyRole } from "@/lib/roles";
-import { TechnicalSpecifications } from "./construction/TechnicalSpecifications";
 
 import {
   Badge,
@@ -66,7 +65,6 @@ const SECTIONS = [
   { key: "overview", label: "Overview" },
   { key: "unit-costs", label: "Unit cost analysis" },
   { key: "contracts", label: "Contracts" },
-  { key: "technical-specifications", label: "Technical Specifications" },
   { key: "variations", label: "Variations & reductions" },
   { key: "certificates", label: "Certificates" },
   { key: "cash", label: "Invoices & Payments" },
@@ -77,9 +75,9 @@ const SECTIONS = [
 /** Contract-first costing. All financial totals arrive from the server. */
 export function ConstructionTab({ projectId, roles = new Set<string>(), currencyId = "", currencyCode = null }: { projectId: string; roles?: Set<string>; currencyId?: string; currencyCode?: string | null }) {
   const canReadCosts = hasAnyRole(roles, CONSTRUCTION_READERS);
-  const sections = canReadCosts ? SECTIONS.filter(item => item.key !== "unit-costs" || hasAnyRole(roles, ECONOMICS_READERS)) : SECTIONS.filter(item => item.key === "technical-specifications");
+  const sections = canReadCosts ? SECTIONS.filter(item => item.key !== "unit-costs" || hasAnyRole(roles, ECONOMICS_READERS)) : [];
   const [view, setView] = useRegisterFields({ constructionTab: "contracts" });
-  const section = sections.some(item => item.key === view.constructionTab) ? view.constructionTab : sections[0].key;
+  const section = sections.some(item => item.key === view.constructionTab) ? view.constructionTab : "contracts";
   const setSection = (constructionTab: string) => setView({ constructionTab });
   const [summary, setSummary] = useState<ConstructionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +106,8 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
       await load();
     })();
   }, [load]);
+
+  if (!canReadCosts) return <Notice tone="info">Construction costs are not available to your role. Open Technical Specifications under Delivery.</Notice>;
 
   return (
     <div className="stack">
@@ -144,7 +144,6 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
 
       <TabPanel group="construction" tab={section}>
       {section === "unit-costs" ? <CurrentCostAnalysis key={projectId} projectId={projectId} roles={roles} /> : null}
-      {section === "technical-specifications" ? <TechnicalSpecifications key={projectId} projectId={projectId} roles={roles} /> : null}
       {section === "overview" ? (
         summary ? (
           <ConstructionSummaryView summary={summary} />

@@ -54,13 +54,14 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
     func,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import MONEY, RATE, Base, in_list
 
@@ -84,6 +85,15 @@ class TechnicalSpecification(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    images: Mapped[list[SpecificationImage]] = relationship(
+        primaryjoin=(
+            "and_(TechnicalSpecification.id == SpecificationImage.specification_id, "
+            "SpecificationImage.removed_at.is_(None))"
+        ),
+        order_by="(SpecificationImage.created_at, SpecificationImage.id)",
+        lazy="selectin",
+        viewonly=True,
+    )
     __table_args__ = (
         Index("ix_technical_specifications_project_id", "project_id"),
         CheckConstraint(
@@ -91,23 +101,40 @@ class TechnicalSpecification(Base):
             "'aluminium','doors','kitchen','electrical','heating_cooling','shared','other')",
             name="category_allowed",
         ),
-        CheckConstraint("scope IN ('project','units')", name="scope_allowed"),
+        CheckConstraint("scope IN ('project','units','buildable')", name="scope_allowed"),
         CheckConstraint(
             "inclusion IN ('included','optional','excluded','undecided')", name="inclusion_allowed"
         ),
         CheckConstraint("status IN ('draft','confirmed')", name="status_allowed"),
         CheckConstraint(
-            "length(trim(title)) > 0 AND length(trim(applies_to)) > 0 "
-            "AND length(trim(description)) > 0",
+            "length(trim(title)) > 0 AND length(trim(description)) > 0",
             name="text_required",
         ),
         CheckConstraint(
-            "status != 'confirmed' OR (length(trim(source_reference)) > 0 "
-            "AND inclusion != 'undecided')",
+            "status != 'confirmed' OR inclusion != 'undecided'",
             name="confirmation_source",
         ),
         CheckConstraint("version > 0", name="version_positive"),
     )
+
+
+class SpecificationImage(Base):
+    """Optional presentation image, with retained bytes after removal."""
+
+    __tablename__ = "specification_images"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    specification_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("technical_specifications.id", ondelete="RESTRICT")
+    )
+    filename: Mapped[str] = mapped_column(String(200))
+    image_data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (Index("ix_specification_images_specification_id", "specification_id"),)
 
 
 class ConstructionStage(Base):

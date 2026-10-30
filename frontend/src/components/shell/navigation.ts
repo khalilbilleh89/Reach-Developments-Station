@@ -6,6 +6,7 @@ import {
   CASHFLOW_READERS,
   COLLECTION_READERS,
   SPECIFICATION_READERS,
+  CONSTRUCTION_READERS,
   CONSULTANT_READERS,
   COMMISSION_READERS,
   ECONOMICS_READERS,
@@ -67,6 +68,7 @@ export type ProjectSection =
   | "operations"
   | "faqs"
   | "emails"
+  | "technical-specifications"
   | "construction"
   | "economics"
   | "cashflow"
@@ -262,7 +264,12 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         label: "Construction",
         icon: "permits",
         description:
-          "Project and unit specifications, alongside authorized construction cost and delivery controls.",
+          "Signed contracts, contractor payments and construction delivery controls.",
+        visible: (roles) => hasAnyRole(roles, CONSTRUCTION_READERS),
+      },
+      {
+        key: "technical-specifications", label: "Technical Specifications", icon: "blueprint",
+        description: "The project specification guide for Sales, with optional reference images.",
         visible: (roles) => hasAnyRole(roles, SPECIFICATION_READERS),
       },
     ],

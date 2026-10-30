@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
 import { ApiError } from "@/lib/api";
@@ -50,6 +50,8 @@ export function EditForm({
   submitLabel = "Save changes",
   columns = 3,
   closeOnSave = true,
+  children,
+  additionalDirty = false,
 }: {
   fields: EditField[];
   initial: EditValues;
@@ -58,12 +60,14 @@ export function EditForm({
   submitLabel?: string;
   columns?: 2 | 3 | 4;
   closeOnSave?: boolean;
+  children?: ReactNode;
+  additionalDirty?: boolean;
 }) {
   const [values, setValues] = useState<EditValues>(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
-  const dirty = fields.some(field => field.visible !== false && values[field.name] !== initial[field.name]);
+  const dirty = additionalDirty || fields.some(field => field.visible !== false && values[field.name] !== initial[field.name]);
 
   const set = (name: string, value: string | boolean) =>
     setValues((current) => ({ ...current, [name]: value }));
@@ -83,7 +87,7 @@ export function EditForm({
         // reads as an explicit null rather than as an omission.
         changes[field.name] = next === "" ? null : next;
       }
-      if (Object.keys(changes).length > 0) await onSave(changes);
+      if (Object.keys(changes).length > 0 || additionalDirty) await onSave(changes);
       if (closeOnSave) onCancel();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not save the changes.");
@@ -176,8 +180,9 @@ export function EditForm({
 
   return (
     <form onSubmit={submit} ref={form}>
-      <UnsavedChangesGuard dirty={dirty && !busy} form={form} />
+      <UnsavedChangesGuard dirty={dirty} busy={busy} form={form} />
       {error ? <Notice tone="error">{error}</Notice> : null}
+      <fieldset className="draft-fields" disabled={busy}>
       {groups.map((group, index) =>
         group.title ? (
           <FormSection key={group.title} title={group.title}>
@@ -189,6 +194,8 @@ export function EditForm({
           </FieldRow>
         ),
       )}
+      {children ? <fieldset className="form-extra-fields" disabled={busy}>{children}</fieldset> : null}
+      </fieldset>
       <FormActions>
         <Button variant="primary" type="submit" disabled={busy}>
           {busy ? "Saving…" : submitLabel}
