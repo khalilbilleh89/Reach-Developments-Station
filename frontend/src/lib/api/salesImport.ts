@@ -4,6 +4,9 @@ export interface SalesImportReport {
   total_rows: number; created_count: number; applied: boolean; error_count: number;
   issues: { row: number; column: string | null; message: string }[];
   issues_truncated: boolean;
+  new_count?: number | null; duplicate_count?: number;
+  duplicates?: { row: number; source: "existing" | "file" }[];
+  duplicates_truncated?: boolean;
 }
 const root = (projectId: string, kind: ImportKind) => kind === "faqs" ? `/projects/${projectId}/faqs/import` : `/projects/${projectId}/sales/import/${kind}`;
 export const salesImport = {

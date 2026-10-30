@@ -72,8 +72,10 @@ def test_agents_validate_import_retry_and_delete(
     assert len(agents) == 2
     assert agents[0]["branch_leader"] == "Leader"
     retried = upload(sales_ops_client, operational_project, "agents", body)
-    assert retried.json()["applied"] is False
-    assert retried.json()["error_count"] == 2
+    assert retried.json()["applied"] is True
+    assert retried.json()["created_count"] == 0
+    assert retried.json()["duplicate_count"] == 2
+    assert retried.json()["error_count"] == 0
     row = agents[1]
     assert (
         sales_ops_client.delete(
@@ -140,7 +142,10 @@ def test_buyers_keep_contacts_agent_and_sole_or_joint_ownership(
     assert len(parties) == 1 and parties[0]["share_fraction"] == "1.000000"
     assert advisor_client.get(f"{base}/clients/{joint['id']}/parties").json() == []
     assert "email" not in finance_client.get(f"{base}/clients/{sole['id']}").json()
-    assert upload(advisor_client, operational_project, "buyers", body).json()["applied"] is False
+    retried = upload(advisor_client, operational_project, "buyers", body).json()
+    assert retried["applied"] is True
+    assert retried["created_count"] == 0
+    assert retried["duplicate_count"] == 2
     assert (
         sales_ops_client.delete(
             f"{base}/agents/{agent['id']}", params={"reason": "Referenced"}
@@ -188,14 +193,12 @@ def test_one_invalid_row_rolls_back_the_entire_batch(
 
 
 @pytest.mark.parametrize(
-    "bad", ["duplicate", "formula", "headers", "empty", "project", "version", "macro", "not_xlsx"]
+    "bad", ["formula", "headers", "empty", "project", "version", "macro", "not_xlsx"]
 )
 def test_bad_workbooks_are_refused_without_writes(
     sales_ops_client: TestClient, operational_project: str, db: Session, bad: str
 ) -> None:
     records = [{"display_name": "One"}]
-    if bad == "duplicate":
-        records.append({"display_name": "one"})
     if bad == "formula":
         records[0]["display_name"] = "=1+1"
     body = workbook(sales_ops_client, operational_project, "agents", records)
@@ -220,9 +223,7 @@ def test_bad_workbooks_are_refused_without_writes(
     if bad == "not_xlsx":
         body = b"not a workbook"
     response = upload(sales_ops_client, operational_project, "agents", body)
-    assert response.status_code == (200 if bad == "duplicate" else 422), response.text
-    if bad == "duplicate":
-        assert response.json()["applied"] is False
+    assert response.status_code == 422, response.text
     assert db.scalar(text("SELECT count(*) FROM sales_agents")) == 0
 
 
@@ -274,3 +275,112 @@ def test_import_authorization_and_project_scope(
         upload(sales_ops_client, operational_project, "buyers", b"x" * (MAX_BYTES + 1)).status_code
         == 413
     )
+
+
+@pytest.mark.parametrize("kind", ["buyers", "agents"])
+def test_expanding_list_skips_duplicates_and_rechecks_at_apply(
+    sales_ops_client: TestClient, operational_project: str, db: Session, kind: str
+) -> None:
+    client = sales_ops_client
+    project = operational_project
+    base = sales_url(project)
+    table = "clients" if kind == "buyers" else "sales_agents"
+    records = [{"display_name": "First"}, {"display_name": "Second"}, {"display_name": " first "}]
+    body = workbook(client, project, kind, records)
+    checked = upload(client, project, kind, body, "validate").json()
+    assert checked["new_count"] == 2 and checked["duplicate_count"] == 1
+    assert checked["duplicates"] == [{"row": 4, "source": "file"}]
+    assert checked["error_count"] == 0 and checked["created_count"] == 0
+    assert db.scalar(text(f"SELECT count(*) FROM {table}")) == 0
+    db.rollback()
+    result = upload(client, project, kind, body).json()
+    assert result["applied"] and result["created_count"] == 2
+    assert result["duplicate_count"] == 1
+    route = "clients" if kind == "buyers" else "agents"
+    existing_row = client.get(f"{base}/{route}").json()[0]
+    assert (
+        client.patch(f"{base}/{route}/{existing_row['id']}", json={"is_active": False}).status_code
+        == 200
+    )
+    audit_before = db.scalar(text("SELECT count(*) FROM audit_events"))
+    parties_before = db.scalar(text("SELECT count(*) FROM client_parties"))
+    db.rollback()
+    retried = upload(client, project, kind, body).json()
+    assert retried["applied"] and retried["created_count"] == 0
+    assert retried["new_count"] == 0 and retried["duplicate_count"] == 3
+    assert all(row["source"] == "existing" for row in retried["duplicates"])
+    assert client.get(f"{base}/{route}/{existing_row['id']}").json()["is_active"] is False
+    assert db.scalar(text("SELECT count(*) FROM audit_events")) == audit_before
+    assert db.scalar(text("SELECT count(*) FROM client_parties")) == parties_before
+    db.rollback()
+    records.append({"display_name": "Third"})
+    expanded = workbook(client, project, kind, records)
+    checked = upload(client, project, kind, expanded, "validate").json()
+    assert checked["new_count"] == 1 and checked["duplicate_count"] == 3
+    route = "clients" if kind == "buyers" else "agents"
+    # Another writer adds the new name after preview. Apply must skip it too.
+    assert client.post(f"{base}/{route}", json={"display_name": "Third"}).status_code == 201
+    applied = upload(client, project, kind, expanded).json()
+    assert applied["applied"] and applied["created_count"] == 0
+    assert applied["duplicate_count"] == 4
+    records.append({"display_name": "Fourth"})
+    final = upload(client, project, kind, workbook(client, project, kind, records)).json()
+    assert final["applied"] and final["created_count"] == 1
+    assert final["new_count"] == 1 and final["duplicate_count"] == 4
+    assert db.scalar(text(f"SELECT count(*) FROM {table}")) == 4
+
+
+@pytest.mark.parametrize("kind", ["buyers", "agents"])
+def test_skipped_duplicates_do_not_hide_real_errors(
+    sales_ops_client: TestClient, operational_project: str, db: Session, kind: str
+) -> None:
+    client = sales_ops_client
+    project = operational_project
+    first = workbook(client, project, kind, [{"display_name": "Existing"}])
+    assert upload(client, project, kind, first).json()["created_count"] == 1
+    invalid = {"email": "missing@example.test"} if kind == "buyers" else {"country": "Jordan"}
+    body = workbook(
+        client, project, kind, [{"display_name": "Existing"}, {"display_name": "New"}, invalid]
+    )
+    for operation in ("validate", "apply"):
+        report = upload(client, project, kind, body, operation).json()
+        assert report["applied"] is False and report["created_count"] == 0
+        assert report["new_count"] == 1 and report["duplicate_count"] == 1
+        assert report["error_count"] > 0 and report["issues"][0]["row"] == 4
+        table = "clients" if kind == "buyers" else "sales_agents"
+        assert db.scalar(text(f"SELECT count(*) FROM {table}")) == 1
+        db.rollback()
+
+
+@pytest.mark.parametrize("kind", ["buyers", "agents"])
+def test_same_name_with_different_identity_fields_is_not_silently_skipped(
+    sales_ops_client: TestClient, operational_project: str, kind: str
+) -> None:
+    distinguishing = "email" if kind == "buyers" else "branch"
+    body = workbook(
+        sales_ops_client,
+        operational_project,
+        kind,
+        [
+            {"display_name": "Same name", distinguishing: "first@example.test"},
+            {"display_name": "Same name", distinguishing: "second@example.test"},
+        ],
+    )
+    report = upload(sales_ops_client, operational_project, kind, body).json()
+    assert report["applied"] and report["created_count"] == 2
+    assert report["duplicate_count"] == 0
+
+
+def test_duplicate_checks_do_not_disclose_another_advisors_buyers(
+    sales_ops_client: TestClient, advisor_client: TestClient, operational_project: str, db: Session
+) -> None:
+    fields = {"display_name": "Scoped buyer", "email": "scoped@example.test"}
+    base = sales_url(operational_project)
+    assert sales_ops_client.post(base + "/clients", json=fields).status_code == 201
+    body = workbook(advisor_client, operational_project, "buyers", [fields])
+    checked = upload(advisor_client, operational_project, "buyers", body, "validate").json()
+    assert checked["new_count"] == 1 and checked["duplicate_count"] == 0
+    assert checked["duplicates"] == []
+    saved = upload(advisor_client, operational_project, "buyers", body).json()
+    assert saved["created_count"] == 1 and saved["duplicate_count"] == 0
+    assert db.scalar(text("SELECT count(*) FROM clients")) == 2
