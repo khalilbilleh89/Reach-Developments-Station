@@ -1,16 +1,51 @@
 """Commercial FAQ routes, using existing Sales project access."""
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
+from starlette.concurrency import run_in_threadpool
 
+from app.core.xlsx import MAX_BYTES
 from app.modules.access.dependencies import ActiveActor, DbSession
-from app.modules.sales import faq
+from app.modules.sales import faq, faq_import
 from app.modules.sales.faq_schemas import FaqInput, FaqList, FaqRead, FaqUpdate
 from app.modules.sales.permissions import SalesProject
+from app.modules.sales.schemas import SalesImportReportRead
 
 router = APIRouter(prefix="/projects/{project_id}/faqs", tags=["sales"])
+
+
+@router.get("/import/template")
+def faq_template(session: DbSession, actor: ActiveActor, project: SalesProject) -> Response:
+    return Response(
+        faq_import.template(session, project, actor),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="faq-template.xlsx"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/import/{operation}", response_model=SalesImportReportRead)
+async def create_faq_import(
+    operation: Literal["validate", "apply"],
+    request: Request,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> SalesImportReportRead:
+    faq.require_writer(session, project, actor)
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Upload an Excel file up to 5 MB.")
+        body.extend(chunk)
+    return await run_in_threadpool(
+        faq_import.process, session, project, actor, bytes(body), apply=operation == "apply"
+    )
 
 
 @router.get("", response_model=FaqList)

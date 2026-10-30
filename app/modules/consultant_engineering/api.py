@@ -229,6 +229,17 @@ def terminate_engagement(
     return service.transition_engagement(session, project, actor, engagement_id, "terminated")
 
 
+@router.post("/engagements/{engagement_id}/reopen", response_model=schemas.EngagementOut)
+def reopen_engagement(
+    project: ConsultantProject,
+    engagement_id: uuid.UUID,
+    payload: schemas.EngagementReopen,
+    session: DbSession,
+    actor: ActiveActor,
+):
+    return service.reopen_engagement(session, project, actor, engagement_id, payload)
+
+
 @router.post(
     "/engagements/{engagement_id}/disciplines",
     response_model=schemas.DisciplineOut,

@@ -399,7 +399,7 @@ def test_image_migration_roundtrip_and_retention(
     admin_client: TestClient, project_id: str, db: Session
 ) -> None:
     db.rollback()
-    command.downgrade(alembic_config(), "0052_design_payments")
+    command.downgrade(alembic_config(), "0053_marketing_economics")
     command.upgrade(alembic_config(), "head")
     created = admin_client.post(url(project_id), json=payload()).json()
     response = admin_client.post(
@@ -410,7 +410,7 @@ def test_image_migration_roundtrip_and_retention(
     assert response.status_code == 201
     db.rollback()
     with pytest.raises(RuntimeError, match="retained evidence"):
-        command.downgrade(alembic_config(), "0052_design_payments")
+        command.downgrade(alembic_config(), "0053_marketing_economics")
 
 
 def test_optional_fields_and_buildable_area_persist_without_source(
@@ -427,4 +427,4 @@ def test_optional_fields_and_buildable_area_persist_without_source(
     assert saved["id"] == row["id"] and saved["source_reference"] == ""
     db.rollback()
     with pytest.raises(RuntimeError, match="cannot be represented"):
-        command.downgrade(alembic_config(), "0052_design_payments")
+        command.downgrade(alembic_config(), "0053_marketing_economics")

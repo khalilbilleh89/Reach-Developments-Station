@@ -43,6 +43,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<ConsultantEngagement | null>(null);
   const [terminating, setTerminating] = useState<ConsultantEngagement | null>(null);
+  const [reopening, setReopening] = useState<ConsultantEngagement | null>(null);
   const canEdit = hasAnyRole(roles, CONSULTANT_EDITORS);
   const [readError, setReadError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -53,9 +54,11 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
     finally { setRetrying(false); }
   }, [projectId]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]);
-  const current = data?.active_engagement ?? data?.engagements.find((x) => x.status === "draft" && x.engagement_type === "main") ?? data?.engagements.find((x) => ["draft", "active"].includes(x.status));
+  const current = data?.active_engagement ?? data?.engagements.find((x) => x.status === "draft" && x.engagement_type === "main") ?? data?.engagements.find((x) => ["draft", "active"].includes(x.status)) ?? data?.engagements[0];
   const selected = data?.engagements.find((x) => x.id === selectedId) ?? current;
   const editable = canEdit && !!selected && ["draft", "active"].includes(selected.status);
+  const agreementEditable = canEdit && !!selected && ["draft", "active", "completed"].includes(selected.status);
+  const reopenBlocked = selected?.engagement_type === "main" && !!data?.active_engagement && data.active_engagement.id !== selected.id;
   const disciplines = data?.disciplines.filter((x) => x.engagement_id === selected?.id) ?? [];
   const stages = data?.stages.filter((x) => x.engagement_id === selected?.id) ?? [];
   const deliverables = data?.deliverables.filter((x) => x.engagement_id === selected?.id) ?? [];
@@ -117,13 +120,14 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
         </KeyValueGrid>
         {selected.scope_summary ? <p>{selected.scope_summary}</p> : null}
         {selected.notes ? <p className="footnote">{selected.notes}</p> : null}
-        {!editable ? <p className="footnote">Read-only agreement. Its programme and delivery records remain available in their tabs.</p> : null}
+        {!agreementEditable ? <p className="footnote">Read-only agreement. Its programme and delivery records remain available in their tabs.</p> : selected.status === "completed" ? <p className="footnote">Correct completed agreement details here. Reopen the agreement to resume programme editing; existing stages, payments and PDFs remain unchanged.</p> : null}
         <ButtonRow>
-          {editable ? <Button disabled={busy} onClick={() => { setError(null); setEditor({ kind: "engagement", row: selected }); }}>Edit agreement</Button> : null}
+          {agreementEditable ? <Button disabled={busy} onClick={() => { setError(null); setEditor({ kind: "engagement", row: selected }); }}>Edit agreement</Button> : null}
+          {canEdit && selected.status === "completed" ? <Button disabled={busy || reopenBlocked} onClick={() => { setError(null); setReopening(selected); }}>Reopen agreement</Button> : null}
           {canEdit && selected.status === "draft" ? <>{selected.engagement_type === "subconsultant" || !data?.active_engagement ? <Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "activate"))}>Activate</Button> : null}</> : null}
           {canEdit && selected.status === "active" ? <><Button disabled={busy} onClick={() => void run(() => api.transitionEngagement(projectId, selected.id, "complete"))}>Complete agreement</Button><Button variant="danger" disabled={busy} onClick={() => setTerminating(selected)}>Terminate agreement</Button></> : null}
           {canEdit && selected.status === "draft" ? <Button variant="danger" disabled={busy} onClick={() => setDeleting(selected)}>Delete draft agreement</Button> : null}
-        </ButtonRow></> : null}
+        </ButtonRow>{canEdit && selected.status === "completed" && reopenBlocked ? <p className="footnote">Another main consultant agreement is active. Complete or terminate it before reopening this agreement. You can still edit these agreement details.</p> : null}</> : null}
       {section === "disciplines" ? <Register nested title="Disciplines" action={editable ? <Button onClick={() => setEditor({ kind: "discipline" })}>Add discipline</Button> : undefined} headers={["Discipline", "Lead", "Status", "Notes", "Actions"]} rows={disciplines.map((x) => [x.name, x.lead_name ?? "—", <Badge key={x.id + "-status"} tone={designTone(x.status)}>{labels(x.status)}</Badge>, x.notes ?? "—", editable ? <Button key={x.id} small variant="quiet" onClick={() => setEditor({ kind: "discipline", row: x })}>Edit discipline</Button> : "Read only"])} /> : null}
       {section === "programme" ? <SubPanel title="Design programme" actions={editable ? <ButtonRow><Button onClick={() => setEditor({kind:"stage"})}>Add design stage</Button><Button disabled={busy || stages.length < 2} aria-pressed={reordering} onClick={() => setReordering(!reordering)}>{reordering ? "Finish reordering" : "Reorder stages"}</Button></ButtonRow> : undefined}>
         <p className="footnote">Stages follow their recorded sequence. An undated stage is not a forecast milestone.</p>
@@ -143,6 +147,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
     {data && section === "history" ? <Register title="Agreement register and history" headers={["Consultant", "Agreement reference", "Status", "Agreement date", "Planned completion", "Details"]} rows={(data?.engagements ?? []).map((x) => [<Button key={x.id} variant="link" onClick={() => { setSelectedId(x.id); setSection("agreement"); }}><IdentityCell name={x.consultant_name} /></Button>, x.agreement_reference, <Badge key={x.id + "-status"} tone={designTone(x.status)}>{labels(x.status)}</Badge>, businessDate(x.agreement_date), businessDate(x.planned_completion_date), <Button key={x.id} small variant="quiet" onClick={() => { setSelectedId(x.id); setSection("agreement"); }}>View {x.status === "draft" ? "draft" : x.status === "active" ? "active agreement" : "history"}</Button>])} /> : null}
     </TabPanel>
     {terminating ? <ConfirmDialog title="Terminate consultant agreement" body={`Terminate ${terminating.agreement_reference} — ${terminating.consultant_name}? Recorded stages and deliverables remain in history; this agreement will no longer be editable as active work.`} confirmLabel="Terminate agreement" busy={busy} onCancel={() => { if (!busy) setTerminating(null); }} onConfirm={() => void run(() => api.transitionEngagement(projectId, terminating.id, "terminate"))} /> : null}
+    {reopening ? <PromptDialog title={`Reopen ${reopening.agreement_reference} · ${reopening.consultant_name}`} label="Reason" hint="Return this completed agreement to active work. Existing stages, deliverables, payments, PDFs and audit history are retained." confirmLabel="Reopen agreement" busy={busy} error={error} onCancel={() => { if (!busy) { setReopening(null); setError(null); } }} onSubmit={reason => { void run(async () => { await api.reopenEngagement(projectId, reopening, reason); setReopening(null); }); }} /> : null}
     {deleting ? <PromptDialog title={`Delete draft ${deleting.consultant_name}`} label="Reason" hint="Only an unused draft can be deleted. Recorded programme, deliverables or payments block deletion. Audit history is retained." confirmLabel="Delete draft agreement" error={error} busy={busy} onCancel={() => { if (!busy) setDeleting(null); }} onSubmit={reason => { void run(async () => { await api.deleteEngagement(projectId, deleting, reason); setDeleting(null); setSelectedId(null); }); }} /> : null}
     {editor ? <ConsultantDialog editor={editor} stages={stages} disciplines={disciplines} busy={busy} error={error} onCancel={() => { if (!busy) { setEditor(null); setError(null); } }} onSubmit={(body) => void save(body)} /> : null}
   </div>;

@@ -24,7 +24,7 @@ Validation stages the domain writes in savepoints and rolls the whole transactio
 back, including audit and attribution records. Apply reparses and repeats validation
 under the project lock, then commits once only if every row succeeds. No persistent
 import batch record or uploaded workbook is stored. Matching visible records and
-repeated rows are refused using trimmed, case-insensitive buyer name/email/phone
+repeated rows are skipped and counted using trimmed, case-insensitive buyer name/email/phone
 or Agent name/country/branch/leader. Buyer checks honor existing advisor visibility;
 this is not a global identity-matching or deduplication feature. After ambiguous
 network failures, refresh the register before retrying.
@@ -42,3 +42,17 @@ manual-equivalent ownership/attribution, read redaction, scope, role denial,
 malformed files, stale Agent state and existing removal contracts.
 frontend/tests/salesImport.test.mjs covers file-change invalidation, failed apply,
 row errors, refresh and repeat-submission prevention.
+
+## Re-importing an expanding list
+
+Keep existing rows in the project template and append new names. Validate reports
+new_count and duplicate_count separately. Apply reparses under the project lock,
+creates only the new rows and reports created_count plus duplicate_count, with
+Excel row numbers and whether each match already existed or repeated a file row.
+A file containing only duplicates succeeds with zero new records. Existing records
+are never changed or reactivated, and skipped rows create no audit/ownership rows.
+Real validation errors still roll back all new records. Matching remains exact
+after trimming and case folding: Agents use name/country/branch/leader; Buyers
+use name/email/phone within the caller’s visible buyers. Changing these identity
+fields is a new record, not an update. If another user imports the same names between validation and apply, apply
+rechecks the current state and skips those names too.
