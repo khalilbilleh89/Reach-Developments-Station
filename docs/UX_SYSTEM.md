@@ -20,7 +20,7 @@ A page is not a collection of equal KPI cards. Use open bands for counts, ink fo
 
 ## 2. Tokens and theme
 
-There is one explicit white theme. The rail, the working surfaces and the executive positions are white; the tonal ladder above the canvas is canvas, working surface, and one stage surface a card may give the single figure it is opened for. Nothing changes with the operating system. All literal colours belong to the one top-level `:root` block. Semantic aliases inside a component scope may refer to these tokens. Responsive token changes belong in the existing media queries.
+There is one explicit light theme. Working surfaces are white; the navigation rail and the one executive (command) card are graphite; the tonal ladder above the canvas is canvas, working surface, and one stage surface a card may give the single figure it is opened for. Nothing changes with the operating system. All literal colours belong to the one top-level `:root` block. Semantic aliases inside a component scope may refer to these tokens. Responsive token changes belong in the existing media queries.
 
 | Role | Token | Value |
 | --- | --- | --- |
@@ -28,10 +28,10 @@ There is one explicit white theme. The rail, the working surfaces and the execut
 | Working surface | `--surface` | `#ffffff` |
 | Supporting ground | `--surface-secondary` | `#f1f1ee` |
 | Stage surface, once per card | `--surface-stage` | the gold wash (`--accent-soft`, `#faf5e2`) |
-| Navigation | `--nav-bg` | `#ffffff` |
-| Executive ground | `--command-bg` | `#ffffff` |
-| Executive text | `--command-text` | `#1c1d20` |
-| Executive secondary text | `--command-muted` | `#54565c` |
+| Navigation: graphite rail, gold current marker | `--nav-bg`, `--nav-accent` | `#17181b` / `#dcc263` |
+| Executive ground: graphite command card, a dark scope that remaps every pair its children draw | `--command-bg` | `#1c1d20` |
+| Executive text | `--command-text` | `#f3f3f1` |
+| Executive secondary text | `--command-muted` | `#a9abb0` |
 | Primary text | `--text-primary` | `#1c1d20` |
 | Secondary text | `--text-secondary` | `#54565c` |
 | Quiet text | `--text-muted` | `#66686e` |
