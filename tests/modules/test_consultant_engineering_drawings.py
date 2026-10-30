@@ -200,7 +200,7 @@ def test_migration_roundtrip_and_retention(
 ) -> None:
     db.rollback()
     config = _alembic_config()
-    command.downgrade(config, "0052_design_payments")
+    command.downgrade(config, "0055_commercial_emails")
     command.upgrade(config, "head")
     command.check(config)
     row = upload(manager_member_client, project_id).json()
@@ -213,6 +213,6 @@ def test_migration_roundtrip_and_retention(
     )
     db.rollback()
     with pytest.raises(RuntimeError, match="Project drawings exist"):
-        command.downgrade(config, "0052_design_payments")
+        command.downgrade(config, "0055_commercial_emails")
     db.rollback()
     assert db.get(ProjectDrawing, uuid.UUID(row["id"])).is_deleted

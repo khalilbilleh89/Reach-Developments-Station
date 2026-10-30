@@ -154,8 +154,8 @@ def update_engagement(
     require_editor(actor)
     lock_project(session, project.id)
     row = _get(session, models.ConsultantEngagement, project, identifier)
-    if row.status not in {"draft", "active"}:
-        raise ConflictError("Historical consultant engagements are read-only.")
+    if row.status not in {"draft", "active", "completed"}:
+        raise ConflictError("Terminated consultant agreements are read-only.")
     if row.updated_at != payload.expected_updated_at:
         raise ConflictError("Engagement changed. Reload before saving.")
     _validate_engagement_dates(payload)
@@ -169,6 +169,48 @@ def update_engagement(
         setattr(row, key, value.strip() if isinstance(value, str) else value)
     session.flush()
     _audit(session, actor, "consultant.engagement_updated", row, before, values)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+def reopen_engagement(
+    session: Session,
+    project: Project,
+    actor: ActorContext,
+    identifier: uuid.UUID,
+    payload: schemas.EngagementReopen,
+) -> models.ConsultantEngagement:
+    require_editor(actor)
+    lock_project(session, project.id)
+    row = _get(session, models.ConsultantEngagement, project, identifier)
+    if row.status != "completed":
+        raise ConflictError("Only a completed consultant agreement can be reopened.")
+    if row.updated_at != payload.expected_updated_at:
+        raise ConflictError("Engagement changed. Reload before reopening.")
+    reason = payload.reason.strip()
+    if not reason:
+        raise ValidationError("Enter a reason for reopening this agreement.")
+    row.status = "active"
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise ConflictError(
+            "This project already has an active main consultant agreement. "
+            "Complete or terminate it before reopening this one."
+        ) from exc
+    record_event(
+        session,
+        action="consultant.engagement_reopened",
+        entity_type="ConsultantEngagement",
+        entity_id=row.id,
+        actor_user_id=actor.user_id,
+        correlation_id=actor.correlation_id,
+        reason=reason,
+        before={"status": "completed", "project_id": project.id},
+        after={"status": "active", "project_id": project.id},
+    )
     session.commit()
     session.refresh(row)
     return row

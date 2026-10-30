@@ -29,7 +29,7 @@ card, requires a reason and expected version, hides the record and retains bytes
 checksum, metadata and attributed audit events. There are no links from other
 business records to drawings and no cascading financial/approval mutations.
 
-Migration `0053_project_drawings` follows `0052_design_payments`, adds one table,
+Migration `0056_project_drawings` follows `0055_commercial_emails`, adds one table,
 and requires no backfill. Downgrade succeeds only while the table is empty; even
 deleted evidence prevents downgrade. After any upload, roll forward or revert the
 application while retaining this additive schema. Reconcile migration ordering
