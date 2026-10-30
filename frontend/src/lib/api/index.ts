@@ -2440,6 +2440,7 @@ export const consultantEngineering = {
   workspace: (projectId: string) => get<import("./types").ConsultantWorkspace>(consultantRoot(projectId)),
   createEngagement: (projectId: string, body: Record<string, unknown>) => post<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements`, body),
   transitionEngagement: (projectId: string, id: string, action: "activate" | "complete" | "terminate") => post<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements/${id}/${action}`, {}),
+  reopenEngagement: (projectId: string, agreement: import("./types").ConsultantEngagement, reason: string) => post<import("./types").ConsultantEngagement>(`${consultantRoot(projectId)}/engagements/${agreement.id}/reopen`, { expected_updated_at: agreement.updated_at, reason }),
   createDiscipline: (projectId: string, engagementId: string, body: Record<string, unknown>) => post<import("./types").ConsultantDiscipline>(`${consultantRoot(projectId)}/engagements/${engagementId}/disciplines`, body),
   createStage: (projectId: string, engagementId: string, body: Record<string, unknown>) => post<import("./types").ConsultantStage>(`${consultantRoot(projectId)}/engagements/${engagementId}/stages`, body),
   updateStage: (projectId: string, id: string, body: Record<string, unknown>) => put<import("./types").ConsultantStage>(`${consultantRoot(projectId)}/stages/${id}`, body),

@@ -306,6 +306,50 @@ test("active consultant agreement edits the same record and keeps a refused save
   assert.ok(!nodes(render()).some(n => n.props?.editor));
 });
 
+test("completed Design agreement remains selected, editable and reopen failures stay visible", async () => {
+  let row = { id: "agreement", engagement_type: "main", consultant_name: "Main Studio", agreement_reference: "CE-1", status: "completed", updated_at: "2026-10-29T10:00:00Z" };
+  let fail = true; const calls = [];
+  class ApiError extends Error {}
+  const render = mount("projects/ConsultantEngineerTab", "ConsultantEngineerTab", {
+    "@/lib/api": { ApiError, consultantEngineering: {
+      workspace: async () => ({ active_engagement: row.status === "active" ? row : null, engagements: [row], disciplines: [], stages: [], deliverables: [] }),
+      reopenEngagement: async (...args) => { calls.push(args); if (fail) throw new ApiError("Agreement changed. Reload before reopening."); row = { ...row, status: "active" }; },
+    } },
+    "@/lib/roles": { hasAnyRole: () => true },
+    "@/lib/format": { businessDate: value => value ?? "—" },
+  }, { projectId: "project", roles: new Set(["master_admin"]) });
+  render(); await settle();
+  assert.ok(nodes(render()).some(n => n.type === "Button" && n.props.children === "Edit agreement"));
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "Edit agreement").props.onClick();
+  assert.equal(nodes(render()).find(n => n.props?.editor).props.editor.row.id, row.id);
+  nodes(render()).find(n => n.props?.editor).props.onCancel();
+  nodes(render()).find(n => n.type === "Button" && n.props.children === "Reopen agreement").props.onClick();
+  const prompt = () => nodes(render()).find(n => n.type === "PromptDialog");
+  assert.ok(prompt().props.title.includes("CE-1"));
+  assert.equal(calls.length, 0);
+  prompt().props.onSubmit("Completed during testing"); await settle();
+  assert.equal(calls[0][1].updated_at, "2026-10-29T10:00:00Z");
+  assert.equal(calls[0][2], "Completed during testing");
+  assert.ok(prompt().props.error.includes("Reload"));
+  fail = false; prompt().props.onSubmit("Completed during testing"); await settle();
+  assert.ok(!prompt());
+  assert.ok(nodes(render()).some(n => n.type === "Button" && n.props.children === "Complete agreement"));
+});
+
+test("Design correction controls remain unavailable to readers and terminated agreements", async () => {
+  for (const [status, canEdit] of [["completed", false], ["terminated", true]]) {
+    const row = { id: "agreement", engagement_type: "main", consultant_name: "Main Studio", agreement_reference: "CE-1", status };
+    const render = mount("projects/ConsultantEngineerTab", "ConsultantEngineerTab", {
+      "@/lib/api": { consultantEngineering: { workspace: async () => ({ active_engagement: null, engagements: [row], disciplines: [], stages: [], deliverables: [] }) } },
+      "@/lib/roles": { hasAnyRole: () => canEdit },
+      "@/lib/format": { businessDate: value => value ?? "—" },
+    }, { projectId: "project", roles: new Set([canEdit ? "project_manager" : "executive_viewer"]) });
+    render(); await settle();
+    assert.ok(!nodes(render()).some(n => n.type === "Button" && ["Edit agreement", "Reopen agreement"].includes(n.props.children)));
+    assert.ok(nodes(render()).some(n => n.type === "Card" && n.props.title === "Main Studio"));
+  }
+});
+
 test("Pre-Launch renders server category amounts after the register and honors confirmation eligibility", async () => {
   const calls = [];
   const row = { id: "expense", invoice_reference: "INV-17", evidence_reference: "EVID-29", movement_reference: "MOV-08", category: "design", amount: "1.01", movement_date: "2026-09-12", status: "recorded", can_confirm: true };
