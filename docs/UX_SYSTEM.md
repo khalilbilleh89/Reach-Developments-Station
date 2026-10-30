@@ -51,7 +51,7 @@ Spacing uses the existing 4, 8, 12, 16, 24, 32, 48 and 64px scale. Controls, row
 
 ## 3. Typography
 
-Use the installed system sans stack. Inter is used only where already installed; no web font is fetched. The mono stack identifies references, rather than styling all money as code. Financial figures use tabular numerals.
+Experience 5 sets text in Geist (`--font-sans`) and references in Geist Mono (`--font-mono`), self-hosted at build time by `next/font`, so no font host is contacted at runtime; the system stack is the fallback. The mono stack identifies references, rather than styling all money as code. Financial figures use tabular numerals.
 
 | Role | Token | Size |
 | --- | --- | --- |
