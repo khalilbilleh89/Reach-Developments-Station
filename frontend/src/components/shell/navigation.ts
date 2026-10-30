@@ -136,9 +136,9 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
       },
       {
         key: "prelaunch",
-        label: "Pre-Launch",
+        label: "Authorities",
         icon: "money",
-        description: "Development expenses recorded before launch, with confirmed cash kept distinct.",
+        description: "Authority and other development expenses, with optional notes and confirmed cash kept distinct.",
         visible: (roles) => hasAnyRole(roles, CASHFLOW_READERS),
       },
       {

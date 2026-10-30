@@ -1,4 +1,4 @@
-import { get, put, remove } from "./client";
+import { get, put, remove, download, postBinary } from "./client";
 
 export type OperationSection = "property_purchase" | "golden_visa";
 export type PurchasePurpose = "investment_only" | "golden_visa" | null;
@@ -13,11 +13,11 @@ export interface OperationMilestone {
 export interface OperationBuyer {
   id: string; number: string; name: string; active: boolean; purpose: PurchasePurpose; version: number;
   purchases: {id: string; number: string; kind: "sale" | "reservation"; status: string}[];
-  milestones: OperationMilestone[]; completed_count: number; applicable_count: number; next_stage: string | null;
+  milestones: OperationMilestone[]; completed_count: number; applicable_count: number; next_stage: string | null; completion_percent: number;
 }
 export interface OperationsData {
   pipeline_version: number; stages: OperationStage[]; buyers: OperationBuyer[];
-  summaries: {stage_id: string; yes: number; no: number; unrecorded: number; not_applicable: number; purpose_unknown: number; applicable: number; missing_dates: number}[];
+  summaries: {stage_id: string; yes: number; no: number; unrecorded: number; not_applicable: number; purpose_unknown: number; applicable: number; missing_dates: number; completion_percent: number}[];
   buyer_count: number; golden_visa_count: number; investment_count: number; purpose_unknown_count: number;
   can_configure: boolean; can_edit: boolean;
 }
@@ -25,9 +25,17 @@ export interface StageDraft { id: string | null; label: string; section: Operati
 export interface ProgressDraft { stage_id: string; completed: boolean | null; completed_date: string | null }
 const base = (project: string) => `/projects/${project}/operations`;
 export const operations = {
+  template: (project: string) => download(`${base(project)}/import/template`, "operations-clients.xlsx"),
+  import: (project: string, operation: "validate" | "apply", bytes: ArrayBuffer, reason: string) => postBinary<OperationsImportReport>(`${base(project)}/import/${operation}?${new URLSearchParams({reason})}`, bytes),
   read: (project: string) => get<OperationsData>(base(project)),
   savePipeline: (project: string, expected_version: number, stages: StageDraft[]) => put<void>(`${base(project)}/pipeline`, {expected_version, stages}),
   saveBuyer: (project: string, id: string, expected_version: number, pipeline_version: number, purpose: PurchasePurpose, progress: ProgressDraft[], reason: string) => put<void>(`${base(project)}/buyers/${id}`, {expected_version, pipeline_version, purpose, progress, reason}),
   deleteStage: (project: string, id: string, version: number, reason: string) => remove(`${base(project)}/stages/${id}?${new URLSearchParams({version: String(version), reason})}`),
   deleteProgress: (project: string, id: string, version: number, reason: string) => remove(`${base(project)}/buyers/${id}?${new URLSearchParams({version: String(version), reason})}`),
 };
+
+export interface OperationsImportReport {
+  total_rows: number; changed_clients: number; unchanged_clients: number; change_count: number;
+  changes: {row: number; client: string; field: string; before: string; after: string}[];
+  issues: {row: number; message: string}[]; applied: boolean;
+}

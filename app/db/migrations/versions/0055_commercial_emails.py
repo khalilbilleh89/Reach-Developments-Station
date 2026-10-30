@@ -4,8 +4,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0053_commercial_emails"
-down_revision = "0052_design_payments"
+revision = "0055_commercial_emails"
+down_revision = "0054_specification_images"
 branch_labels = None
 depends_on = None
 

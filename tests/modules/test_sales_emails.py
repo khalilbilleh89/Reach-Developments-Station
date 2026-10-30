@@ -144,7 +144,7 @@ def test_email_project_isolation(
 
 def test_email_migration_roundtrip(postgres: None) -> None:
     config = Config("alembic.ini")
-    command.downgrade(config, "0052_design_payments")
+    command.downgrade(config, "0054_specification_images")
     command.upgrade(config, "head")
     command.check(config)
 
@@ -152,7 +152,7 @@ def test_email_migration_roundtrip(postgres: None) -> None:
 def test_email_migration_preserves_templates(admin_client: TestClient, project_id: str) -> None:
     assert admin_client.post(url(project_id), json=BODY).status_code == 201
     with pytest.raises(RuntimeError, match="Retained email templates"):
-        command.downgrade(Config("alembic.ini"), "0052_design_payments")
+        command.downgrade(Config("alembic.ini"), "0054_specification_images")
     assert admin_client.get(url(project_id)).json()["items"][0]["body"] == BODY["body"]
 
 

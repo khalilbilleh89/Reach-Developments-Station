@@ -27,7 +27,7 @@ storage. No business templates or factual claims are seeded.
 
 ## Migration and rollback
 
-0053_commercial_emails follows 0052_design_payments. It adds commercial_emails with
+0055_commercial_emails follows 0054_specification_images. It adds commercial_emails with
 project foreign key, category/length/version constraints and project index. No
 backfill or existing-record change. Downgrade refuses while templates remain;
 roll application code back while retaining the additive table, or explicitly

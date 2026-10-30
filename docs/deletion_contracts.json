@@ -5,7 +5,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/agents/{agent_id}?reason=...",
     "ui_file": "frontend/src/components/projects/sales/AgentsPanel.tsx",
-    "notes": "Unused Agent only; reason and audit required. Buyer, transaction, or Commission allocation references prevent hard deletion; deactivate instead. A removed draft Commission allocation releases its reference, subject to all other Agent history checks. Excel-imported agents use this same removal and deactivation contract."
+    "notes": "Unused Agent only; reason and audit required. Buyer, transaction, or Commission allocation references prevent hard deletion; deactivate instead. A removed draft Commission allocation releases its reference, subject to all other Agent history checks. Excel-imported agents use this same removal and deactivation contract. Re-import skips existing records; only newly created rows use this removal flow."
   },
   {
     "handler": "access.create_user",
@@ -525,7 +525,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/clients/{client_id}",
     "ui_file": "frontend/src/components/projects/sales/ClientsPanel.tsx",
-    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract."
+    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract. Re-import skips existing records; only newly created rows use this removal flow."
   },
   {
     "handler": "sales.create_handover",
@@ -696,12 +696,20 @@
     "handler": "sales.save_pipeline"
   },
   {
-    "notes": "Delete manual progress and purpose with before-values retained in audit. Buyer, purchases and linked signatures remain. Revision frontier retained against stale replay.",
+    "notes": "Delete manual progress and purpose, including Excel-imported entries, with before-values retained in audit. Import previews are transient; uploaded files are not stored. Buyer, purchases and linked signatures remain. Revision frontier retained against stale replay.",
     "ui_file": "frontend/src/components/projects/operations/BuyerOperations.tsx",
     "create_route": "PUT /buyers/{client_id}",
     "removal_route": "DELETE /projects/{project_id}/operations/buyers/{client_id}",
     "status": "implemented",
     "handler": "sales.save_buyer"
+  },
+  {
+    "handler": "sales.create_faq_import",
+    "create_route": "POST /import/{operation}",
+    "status": "implemented",
+    "removal_route": "DELETE /{faq_id}",
+    "ui_file": "frontend/src/components/projects/FaqTab.tsx",
+    "notes": "Atomic import creates ordinary FAQs. Each imported card has named, reasoned Delete; writer authorization, project scope, version checks and full audit retention are unchanged. Validation creates no records."
   },
   {
     "handler": "sales.create_faq",
@@ -741,7 +749,7 @@
     "status": "implemented",
     "removal_route": "POST /scenarios/{record_id}/delete",
     "ui_file": "frontend/src/components/projects/marketing/MarketingEconomicsTab.tsx",
-    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor."
+    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor. Valuation evidence and rental delay remain in retained scenario/audit history; optional valuation fields clear together in the editor."
   },
   {
     "handler": "marketing.create_indicator",

@@ -20,20 +20,21 @@ export type ScenarioFields = {
   vacancy_percent: string; income_growth_percent: string; expense_growth_percent: string;
   appreciation_percent: string; exit_cap_percent: string; discount_percent: string;
   acquisition_cost_percent: string; selling_cost_percent: string; setup_cost: string;
-  price_override: string | null; exit_method: "appreciation" | "cap_rate"; source: string; as_of: string;
+  rental_delay_months: number; current_value: string | null; valuation_source: string | null; valuation_as_of: string | null; price_override: string | null; exit_method: "appreciation" | "cap_rate"; source: string; as_of: string;
 };
 export type Scenario = ScenarioFields & { id: string; version: number; unit_reference: string | null };
 export type IndicatorFields = { name: string; geography: string; value: string; unit: string; period: string; as_of: string; source: string; commentary: string };
 export type Indicator = IndicatorFields & { id: string; version: number };
-export type ProjectionYear = { year: number; gross_revenue: string; vacancy_amount: string; effective_revenue: string; expenses: string; noi: string; property_value: string; cashflow: string };
+export type ProjectionYear = { year: number; rental_months: number; gross_revenue: string; vacancy_amount: string; effective_revenue: string; expenses: string; noi: string; property_value: string; cashflow: string; gross_yield_percent: string; net_yield_percent: string; cumulative_noi: string; cumulative_cashflow: string; discounted_cashflow: string };
 export type Projection = {
+  valuation_basis: string;
   initial_investment: string; gross_yield_percent: string; net_yield_percent: string;
   monthly_potential_revenue: string; appreciation_value: string; capital_gain: string;
-  cap_value: string; sale_proceeds: string; roi_percent: string; irr_percent: string | null;
+  cap_value: string | null; resale_value: string; selling_costs: string; acquisition_costs: string; total_rental_income: string; total_operating_expenses: string; total_noi: string; rental_return_percent: string; total_profit: string; present_value_of_future_cashflows: string; discounted_payback_year: number | null; warnings: string[]; sale_proceeds: string; roi_percent: string; irr_percent: string | null;
   irr_reason: string | null; npv: string; simple_payback_years: string | null; rental_payback_years: string | null; total_payback_year: number | null;
   years: ProjectionYear[];
 };
-export type UnitScenario = { mode: string; scenario_id: string | null; source_scope: string | null; area_sqm: string | null; price: string | null; price_basis: string | null; currency_id: string | null; unavailable: string | null; projection: Projection | null };
+export type UnitScenario = { mode: string; scenario_id: string | null; scenario_version: number | null; assumptions: ScenarioFields | null; area_schedule_id: string | null; price_version_id: string | null; source_scope: string | null; area_sqm: string | null; price: string | null; price_basis: string | null; currency_id: string | null; unavailable: string | null; projection: Projection | null };
 export type UnitResult = { unit_id: string; reference: string; scenarios: UnitScenario[] };
 export type UnitRegister = { total: number; units: UnitResult[] };
 const root = (id: string) => `/projects/${id}/marketing`;

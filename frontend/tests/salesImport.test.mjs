@@ -102,3 +102,61 @@ test("successful import refreshes register and prevents repeat submission", asyn
   assert.equal(button(tree, "Import").props.disabled, true);
   assert.equal(find(tree, "DraftBoundary")[0].props.dirty, false);
 });
+
+
+test("duplicates do not block new imports and both totals are shown", async () => {
+  let imported = 0;
+  const duplicateReport = {...report, total_rows: 57, new_count: 56, duplicate_count: 1,
+    duplicates: [{row: 2, source: "existing"}], duplicates_truncated: false};
+  const render = setup(async (_project, _kind, operation) => operation === "apply"
+    ? {...duplicateReport, applied: true, created_count: 56} : duplicateReport);
+  const p = {...props, kind: "agents", onImported() { imported++; }};
+  let tree = render("SalesImport", p);
+  await choose(tree);
+  tree = render("SalesImport", p);
+  await button(tree, "Validate").props.onClick();
+  tree = render("SalesImport", p);
+  assert.equal(button(tree, "Import").props.children, "Import 56 new agents");
+  assert.equal(button(tree, "Import").props.disabled, false);
+  assert.match(find(tree, "Notice")[0].props.children, /56 new agents.*1 duplicate/);
+  assert.equal(find(tree, "td")[0].props.children, 2);
+  assert.equal(find(tree, "td")[1].props.children, "Already in this project");
+  await button(tree, "Import").props.onClick();
+  tree = render("SalesImport", p);
+  assert.match(find(tree, "Notice")[0].props.children, /Imported 56 new agents.*Skipped 1 duplicate/);
+  assert.equal(imported, 1);
+});
+
+test("an all-duplicate file completes with zero new records", async () => {
+  const duplicateReport = {...report, total_rows: 57, new_count: 0, duplicate_count: 57};
+  const render = setup(async (_project, _kind, operation) => ({...duplicateReport, applied: operation === "apply"}));
+  let tree = render("SalesImport", props);
+  await choose(tree);
+  tree = render("SalesImport", props);
+  await button(tree, "Validate").props.onClick();
+  tree = render("SalesImport", props);
+  assert.equal(button(tree, "Finish import").props.disabled, false);
+  assert.match(find(tree, "Notice")[0].props.children, /0 new buyers.*57 duplicate/);
+  await button(tree, "Finish import").props.onClick();
+  tree = render("SalesImport", props);
+  assert.match(find(tree, "Notice")[0].props.children, /Imported 0 new buyers.*Skipped 57 duplicate/);
+  assert.equal(find(tree, "DraftBoundary")[0].props.dirty, false);
+  assert.equal(button(tree, "Import").props.disabled, true);
+});
+
+test("FAQ upload validates the same bytes before importing and uses FAQ guidance", async () => {
+  const calls = [];
+  const render = setup(async (...args) => { calls.push(args); return {...report, applied: args[2]==="apply", created_count: args[2]==="apply" ? 2 : 0}; });
+  const p = {...props, kind:"faqs"};
+  let tree = render("SalesImport", p);
+  assert.equal(tree.props.title,"Import FAQs from Excel");
+  assert.match(find(tree,"Field")[0].props.hint,/plain text/);
+  const bytes = new ArrayBuffer(10);
+  await choose(tree,bytes);
+  await button(render("SalesImport",p),"Validate").props.onClick();
+  await button(render("SalesImport",p),"Import").props.onClick();
+  assert.deepEqual(calls.map(args => args.slice(1,3)),[["faqs","validate"],["faqs","apply"]]);
+  assert.ok(calls.every(args => args[3] === bytes));
+  tree = render("SalesImport", p);
+  assert.equal(find(tree,"Notice")[0].props.children,"Imported 2 FAQs.");
+});

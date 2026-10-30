@@ -52,7 +52,8 @@ def template(session: Session, project: Project, actor: ActorContext, kind: Kind
         [
             "Import",
             (
-                "Validate first. Any error prevents the entire batch. Existing records "
+                "Validate first. Matching records and repeated rows are skipped and counted. "
+                "Other errors prevent new records from being saved. Existing records "
                 "are never updated."
             ),
         ]
@@ -217,17 +218,21 @@ def process(
     def identity(fields: dict[str, object]) -> tuple[str, ...]:
         return tuple(str(fields.get(key) or "").strip().casefold() for key in identity_fields)
 
-    seen = {identity({key: getattr(record, key) for key in identity_fields}) for record in existing}
+    existing_keys = {
+        identity({key: getattr(record, key) for key in identity_fields}) for record in existing
+    }
+    seen: set[tuple[str, ...]] = set()
+    duplicates = []
     issues = []
     for number, values in parsed:
         try:
             fields = payload(values, kind)
             key = identity(fields)
-            if key in seen:
-                raise ValidationError(
-                    "A matching record already exists or is repeated in this file. Remove "
-                    "the duplicate row."
+            if key in existing_keys or key in seen:
+                duplicates.append(
+                    {"row": number, "source": "existing" if key in existing_keys else "file"}
                 )
+                continue
             with session.begin_nested():
                 if kind == "buyers":
                     service.create_client(
@@ -264,7 +269,11 @@ def process(
         session.rollback()
     return {
         "total_rows": len(parsed),
-        "created_count": len(parsed) if applied else 0,
+        "created_count": len(seen) if applied else 0,
+        "new_count": len(seen),
+        "duplicate_count": len(duplicates),
+        "duplicates": duplicates[:200],
+        "duplicates_truncated": len(duplicates) > 200,
         "applied": applied,
         "error_count": len(issues),
         "issues": issues[:200],
