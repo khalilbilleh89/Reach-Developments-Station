@@ -147,10 +147,10 @@
 
   /* ---- Typography ---------------------------------------------------- */
   --font-sans:
-    var(--font-geist), system-ui, -apple-system, "Segoe UI", roboto, "Helvetica Neue",
+    var(--font-geist, system-ui), system-ui, -apple-system, "Segoe UI", roboto, "Helvetica Neue",
     arial, sans-serif;
   --font-mono:
-    var(--font-geist-mono), ui-monospace, sfmono-regular, "SF Mono", menlo, consolas, monospace;
+    var(--font-geist-mono, ui-monospace), ui-monospace, sfmono-regular, "SF Mono", menlo, consolas, monospace;
   --font-display: Georgia, "Times New Roman", serif;
 
   --text-2xs: 0.6875rem;
