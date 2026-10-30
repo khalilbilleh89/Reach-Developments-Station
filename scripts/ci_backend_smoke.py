@@ -195,6 +195,16 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
             "tests/modules/test_consultant_engineering_drawings.py::test_migration_roundtrip_and_retention",
         ),
     ),
+    "0055_commercial_emails.py": (
+        "sales",
+        ("tests/modules/test_sales_emails.py::test_email_migration_roundtrip",),
+    ),
+    "0054_specification_images.py": (
+        "construction",
+        (
+            "tests/modules/test_technical_specifications.py::test_image_migration_roundtrip_and_retention",
+        ),
+    ),
     "0052_design_payments.py": (
         "consultant_engineering",
         (

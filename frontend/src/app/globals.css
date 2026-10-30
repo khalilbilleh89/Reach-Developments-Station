@@ -6207,6 +6207,12 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .specification-comparison dd + dd { margin-top: var(--space-2); }
 @media (max-width: 768px) { .specification-comparison { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); } }
 
+.form-extra-fields { border: 0; padding: 0; margin: var(--space-4) 0; min-width: 0; }
+.specification-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: var(--space-4); }
+.specification-images figure { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.specification-images img { display: block; width: 100%; height: 12rem; object-fit: contain; background: var(--surface-secondary); border-radius: var(--radius-card); }
+.specification-images figcaption { margin-block: var(--space-2); font-size: var(--text-sm); }
+.specification-image-full { display: block; max-width: 100%; height: auto; margin: auto; }
 
 /* Project drawing library and contained, keyboard-scrollable review surface. */
 .drawing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--space-4, 1rem); }

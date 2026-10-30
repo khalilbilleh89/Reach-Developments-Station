@@ -114,6 +114,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `country_approval_thresholds` | Jurisdiction configuration. |
 | `currencies` | Configuration; a batch declares which it expects, never defines them. |
 | `reference_values` | The controlled vocabularies behind shared `*_code` columns. |
+| `specification_images` | Optional specification image evidence maintained through Delivery; never imported by a legacy bundle. |
 | `technical_specifications` | Project delivery specifications maintained through Construction; not imported by a legacy bundle. |
 | `inventory_common_areas` | Measured shared areas managed through Inventory Common Areas; not imported by a legacy bundle. |
 | `inventory_options` | Project-local inventory choices, administered through project Configuration before intake; a bundle may reference approved codes but must not define them. |
@@ -198,6 +199,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `inventory_masterplans` | Application-authored drawing pages and calibration; excluded from legacy intake. |
 | `inventory_masterplan_mappings` | Project-scoped traced unit footprints; excluded from legacy intake. |
 | `commercial_faqs` | Project-authored reusable sales answers maintained in Reach; excluded from legacy import. |
+| `commercial_emails` | Project-authored reusable email templates maintained in Reach; excluded from legacy import. |
 | `project_drawings` | Project drawing PDFs and register metadata uploaded through Design; excluded from legacy import. |
 | `project_price_escalations` | Owner-entered escalation strategy maintained in Finance; it never reprices units, and importing it would imply legacy prices followed it. Excluded from legacy intake. |
 
