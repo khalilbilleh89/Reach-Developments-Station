@@ -30,21 +30,30 @@
  */
 
 :root {
-  --workspace-blue-wash: #f0f5ff;
-  --workspace-blue-line: #d7e3fa;
+  /* ---- Brand ---------------------------------------------------------- */
+  /* Reach Real Estate gold and grey, from the logo. Gold marks the current
+   * item, the stock bar and link underlines; it is never text on white.
+   * `brand-gold-text` is gold that may be text; `brand-gold-strong` is a
+   * gold mark or outline that carries meaning (3:1 on surface). */
+  --brand-gold: #dcc263;
+  --brand-gold-text: #8a6d14;
+  --brand-gold-strong: #a8872a;
+  --brand-grey: #818286;
+  --workspace-blue-wash: #faf5e2;
+  --workspace-blue-line: #ecdfae;
   /* The stock bar's middle steps: one hue, stepped so the bands read in
    * lifecycle order without inventing a second colour family. */
-  --stock-reserved: #8fb0ea;
-  --stock-available: #c9daf6;
+  --stock-reserved: #dcc263;
+  --stock-available: #efe3b5;
   /* ---- Canvas and surfaces ------------------------------------------- */
   /* Cool neutral canvas, white working surfaces and readable ink.
    * Each has a distinct job; borders are reserved for data and controls. */
-  --canvas: #f7f9fc;
+  --canvas: #f6f6f4;
   --surface: #ffffff;
-  --surface-secondary: #f5f7fb;
-  --surface-hover: #f3f5f5;
-  --surface-selected: #edf2fc;
-  --surface-command: #f0f3f5;
+  --surface-secondary: #f1f1ee;
+  --surface-hover: #f3f3f0;
+  --surface-selected: #f7efd2;
+  --surface-command: #f1f1ee;
   --surface-elevated: #ffffff;
   /* The one tint a card may give the single figure it is opened for. Every
    * other surface is white, so this is the whole tonal ladder above the
@@ -52,65 +61,65 @@
   --surface-stage: var(--accent-soft);
 
   --command-bg: #ffffff;
-  --command-text: #17272e;
-  --command-muted: #526369;
-  --command-line: #dce1e8;
-  --command-success: #157347;
-  --command-warning: #8a5300;
-  --command-danger: #a8231a;
+  --command-text: #1c1d20;
+  --command-muted: #54565c;
+  --command-line: #e2e2de;
+  --command-success: #0d7a62;
+  --command-warning: #925700;
+  --command-danger: #b3261e;
 
   /* ---- Lines --------------------------------------------------------- */
-  --line-soft: #e9eceb;
-  --line-default: #dce1df;
-  --line-strong: #c3c9d3;
+  --line-soft: #ecece8;
+  --line-default: #e2e2de;
+  --line-strong: #8d8f95;
 
   /* ---- Text ---------------------------------------------------------- */
-  --text-primary: #17272e;
-  --text-secondary: #526369;
-  --text-muted: #5b6c70;
-  --text-faint: #9aa3b2; /* decorative only: dots and rules, never text */
+  --text-primary: #1c1d20;
+  --text-secondary: #54565c;
+  --text-muted: #66686e;
+  --text-faint: #b4b5b9; /* decorative only: dots and rules, never text */
   --text-inverse: #ffffff;
 
   /* ---- Intent -------------------------------------------------------- */
-  --accent: #245cce;
-  --accent-hover: #1c4aa9;
-  --accent-soft: #e9effc;
-  --accent-ring: rgb(36 84 208 / 24%);
+  --accent: #1c1d20;
+  --accent-hover: #34363b;
+  --accent-soft: #faf5e2;
+  --accent-ring: rgb(168 135 42 / 45%);
   --accent-contrast: #ffffff;
 
-  --success: #157347;
-  --success-soft: #e3f4ea;
-  --warning: #8a5300;
-  --warning-soft: #fbf1dc;
-  --danger: #a8231a;
-  --danger-soft: #fbe9e7;
+  --success: #0d7a62;
+  --success-soft: #e2f3ee;
+  --warning: #925700;
+  --warning-soft: #fbf0d9;
+  --danger: #b3261e;
+  --danger-soft: #fbe8e6;
   /* A fill for a warning band drawn beside a danger one. The warning and
    * danger text tones are the same colour to a deuteranope, which words fix
    * on a label and nothing fixes on two adjacent fills; this lighter mark keeps
    * the bands apart. Text never wears it: it does not clear the contrast a
    * word needs. */
-  --warning-mark: #e2a93b;
-  --info: var(--accent);
-  --info-soft: var(--accent-soft);
+  --warning-mark: #b97a12;
+  --info: #2c58b5;
+  --info-soft: #e8eefb;
 
   /* ---- Navigation rail ----------------------------------------------- */
   /* White navigation uses blue selection and dark readable labels. */
   --nav-bg: #ffffff;
-  --nav-bg-hover: #f5f7fb;
-  --nav-bg-selected: #edf2fc;
-  --nav-line: #e6eaf0;
-  --nav-text: #4c5d70;
-  --nav-text-strong: #182b43;
-  --nav-text-muted: #607086;
-  --nav-accent: #245cce;
-  --nav-focus: #245cce;
-  --nav-glyph-bg: #edf2fc;
-  --nav-glyph-bg-strong: #e4ebf8;
-  --nav-scrollbar: #cbd3df;
-  --ink: #213852;
+  --nav-bg-hover: #f3f3f0;
+  --nav-bg-selected: #f7efd2;
+  --nav-line: #e6e6e2;
+  --nav-text: #4f5157;
+  --nav-text-strong: #1c1d20;
+  --nav-text-muted: #66686e;
+  --nav-accent: #9c7d22;
+  --nav-focus: #9c7d22;
+  --nav-glyph-bg: #f1f1ee;
+  --nav-glyph-bg-strong: #f7efd2;
+  --nav-scrollbar: #cfcfca;
+  --ink: #1c1d20;
 
   /* ---- Scrims -------------------------------------------------------- */
-  --scrim: rgb(14 20 34 / 42%);
+  --scrim: rgb(12 12 14 / 50%);
 
   /* ---- Spacing ------------------------------------------------------- */
   --space-1: 0.25rem;
@@ -124,17 +133,17 @@
 
   /* ---- Radius -------------------------------------------------------- */
   --radius-control: 8px;
-  --radius-card: 12px;
-  --radius-tag: 5px;
+  --radius-card: 14px;
+  --radius-tag: 6px;
   --radius-pill: 999px;
 
   /* ---- Elevation ----------------------------------------------------- */
   /* Nearly flat on purpose. Hierarchy comes from spacing and rules, and a
    * shadow is reserved for something that genuinely floats. */
-  --shadow-xs: 0 1px 1px rgb(19 24 32 / 4%);
-  --shadow-sm: 0 1px 2px rgb(19 24 32 / 6%), 0 1px 3px rgb(19 24 32 / 4%);
-  --shadow-md: 0 2px 4px rgb(19 24 32 / 6%), 0 8px 24px rgb(19 24 32 / 10%);
-  --shadow-lg: 0 8px 16px rgb(19 24 32 / 8%), 0 24px 56px rgb(19 24 32 / 18%);
+  --shadow-xs: 0 1px 2px rgb(16 17 20 / 5%);
+  --shadow-sm: 0 1px 2px rgb(16 17 20 / 6%), 0 2px 6px rgb(16 17 20 / 4%);
+  --shadow-md: 0 4px 12px rgb(16 17 20 / 8%), 0 1px 3px rgb(16 17 20 / 6%);
+  --shadow-lg: 0 16px 40px rgb(16 17 20 / 16%), 0 4px 12px rgb(16 17 20 / 8%);
 
   /* ---- Typography ---------------------------------------------------- */
   --font-sans:
@@ -1675,7 +1684,7 @@ section + section {
   justify-content: center;
   min-height: var(--control-height);
   padding: 0 var(--space-4);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line-default);
   border-radius: var(--radius-control);
   background-color: var(--surface);
   color: var(--text-primary);
@@ -1748,7 +1757,11 @@ section + section {
 }
 
 .button-link {
-  text-decoration: none;
+  /* Links read as text with a brand-gold rule, not as a second colour. */
+  text-decoration: underline;
+  text-decoration-color: var(--brand-gold);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -1768,6 +1781,7 @@ section + section {
   background: none;
   color: var(--accent-hover);
   text-decoration: underline;
+  text-decoration-color: var(--brand-gold-strong);
 }
 
 .button-small {
@@ -2737,6 +2751,9 @@ input[type="file"].input {
 .table .button-link:hover .identity-cell-name {
   color: var(--accent-hover);
   text-decoration: underline;
+  text-decoration-color: var(--brand-gold);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .table .button-link .identity-cell-meta {

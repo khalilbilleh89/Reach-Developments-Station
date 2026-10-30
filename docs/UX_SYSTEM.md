@@ -1,8 +1,8 @@
-# Reach Experience 4.1 — UX System
+# Reach Experience 5 — UX System
 
 Reach is a real-estate development operating system. Its interface must help a developer understand capital, assets, commitments and delivery before inspecting individual records. Experience 4 uses architectural graphite, a warm mineral canvas, strong financial typography and clearly separated working surfaces.
 
-This document replaces the visual rules of Product Experience 3.0. Business truth, permissions and accessibility remain constraints on every composition. The design system is implemented in `frontend/src/app/globals.css` and the canonical exports in `frontend/src/components/ui/index.ts`.
+Experience 5 recolours Experience 4.1 with the Reach Real Estate graphite and gold (design system: Reach Experience 5); the composition rules below are unchanged. This document replaces the visual rules of Product Experience 3.0. Business truth, permissions and accessibility remain constraints on every composition. The design system is implemented in `frontend/src/app/globals.css` and the canonical exports in `frontend/src/components/ui/index.ts`.
 
 Experience 4.1 refines three scales within that system: Portfolio exposes development attention and denomination-specific capital, Project identifies the development and its current position, and Unit 360 presents a physical asset with independently owned commercial, legal, collection and delivery states. Registers connect those scales without losing the source context.
 
@@ -24,21 +24,24 @@ There is one explicit white theme. The rail, the working surfaces and the execut
 
 | Role | Token | Value |
 | --- | --- | --- |
-| Cool canvas | `--canvas` | `#f7f9fc` |
+| Warm-neutral canvas | `--canvas` | `#f6f6f4` |
 | Working surface | `--surface` | `#ffffff` |
-| Supporting ground | `--surface-secondary` | `#f5f7fb` |
-| Stage surface, once per card | `--surface-stage` | the accent tint |
+| Supporting ground | `--surface-secondary` | `#f1f1ee` |
+| Stage surface, once per card | `--surface-stage` | the gold wash (`--accent-soft`, `#faf5e2`) |
 | Navigation | `--nav-bg` | `#ffffff` |
 | Executive ground | `--command-bg` | `#ffffff` |
-| Executive text | `--command-text` | `#17272e` |
-| Executive secondary text | `--command-muted` | `#526369` |
-| Primary text | `--text-primary` | `#17272e` |
-| Secondary text | `--text-secondary` | `#526369` |
-| Quiet text | `--text-muted` | `#5b6c70` |
-| Accent | `--accent` | `#245cce` |
-| Success / warning / danger | `--success`, `--warning`, `--danger` | Emerald, amber, restrained red |
-| Warning mark, fills only | `--warning-mark` | `#e2a93b`: the warning and danger text tones are one colour to a deuteranope, so adjacent fills use this lighter mark and text never does |
-| Controls / surfaces / tags | `--radius-control`, `--radius-card`, `--radius-tag` | 8px / 12px / 5px |
+| Executive text | `--command-text` | `#1c1d20` |
+| Executive secondary text | `--command-muted` | `#54565c` |
+| Primary text | `--text-primary` | `#1c1d20` |
+| Secondary text | `--text-secondary` | `#54565c` |
+| Quiet text | `--text-muted` | `#66686e` |
+| Accent: graphite primary action, focus and current item | `--accent` | `#1c1d20` |
+| Brand gold: marks, current-item rule, link underline, stock bar; never text on white | `--brand-gold` | `#dcc263` |
+| Gold as text / meaningful gold mark | `--brand-gold-text`, `--brand-gold-strong` | `#8a6d14` / `#a8872a` |
+| Info, independent of accent | `--info` | `#2c58b5` |
+| Success / warning / danger | `--success`, `--warning`, `--danger` | Teal-green (off the red-green axis), amber, restrained red |
+| Warning mark, fills only | `--warning-mark` | `#b97a12` (3.6:1 on surface): the warning and danger text tones are one colour to a deuteranope, so adjacent fills use this lighter mark and text never does |
+| Controls / surfaces / tags | `--radius-control`, `--radius-card`, `--radius-tag` | 8px / 14px / 6px |
 | Rail / context bar | `--sidebar-width`, `--context-bar-height` | 15.5rem / 4rem |
 | Record width | `--drawer-width` | 70rem maximum |
 
