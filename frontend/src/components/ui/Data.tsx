@@ -85,41 +85,6 @@ export function MetricGroup({ children, compact }: { children: ReactNode; compac
 }
 
 /**
- * A wide table that scrolls inside itself.
- *
- * The registers in this product are genuinely wide — a unit has four status
- * dimensions and a deal has five records behind it — so they scroll sideways
- * rather than being cut down to what fits a phone. `fixedFirst` keeps the
- * identity column in view while the rest scrolls.
- */
-export function TableScroll({
-  label,
-  fixedFirst,
-  compact,
-  stickyHeader,
-  children,
-}: {
-  label: string;
-  fixedFirst?: boolean;
-  compact?: boolean;
-  /** Bounded register scrolling keeps column labels visible on long lists. */
-  stickyHeader?: boolean;
-  children: ReactNode;
-}) {
-  const classes = ["table", fixedFirst ? "table-fixed-first" : "", compact ? "table-compact" : ""]
-    .filter(Boolean)
-    .join(" ");
-  return (
-    <div className={stickyHeader ? "table-scroll table-scroll-register" : "table-scroll"} tabIndex={0} role="group" aria-label={label}>
-      <table className={classes}>
-        <caption className="visually-hidden">{label}</caption>
-        {children}
-      </table>
-    </div>
-  );
-}
-
-/**
  * Small facts in a line: "Code RG-01 · Status Active · Base JOD".
  *
  * For identity a reader scans once, not for figures a reader compares.
