@@ -32,10 +32,12 @@ import {
   PageHeader,
   PromptDialog,
   Segmented,
+  SortHeader,
   Switch,
   TableScroll,
   ToolbarFilter,
   Tooltip,
+  useSort,
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 
@@ -53,6 +55,20 @@ const CATEGORIES = [
 ] as const;
 
 const categoryLabel = (key: string) => CATEGORIES.find(([value]) => value === key)?.[1] ?? key;
+const standingLabel = (row: PreLaunchExpense) => row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded";
+
+/** What each schedule column sorts by: the server's own value, only compared. */
+function readExpenseColumn(row: PreLaunchExpense, column: string): string | null {
+  switch (column) {
+    case "notes": return row.notes ?? row.movement_reference;
+    case "category": return categoryLabel(row.category);
+    case "counterparty": return row.counterparty_reference;
+    case "date": return row.movement_date;
+    case "total": return row.amount;
+    case "status": return standingLabel(row);
+    default: return null;
+  }
+}
 const statusTone = (status: string): Tone =>
   status === "confirmed" ? "success" : status === "reversed" ? "muted" : "warning";
 
@@ -91,6 +107,8 @@ export function PreLaunchTab({
     [row.notes, row.movement_reference, row.counterparty_reference, row.invoice_reference, categoryLabel(row.category)].some(value => value?.toLowerCase().includes(search.toLowerCase().trim()))
   ) ?? [];
   const nonzero = (value: string) => /[1-9]/.test(value);
+  // The register arrives whole, so the schedule may be ordered by what it already shows.
+  const { sort, toggle, sorted } = useSort(expenses, readExpenseColumn);
   const canRecord = hasAnyRole(roles, PRELAUNCH_RECORDERS);
   const canConfirm = hasAnyRole(roles, CASHFLOW_CONFIRMERS);
 
@@ -179,21 +197,21 @@ export function PreLaunchTab({
           <div className="card-body"><EmptyState title="No Authorities expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : expenses.length === 0 ? <EmptyState title="No matching expenses" actions={<Button onClick={() => { setSearch(""); setStatus(""); }}>Reset filters</Button>} /> : (
           schedule ? <TableScroll label="Authorities expense register" fixedFirst stickyHeader>
-            <thead><tr><th scope="col">Notes / reference</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Total including VAT</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
-            <tbody>{expenses.map((row) => (
+            <thead><tr><SortHeader column="notes" sort={sort} onToggle={toggle}>Notes / reference</SortHeader><SortHeader column="category" sort={sort} onToggle={toggle}>Category</SortHeader><SortHeader column="counterparty" sort={sort} onToggle={toggle}>Counterparty / authority</SortHeader><SortHeader column="date" sort={sort} onToggle={toggle}>Date</SortHeader><SortHeader column="total" sort={sort} onToggle={toggle} className="num">Total including VAT</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>{sorted.map((row) => (
               <tr key={row.id}>
                 <th scope="row" className="cell-prose">{row.notes ?? row.movement_reference}</th>
                 <td>{categoryLabel(row.category)}</td>
                 <td>{row.counterparty_reference ?? "—"}</td>
                 <td>{businessDate(row.movement_date)}</td>
                 <td className="num">{money(row.amount, row.currency_code ?? currencyCode)}<ExpenseVat row={row} currencyCode={currencyCode} /></td>
-                <td><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge>{row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}</td>
+                <td><Badge tone={statusTone(row.status)}>{standingLabel(row)}</Badge>{row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}</td>
                 <td><span className="cell-secondary">Invoice: {row.invoice_reference ?? "—"}</span><span className="cell-secondary">Evidence: {row.evidence_reference ?? "—"}</span></td>
                 <td className="cell-prose">{expenseActions(row)}</td>
               </tr>
             ))}</tbody>
           </TableScroll> : <div className="expense-entry-list">{expenses.map(row => <article className="expense-entry" key={row.id}>
-            <header><div><span className="eyebrow"><Icon name="money" />{categoryLabel(row.category)}</span><h3>{row.notes ?? row.movement_reference}</h3><p className="footnote">{row.counterparty_reference ?? "Counterparty not recorded"}</p></div><div className="expense-entry-amount"><strong>{money(row.amount, row.currency_code ?? currencyCode)}</strong><ExpenseVat row={row} currencyCode={currencyCode} /><Badge tone={statusTone(row.status)}>{row.removed_without_confirmation ? "Removed" : row.status === "confirmed" ? "Confirmed" : row.status === "reversed" ? "Reversed" : "Recorded"}</Badge></div></header>
+            <header><div><span className="eyebrow"><Icon name="money" />{categoryLabel(row.category)}</span><h3>{row.notes ?? row.movement_reference}</h3><p className="footnote">{row.counterparty_reference ?? "Counterparty not recorded"}</p></div><div className="expense-entry-amount"><strong>{money(row.amount, row.currency_code ?? currencyCode)}</strong><ExpenseVat row={row} currencyCode={currencyCode} /><Badge tone={statusTone(row.status)}>{standingLabel(row)}</Badge></div></header>
             <dl><div><dt>Movement date</dt><dd>{businessDate(row.movement_date)}</dd></div><div><dt>Movement reference</dt><dd>{row.movement_reference}</dd></div><div><dt>Invoice reference</dt><dd>{row.invoice_reference ?? "Not recorded"}</dd></div><div><dt>Supporting evidence</dt><dd>{row.evidence_reference ?? "Not recorded"}</dd></div></dl>
             {row.reversal_reason ? <p className="footnote">{row.reversal_reason}</p> : null}<footer>{expenseActions(row)}</footer>
           </article>)}</div>

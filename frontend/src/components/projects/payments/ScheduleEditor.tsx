@@ -8,6 +8,7 @@ import {
   MoneyInput,
   RateInput,
   TableScroll,
+  Tooltip,
 } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money, percent, percentInput } from "@/lib/format";
@@ -150,7 +151,7 @@ export function ScheduleEditor({
             <th scope="col" className="num">
               {byPercentage ? "Share" : "Principal"}
             </th>
-            {rateCharges ? <><th scope="col">VAT / Tax %</th><th scope="col" className="num">VAT / Tax (saved)</th><th scope="col" className="num">Total (saved)</th></> : null}
+            {rateCharges ? <><th scope="col"><Tooltip term="VAT">Value added tax: the sales tax charged on the instalment, at the rate entered for it.</Tooltip> / Tax %</th><th scope="col" className="num">VAT / Tax (saved)</th><th scope="col" className="num">Total (saved)</th></> : null}
             {manualCharges ? (
               <>
                 <th scope="col" className="num">
@@ -472,7 +473,7 @@ export function ScheduleTable({
             Principal
           </th>
           <th scope="col" className="num">
-            VAT / Tax %
+            <Tooltip term="VAT">Value added tax: the sales tax charged on the instalment, at the rate saved for it.</Tooltip> / Tax %
           </th>
           <th scope="col" className="num">
             VAT / Tax

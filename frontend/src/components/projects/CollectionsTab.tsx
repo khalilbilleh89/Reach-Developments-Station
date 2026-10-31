@@ -23,7 +23,7 @@ import {
   useSort,
 } from "@/components/ui";
 import { collections } from "@/lib/api";
-import type { CollectionRegisterRow } from "@/lib/api";
+import type { AgingRow, CollectionRegisterRow } from "@/lib/api";
 import { useAnswer } from "@/lib/answer";
 import { ReadState } from "@/components/portfolio/ReadState";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
@@ -58,6 +58,21 @@ function readAccountColumn(row: CollectionRegisterRow, column: string): string |
     default: return null;
   }
 }
+
+/** What each sortable aging column reads: the server's instalment figures, compared only. */
+function readAgingColumn(row: AgingRow, column: string): string | number | null {
+  switch (column) {
+    case "unit": return row.unit_reference;
+    case "due": return row.installment.due_date;
+    case "scheduled": return row.installment.scheduled;
+    case "collected": return row.installment.paid;
+    case "outstanding": return row.installment.outstanding;
+    case "days": return row.installment.overdue_days;
+    default: return null;
+  }
+}
+
+const NO_AGING: AgingRow[] = [];
 
 const VIEWS = [
   { key: "accounts", label: "Accounts" },
@@ -131,6 +146,8 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
 
   // Ordering the rows already on screen; every figure compared is the server's.
   const { sort, setSort, toggle, sorted } = useSort(visible, readAccountColumn);
+  // The aging list is read whole for the date asked, so it can be ordered on screen too.
+  const { sort: agingSort, toggle: toggleAging, sorted: sortedAging } = useSort(aging ?? NO_AGING, readAgingColumn);
   const chips = [
     status ? { key: "status", label: `Status: ${unitCollectionLabel(status)}`, onRemove: () => setStatus("") } : null,
     bucket ? { key: "bucket", label: `Age: ${bucketLabel(bucket)}`, onRemove: () => setBucket("") } : null,
@@ -306,27 +323,19 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
             <TableScroll label={`Aging as at ${businessDate(asOf)}`} fixedFirst>
               <thead>
                 <tr>
-                  <th scope="col">Account</th>
+                  <SortHeader column="unit" sort={agingSort} onToggle={toggleAging}>Account</SortHeader>
                   <th scope="col">Instalment</th>
-                  <th scope="col">Due</th>
-                  <th scope="col" className="num">
-                    Scheduled
-                  </th>
-                  <th scope="col" className="num">
-                    Collected
-                  </th>
-                  <th scope="col" className="num">
-                    Outstanding
-                  </th>
-                  <th scope="col" className="num">
-                    Days
-                  </th>
+                  <SortHeader column="due" sort={agingSort} onToggle={toggleAging}>Due</SortHeader>
+                  <SortHeader column="scheduled" sort={agingSort} onToggle={toggleAging} className="num">Scheduled</SortHeader>
+                  <SortHeader column="collected" sort={agingSort} onToggle={toggleAging} className="num">Collected</SortHeader>
+                  <SortHeader column="outstanding" sort={agingSort} onToggle={toggleAging} className="num">Outstanding</SortHeader>
+                  <SortHeader column="days" sort={agingSort} onToggle={toggleAging} className="num">Days</SortHeader>
                   <th scope="col">Age</th>
                   <th scope="col">State</th>
                 </tr>
               </thead>
               <tbody>
-                {aging.map((row) => {
+                {sortedAging.map((row) => {
                   const code = currencyCodeOf(row.currency_id);
                   const line = row.installment;
                   return (

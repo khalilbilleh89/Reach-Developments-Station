@@ -150,7 +150,7 @@ export function ClientsPanel({
     { name: "email", label: "Email" }, { name: "phone", label: "Phone" },
     { name: "address", label: "Address" },
     { name: "preferred_language_code", label: "Language code" },
-    { name: "kyc_status", label: "KYC status", kind: "select", options: ["not_started", "in_progress", "cleared", "rejected"].map(value => ({ value, label: value.replaceAll("_", " ") })) },
+    { name: "kyc_status", label: "Identity checks (KYC) status", kind: "select", options: ["not_started", "in_progress", "cleared", "rejected"].map(value => ({ value, label: value.replaceAll("_", " ") })) },
     { name: "is_active", label: "Active buyer", kind: "checkbox" },
   ];
   const [party, setParty] = useState({

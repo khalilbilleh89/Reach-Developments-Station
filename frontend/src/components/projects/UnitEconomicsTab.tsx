@@ -1,7 +1,7 @@
 "use client";
 
 import * as ui from "@/components/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Badge,
@@ -32,6 +32,7 @@ import {
   PromptDialog,
   Segmented,
   SortHeader,
+  SourceNote,
   StatusDot,
   Steps,
   TableScroll,
@@ -354,7 +355,28 @@ function Overview({
             over total revenue, not the average of the unit ratios, and the
             difference between those two is a number somebody would have to
             defend. */}
-        <Card tone="command" title="Project result" description={`On cost basis v${version.version_number}.`}>
+        <Card
+          tone="command"
+          title="Project result"
+          description={`On cost basis v${version.version_number}.`}
+          actions={
+            <SourceNote
+              chip
+              coverage={summary.comparable_unit_count === summary.unit_count ? "available" : summary.comparable_unit_count === 0 ? "unavailable" : "partial"}
+              sampleSize={summary.unit_count}
+              sampleNoun="units"
+              reason={`Totals cover ${summary.comparable_unit_count} of ${summary.unit_count} units.`}
+              method={
+                <>
+                  Totals cover {summary.comparable_unit_count} of {summary.unit_count} units: sold units on the
+                  frozen terms and basis they were sold under, unsold units on today&rsquo;s approved price and
+                  today&rsquo;s basis. Margin is total profit over total revenue and return on cost is total
+                  profit over total cost — weighted on the server, never the average of the unit ratios.
+                </>
+              }
+            />
+          }
+        >
           <Position>
             <PositionFigure lead label="Margin" value={percent(summary.margin_fraction)} />
             <PositionFigure label="Return on cost" value={percent(summary.return_on_cost_fraction)} />
@@ -372,12 +394,6 @@ function Overview({
               value={`${summary.comparable_unit_count} of ${summary.unit_count} units`}
             />
           </PositionSupport>
-          <p className="footnote">
-            Totals cover {summary.comparable_unit_count} of {summary.unit_count} units: sold units on the
-            frozen terms and basis they were sold under, unsold units on today&rsquo;s approved price and
-            today&rsquo;s basis. Margin is total profit over total revenue and return on cost is total
-            profit over total cost — weighted on the server, never the average of the unit ratios.
-          </p>
           {summary.currency_mismatch_count > 0 ? (
             <Notice tone="warning">
               {plural(summary.currency_mismatch_count, "unit")} cannot be included because revenue and project
@@ -1311,7 +1327,7 @@ function UnitCosts({
   const [recording, setRecording] = useState(false);
   const [reversing, setReversing] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const reference = new Map(rows.map((row) => [row.unit_id, row.unit_reference]));
+  const reference = useMemo(() => new Map(rows.map((row) => [row.unit_id, row.unit_reference])), [rows]);
   const needle = search.trim().toLowerCase();
   const shown = costs.filter(
     (cost) => !needle || `${reference.get(cost.unit_id) ?? ""} ${costTypeLabel(cost.cost_type)} ${cost.reference ?? ""}`.toLowerCase().includes(needle),

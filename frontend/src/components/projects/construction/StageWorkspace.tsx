@@ -145,7 +145,7 @@ function StageRecord({ stage, canWrite, save }: { stage: UnitStage; canWrite: bo
     } catch (caught) { setError(message(caught)); }
     finally { setBusy(false); }
   }
-  return <SubPanel title={`${stage.sequence}. ${stage.name}`} actions={<Badge tone={stage.status === "complete" ? "success" : "neutral"}>{stage.status}</Badge>}>
+  return <SubPanel title={`${stage.sequence}. ${stage.name}`} actions={<Badge tone={stage.status === "complete" ? "success" : "neutral"}>{stage.status === "complete" ? "Complete" : "Pending"}</Badge>}>
     <p>Planned: {stage.planned_date ? businessDate(stage.planned_date) : "Not set"} · Completed: {stage.completed_date ? businessDate(stage.completed_date) : "Not recorded"}</p>
     {error ? <Notice tone="error">{error}</Notice> : null}
     {canWrite ? <Disclosure ref={completionForm} summaryRef={completionSummary} title={<>{stage.completed_date ? "Correct completion" : "Record completion"}</>}>

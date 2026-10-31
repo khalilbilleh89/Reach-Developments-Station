@@ -91,9 +91,9 @@ export function PhaseAccessEditor({
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <fieldset className="fieldset" disabled={busy}>
-        <Segmented
+        <Segmented<"all" | "selected">
           label={`Inventory scope for ${displayName}`}
-          value={phaseScope}
+          value={phaseScope === "selected" ? "selected" : "all"}
           options={[
             { value: "all", label: "All phases" },
             { value: "selected", label: "Selected phases only" },

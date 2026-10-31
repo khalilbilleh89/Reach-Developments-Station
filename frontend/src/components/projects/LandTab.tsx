@@ -35,17 +35,35 @@ import {
   PositionFigure,
   SectionHeader,
   Segmented,
+  SortHeader,
+  SourceNote,
   StatusDot,
   StickyActions,
   TableScroll,
+  useSort,
 } from "@/components/ui";
 import type { RecordPageFact } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
-import { AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
+import { ACQUISITION_METHOD, AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
 import { LandAnalytics } from "@/components/projects/land/LandAnalytics";
 import { ParcelCollection } from "@/components/projects/land/ParcelCollection";
 import { measurement } from "@/components/projects/land/presentation";
+
+/** What each schedule column sorts by: the recorded value itself, only compared. */
+function readParcelColumn(parcel: LandParcel, column: string): string | null {
+  switch (column) {
+    case "parcel": return parcel.plot_number;
+    case "ownership": return parcel.ownership_type;
+    case "title": return parcel.title_status;
+    case "zoning": return parcel.zoning;
+    case "area": return parcel.land_area;
+    case "acquired": return parcel.acquisition_date;
+    case "price": return parcel.purchase_price;
+    case "state": return parcel.is_active ? "Active" : "Inactive";
+    default: return null;
+  }
+}
 
 /** Tri-state: null means nobody has established it yet, which is not "no". */
 function utility(value: boolean | null): string {
@@ -435,6 +453,9 @@ export function LandTab({
         .includes(needle),
   );
 
+  // The register holds every parcel, so ordering the schedule is a comparison of what is on screen.
+  const { sort, toggle, sorted } = useSort(rows, readParcelColumn);
+
   const facts: RecordPageFact[] = selected
     ? [
         { label: "Title status", value: selected.title_status ?? "Not established", tone: selected.title_status ? undefined : "muted" },
@@ -542,27 +563,27 @@ export function LandTab({
             <TableScroll label="Land register" fixedFirst stickyHeader>
               <thead>
                 <tr>
-                  <th scope="col">Parcel</th>
-                  <th scope="col">Ownership</th>
-                  <th scope="col">Title status</th>
-                  <th scope="col">Zoning</th>
-                  <th scope="col" className="num">
+                  <SortHeader column="parcel" sort={sort} onToggle={toggle}>Parcel</SortHeader>
+                  <SortHeader column="ownership" sort={sort} onToggle={toggle}>Ownership</SortHeader>
+                  <SortHeader column="title" sort={sort} onToggle={toggle}>Title status</SortHeader>
+                  <SortHeader column="zoning" sort={sort} onToggle={toggle}>Zoning</SortHeader>
+                  <SortHeader column="area" sort={sort} onToggle={toggle} className="num">
                     Area
-                  </th>
-                  <th scope="col">Acquired</th>
+                  </SortHeader>
+                  <SortHeader column="acquired" sort={sort} onToggle={toggle}>Acquired</SortHeader>
                   {canSeeCost ? (
-                    <th scope="col" className="num">
+                    <SortHeader column="price" sort={sort} onToggle={toggle} className="num">
                       Purchase price
-                    </th>
+                    </SortHeader>
                   ) : null}
-                  <th scope="col">State</th>
+                  <SortHeader column="state" sort={sort} onToggle={toggle}>State</SortHeader>
                   <th scope="col">
                     <span className="visually-hidden">Open</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((parcel) => (
+                {sorted.map((parcel) => (
                   <tr key={parcel.id} aria-selected={selected?.id === parcel.id}>
                     <th scope="row">
                       <button
@@ -921,6 +942,14 @@ export function LandTab({
                       ? "What the land cost to acquire. Not a valuation."
                       : undefined
                   }
+                  actions={selected.financials_visible ? (
+                    <SourceNote
+                      coverage={selected.total_acquisition_cost ? "available" : "partial"}
+                      reason={selected.total_acquisition_cost ? null : "A cost input is missing, so the total is not stated."}
+                      method={ACQUISITION_METHOD}
+                      label="How the acquisition cost is totalled"
+                    />
+                  ) : undefined}
                 />
                 {selected.financials_visible ? (
                   <Position compact>

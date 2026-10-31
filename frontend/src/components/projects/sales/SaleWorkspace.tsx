@@ -433,7 +433,7 @@ function HandoverView({
       </section>
 
       {detail.blockers.length > 0 ? (
-        <Notice tone="info">Still outstanding: {detail.blockers.join("; ")}.</Notice>
+        <Banner tone="warning">Still outstanding before handover: {detail.blockers.join("; ")}.</Banner>
       ) : null}
 
       {canRunHandover && detail.handover.status !== "handed_over" ? (
