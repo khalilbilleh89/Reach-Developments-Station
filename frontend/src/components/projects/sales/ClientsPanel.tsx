@@ -23,9 +23,11 @@ import {
   Loading,
   Notice,
   StatusDot,
+  SortHeader,
   SubPanel,
   TableScroll,
   RowMenu,
+  useSort,
 } from "@/components/ui";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
@@ -33,6 +35,19 @@ import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { kycLabel, kycTone } from "@/components/projects/sales/labels";
 import { AgentSelect } from "./AgentSelect";
+
+const NO_CLIENTS: SalesClient[] = [];
+
+/** The value a column sorts by: the server's client number, name, KYC state or standing. */
+function readClientColumn(client: SalesClient, column: string): string | null {
+  switch (column) {
+    case "client": return client.client_number;
+    case "name": return client.display_name;
+    case "kyc": return kycLabel(client.kyc_status);
+    case "standing": return client.is_active ? "Active" : "Inactive";
+    default: return null;
+  }
+}
 
 function BuyerAgentAssignment({projectId, buyer, onSaved}: {
   projectId: string; buyer: SalesClient; onSaved: () => Promise<void>;
@@ -163,6 +178,9 @@ export function ClientsPanel({
     })();
   }, [selected, loadParties]);
 
+  // Ordering the buyers already on screen; the server returns the list in full.
+  const { sort, toggle, sorted } = useSort(clients ?? NO_CLIENTS, readClientColumn);
+
   const run = async (action: () => Promise<unknown>, done: string) => {
     setBusy(true);
     setError(null);
@@ -251,18 +269,18 @@ export function ClientsPanel({
         <TableScroll label="Buyers" compact>
           <thead>
             <tr>
-              <th scope="col">Client</th>
-              <th scope="col">Name</th>
-              <th scope="col">Identity checks</th>
+              <SortHeader column="client" sort={sort} onToggle={toggle}>Client</SortHeader>
+              <SortHeader column="name" sort={sort} onToggle={toggle}>Name</SortHeader>
+              <SortHeader column="kyc" sort={sort} onToggle={toggle}>Identity checks</SortHeader>
               <th scope="col">Contact</th>
-              <th scope="col">Standing</th>
+              <SortHeader column="standing" sort={sort} onToggle={toggle}>Standing</SortHeader>
               <th scope="col">
                 <span className="visually-hidden">Parties</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {clients.map((client) => (
+            {sorted.map((client) => (
               <tr key={client.id} aria-selected={selected === client.id}>
                 <th scope="row" className="mono">
                   {client.client_number}

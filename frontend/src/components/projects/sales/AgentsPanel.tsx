@@ -7,7 +7,7 @@ import { SalesImport } from "./SalesImport";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesAgent } from "@/lib/api";
 import { Button, DataToolbar, DraftBoundary, EmptyState, Field, FieldRow, FormActions,
-  Loading, Notice, RecordPage, RowMenu, TableScroll } from "@/components/ui";
+  Loading, Notice, RecordPage, RowMenu, SortHeader, TableScroll, useSort } from "@/components/ui";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 
 function AgentForm({projectId, agent, onSaved, onCancel}: {
@@ -46,6 +46,20 @@ function AgentForm({projectId, agent, onSaved, onCancel}: {
   </DraftBoundary>;
 }
 
+const NO_AGENTS: SalesAgent[] = [];
+
+/** The value a column sorts by, as the roster record holds it. */
+function readAgentColumn(agent: SalesAgent, column: string): string | null {
+  switch (column) {
+    case "agent": return agent.display_name;
+    case "country": return agent.country;
+    case "branch": return agent.branch;
+    case "leader": return agent.branch_leader;
+    case "status": return agent.is_active ? "Active" : "Inactive";
+    default: return null;
+  }
+}
+
 /** A roster, not a grouping of buyers with matching names. */
 export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite: boolean}) {
   const [agents, setAgents] = useState<SalesAgent[] | null>(null);
@@ -61,6 +75,8 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
     catch (caught) { setAgents(null); setError(caught instanceof ApiError ? caught.message : "Could not load Agents."); }
   }, [projectId, search]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]);
+  // Ordering the roster already on screen; the server returns it in full.
+  const { sort, toggle, sorted } = useSort(agents ?? NO_AGENTS, readAgentColumn);
 
   if (importing) return <SalesImport projectId={projectId} kind="agents" onClose={() => setImporting(false)} onImported={() => { void load(); }} />;
 
@@ -79,8 +95,8 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
     {agents === null ? (error ? null : <Loading label="Loading Agents…" />) : agents.length === 0 ?
       <EmptyState title="No agents registered" hint="Add an Agent before assigning one to a buyer. Buyers may also have no Agent." /> :
       <TableScroll label="Project Agents" fixedFirst>
-        <thead><tr><th scope="col">Agent</th><th scope="col">Country</th><th scope="col">Branch</th><th scope="col">Branch leader</th><th scope="col">Status</th>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
-        <tbody>{agents.map(agent => <tr key={agent.id}>
+        <thead><tr><SortHeader column="agent" sort={sort} onToggle={toggle}>Agent</SortHeader><SortHeader column="country" sort={sort} onToggle={toggle}>Country</SortHeader><SortHeader column="branch" sort={sort} onToggle={toggle}>Branch</SortHeader><SortHeader column="leader" sort={sort} onToggle={toggle}>Branch leader</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
+        <tbody>{sorted.map(agent => <tr key={agent.id}>
           <th scope="row">{agent.display_name}</th><td>{agent.country ?? "—"}</td><td>{agent.branch ?? "—"}</td><td>{agent.branch_leader ?? "—"}</td>
           <td>{agent.is_active ? "Active" : "Inactive"}</td>
           {canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${agent.display_name}`}><Button onClick={() => setEditing(agent)}>Edit agent</Button>

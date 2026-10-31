@@ -6,6 +6,7 @@ import { useAnswer } from "@/lib/answer";
 import { hasAnyRole, MARKETING_READERS, MARKETING_WRITERS } from "@/lib/roles";
 import { businessDate } from "@/lib/format";
 import { Button, Card, EmptyState, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, RowMenu, SectionHeader } from "@/components/ui";
+import { sectionIcon } from "@/components/shell/navigation";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 import { MarketingContentEditor } from "./MarketingContentEditor";
 
@@ -18,7 +19,7 @@ export function MarketingContentTab({ projectId, roles, kind }: { projectId: str
   const title = kind === "bio" ? "Project Bio" : "Branding";
   if (editing && answer.status === "ready") return <MarketingContentEditor kind={kind} initial={answer.data.data} onClose={() => setEditing(false)} onSave={async data => { await marketing.saveContent(projectId, kind, data, answer.data.version); setEditing(false); answer.retry(); }} />;
   return <div className="stack">
-    <PageHeader title={title} subtitle={kind === "bio" ? "The story and setting behind this development." : "A consistent identity for every project touchpoint."} actions={canWrite && answer.status === "ready" ? <Button onClick={() => setEditing(true)}>{answer.data.version ? "Edit" : "Create"} {title.toLowerCase()}</Button> : undefined} />
+    <PageHeader icon={sectionIcon(kind === "bio" ? "marketing-bio" : "marketing-branding")} title={title} subtitle={kind === "bio" ? "The story and setting behind this development." : "A consistent identity for every project touchpoint."} actions={canWrite && answer.status === "ready" ? <Button onClick={() => setEditing(true)}>{answer.data.version ? "Edit" : "Create"} {title.toLowerCase()}</Button> : undefined} />
     {answer.status === "loading" ? <Loading label={`Loading ${title.toLowerCase()}…`} /> : null}
     {answer.status === "denied" ? <Notice tone="info">Not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button onClick={answer.retry}>Retry</Button></Notice> : null}

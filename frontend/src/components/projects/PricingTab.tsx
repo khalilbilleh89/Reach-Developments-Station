@@ -17,7 +17,7 @@ import type {
 } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, fractionFromPercent, money, percent, todayISO } from "@/lib/format";
-import { sectionDescription } from "@/components/shell/navigation";
+import { sectionDescription, sectionIcon } from "@/components/shell/navigation";
 import {
   Badge,
   Button,
@@ -177,7 +177,7 @@ export function PricingTab({
   };
 
   const header = (actions?: React.ReactNode) => (
-    <PageHeader title="Pricing" subtitle={sectionDescription("pricing")} compact actions={actions} />
+    <PageHeader icon={sectionIcon("pricing")} title="Pricing" subtitle={sectionDescription("pricing")} compact actions={actions} />
   );
 
   // Pricing is refused while the project is in setup, because that is the

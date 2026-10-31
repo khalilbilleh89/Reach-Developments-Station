@@ -216,7 +216,7 @@ function mount(file, name, dependencies, props) {
   const exports = {};
   const source = readFileSync(new URL(`../src/components/${file}.tsx`, import.meta.url), "utf8") + `\nexport { ${name} as TestedComponent };`;
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  const ui = new Proxy({}, { get: (_, key) => key });
+  const ui = new Proxy({ useSort: rows => ({ sort: null, toggle: () => {}, sorted: rows }) }, { get: (target, key) => target[key] ?? key });
   runInNewContext(`(function(require, exports) { ${code}\n})`, { setTimeout, clearTimeout, crypto: globalThis.crypto })(key => {
     if (key === "react") return react;
     if (key in dependencies) return dependencies[key];
@@ -553,7 +553,7 @@ test("Payment Plans retries its register without submitting a new plan", async (
     "@/lib/format": { todayISO: () => "2026-09-11" },
     "@/components/projects/payments/labels": { versionLabel: value => value },
     "next/navigation": { useRouter: () => ({}) },
-    "@/components/ui": new Proxy({ useRecordHref: () => () => "" }, { get: (target, key) => target[key] ?? key }),
+    "@/components/ui": new Proxy({ useRecordHref: () => () => "", useSort: rows => ({ sort: null, toggle: () => {}, sorted: rows }) }, { get: (target, key) => target[key] ?? key }),
     "@/components/shell/registerState": { useRegisterRestore() {}, useRegisterFields: () => [{ search: "", status: "" }, () => {}] },
     "@/components/shell/navigation": { sectionDescription: () => "", projectHref: () => "/projects/" },
   }, { projectId: "synthetic", projectStatus: "active", roles: new Set() });

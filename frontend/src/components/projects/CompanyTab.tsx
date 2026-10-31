@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sectionIcon } from "@/components/shell/navigation";
 import { ApiError } from "@/lib/api";
 import { companies, type Company, type CompanyFields, type BankFields, type BankAccount } from "@/lib/api/companies";
 import { useAnswer } from "@/lib/answer";
@@ -81,7 +82,7 @@ export function CompanyTab({ projectId, roles }: { projectId: string; roles: Set
   const selected = rows.find(row => row.id === selectedId) ?? rows[0];
   const name = (row: Company) => row.legal_name || row.trading_name || "Unnamed company";
   return <div className="stack">
-    <PageHeader title="Company" subtitle="Company information, registration documents and registered bank accounts." actions={canWrite ? <Button onClick={() => setEditor({ kind: "company" })}>Add company</Button> : undefined} />
+    <PageHeader icon={sectionIcon("company")} title="Company" subtitle="Company information, registration documents and registered bank accounts." actions={canWrite ? <Button onClick={() => setEditor({ kind: "company" })}>Add company</Button> : undefined} />
     {answer.status === "loading" ? <Loading label="Loading company details…" /> : null}
     {answer.status === "off" || answer.status === "denied" ? <Notice tone="info">Company details are not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}

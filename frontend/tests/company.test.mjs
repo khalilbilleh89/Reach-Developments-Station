@@ -23,6 +23,7 @@ function harness() {
     if (key === "@/lib/api/companies") return { companies: {} };
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
     if (key === "@/lib/roles") return { PROJECT_FINANCIAL_READERS: new Set(["finance"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) };
+    if (key === "@/components/shell/navigation") return { sectionIcon: () => undefined };
     if (key === "./CompanyDocuments") return { CompanyDocuments: "CompanyDocuments" };
     if (key === "./DeleteRecordButton") return { DeleteRecordButton: "DeleteRecordButton" };
     if (key === "@/components/ui") return new Proxy({}, { get: (_, name) => name });

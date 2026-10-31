@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { pageOffset, useRegisterFields } from "@/components/shell/registerState";
 
-import { Badge, Button, ButtonRow, Card, DataToolbar, Disclosure, RecordPage, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Metric, MetricGroup, Notice, Position, PositionFigure, SectionHeader, TableScroll, ToolbarFilter } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, DataToolbar, Disclosure, RecordPage, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Metric, MetricGroup, Notice, Position, PositionFigure, SectionHeader, TableScroll, ToolbarFilter, SourceNote } from "@/components/ui";
 
 import { ReadState } from "./ReadState";
 import { useAnswer } from "@/lib/answer";
@@ -66,7 +66,7 @@ function Observation({ item }: { item: OutlookItem }) {
 
         </KeyValueGrid>}
 
-    <Disclosure title="Source basis"><p>{item.basis}</p>{item.source_version_id ? <p className="cell-prose">Governing version {item.source_version_id}</p> : null}{item.commercial ? <p>Observation window {businessDate(item.commercial.window_from)}–{businessDate(item.commercial.window_to)} · Monthly net counts {item.commercial.monthly_net_absorption.join(", ")}</p> : null}</Disclosure>
+    <p className="muted">Source basis <SourceNote coverage={item.availability === "available" ? "available" : item.availability === "partial" ? "partial" : "unavailable"} label="Source basis" method={<>{item.basis}{item.source_version_id ? <><br />Governing version {item.source_version_id}</> : null}{item.commercial ? <><br />Observation window {businessDate(item.commercial.window_from)}–{businessDate(item.commercial.window_to)} · Monthly net counts {item.commercial.monthly_net_absorption.join(", ")}</> : null}</>} /></p>
 
     <ButtonRow><Link className="button button-small" href={item.drilldown}>Open source</Link>{item.availability !== "unavailable" && item.item_type !== "management_action_due" ? <SourceAction project={item.project_id} source={{ source_type: "portfolio_outlook", source_code: item.item_type, source_key: item.source_key, source_observation_date: item.observation_date }} /> : null}</ButtonRow>
 

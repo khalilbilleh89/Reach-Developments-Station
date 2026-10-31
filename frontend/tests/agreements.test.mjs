@@ -21,11 +21,12 @@ function harness() {
     }};
     if (key === "@/lib/api") return { ApiError };
     if (key === "@/lib/api/agreements") return { agreements: {} };
+    if (key === "@/components/shell/navigation") return { sectionIcon: () => undefined };
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
     if (key === "@/lib/format") return { businessDate: value => value };
     if (key === "@/lib/roles") return { AGREEMENT_READERS: new Set(["finance", "legal"]), AGREEMENT_WRITERS: new Set(["legal"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) };
     if (key === "./DeleteRecordButton") return { DeleteRecordButton: "DeleteRecordButton" };
-    if (key === "@/components/ui") return new Proxy({}, { get: (_, name) => name });
+    if (key === "@/components/ui") return new Proxy({ useSort: rows => ({ sort: null, toggle: () => {}, sorted: rows }) }, { get: (target, name) => target[name] ?? name });
     return require(key);
   }, exports);
   return { exports, ApiError, setAnswer(value) { answer = { retry() {}, ...value }; },
@@ -45,9 +46,10 @@ test("final draft register displays all four fields and writer edit/delete", () 
  const h=harness();h.setAnswer({status:"ready",data:[row]});
  const tree=h.render("AgreementsTab",{projectId:"p",roles:new Set(["legal"])});
  assert.equal(h.enabled(),true);
- assert.deepEqual(find(tree,"th").map(n=>n.props.children),["Agreement name","Signing company","Draft creation date","Document","Actions",row.name]);
+ assert.deepEqual(nodes(tree).filter(n=>n.type==="th"||n.type==="SortHeader").map(n=>n.props.children),["Agreement name","Signing company","Draft creation date","Document","Actions",row.name]);
  assert.equal(find(tree,"time")[0].props.dateTime,row.draft_created_on);
  assert.equal(find(tree,"DeleteRecordButton")[0].props.recordName,row.name);
+ assert.deepEqual(find(tree,"SortHeader").map(n=>n.props.column),["name","company","drafted"]);
 });
 
 test("reader has download but no mutation controls; denied request is gated", () => {

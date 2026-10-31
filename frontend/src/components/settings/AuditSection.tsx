@@ -6,7 +6,7 @@ import { ReadState } from "@/components/portfolio/ReadState";
 import { eventTime } from "@/lib/format";
 
 import { audit } from "@/lib/api";
-import { Button, Card, DataToolbar, EmptyState, Notice, RegisterPagination, TableScroll, ToolbarFilter } from "@/components/ui";
+import { Button, Card, DataToolbar, DateRange, EmptyState, Notice, RegisterPagination, TableScroll, ToolbarFilter } from "@/components/ui";
 
 /** Format a before/after snapshot as readable field lines, not raw JSON. */
 function Snapshot({ title, data }: { title: string; data: Record<string, unknown> | null }) {
@@ -58,8 +58,7 @@ export function AuditSection() {
       >
         <ToolbarFilter label="Action code (exact)" active={fields.action !== ""}><input className="input" placeholder="Action code" value={fields.action} onChange={e => filter({ action: e.target.value })} maxLength={64} /></ToolbarFilter>
         <ToolbarFilter label="Object type (exact)" active={fields.entity_type !== ""}><input className="input" placeholder="Object type" value={fields.entity_type} onChange={e => filter({ entity_type: e.target.value })} maxLength={64} /></ToolbarFilter>
-        <ToolbarFilter label="From (UTC)" active={fields.occurred_from !== ""}><span className="toolbar-filter-prefix" aria-hidden="true">From</span><input className="input" type="date" value={fields.occurred_from} onChange={e => filter({ occurred_from: e.target.value })} /></ToolbarFilter>
-        <ToolbarFilter label="Through (UTC)" active={fields.occurred_to !== ""}><span className="toolbar-filter-prefix" aria-hidden="true">Through</span><input className="input" type="date" value={fields.occurred_to} onChange={e => filter({ occurred_to: e.target.value })} /></ToolbarFilter>
+        <ToolbarFilter label="Occurred (UTC dates)" active={fields.occurred_from !== "" || fields.occurred_to !== ""}><DateRange label="Occurred between (UTC dates)" from={fields.occurred_from} to={fields.occurred_to} onChange={range => filter({ occurred_from: range.from, occurred_to: range.to })} /></ToolbarFilter>
         {fields.actor_user_id ? <p className="hint">Filtered to selected actor <Button small onClick={() => filter({ actor_user_id: "" })}>Clear actor</Button></p> : null}
       </DataToolbar>
 

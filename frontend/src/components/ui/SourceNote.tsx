@@ -28,7 +28,8 @@ export function SourceNote({
   label = "How this is calculated",
 }: {
   coverage: Coverage;
-  sampleSize: number;
+  /** Omitted where the basis is a statement with no sample behind it. */
+  sampleSize?: number;
   sampleNoun?: string;
   /** Why coverage is partial or unavailable; shown first when it is. */
   reason?: string | null;
@@ -65,13 +66,13 @@ export function SourceNote({
     <span className="source-note" ref={root}>
       <button
         type="button"
-        className={chip ? "source-note-chip" : "source-note-mark"}
-        aria-label={chip ? undefined : label}
+        className={chip && sampleSize !== undefined ? "source-note-chip" : "source-note-mark"}
+        aria-label={chip && sampleSize !== undefined ? undefined : label}
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
       >
-        {chip ? (
+        {chip && sampleSize !== undefined ? (
           <>
             {coverage === "available" ? (
               <span className={`source-note-dot source-note-dot-${coverage}`} aria-hidden="true" />
@@ -91,9 +92,11 @@ export function SourceNote({
         )}
       </button>
       <span className="source-note-pop" id={id} role="note" hidden={!open}>
-        <strong>
-          {sampleSize} {sampleNoun} · {coverageText}
-        </strong>
+        {sampleSize !== undefined ? (
+          <strong>
+            {sampleSize} {sampleNoun} · {coverageText}
+          </strong>
+        ) : null}
         {coverage !== "available" && reason ? <span className="source-note-reason">{reason}</span> : null}
         <span className="source-note-method">{method}</span>
       </span>

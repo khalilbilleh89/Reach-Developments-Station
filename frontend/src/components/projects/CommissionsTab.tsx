@@ -9,7 +9,7 @@ import { money, percent, percentInput, fractionFromPercent } from "@/lib/format"
 import { COMMISSION_PREPARERS, COMMISSION_RELEASERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { sectionDescription } from "@/components/shell/navigation";
-import { Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, RecordPage, RowMenu, SectionHeader, TableScroll } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, RecordPage, RowMenu, SectionHeader, SortHeader, TableScroll, useSort } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 
 const COMMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {
@@ -24,10 +24,25 @@ function CommissionStatus({ status }: { status: string }) {
   return <Badge tone={known?.tone ?? "neutral"}>{known?.label ?? status}</Badge>;
 }
 
+/** The value a register column sorts by: always a field the server returned. */
+function readCommissionColumn(row: CommissionGrant, column: string): string | number | null {
+  switch (column) {
+    case "unit": return row.unit_reference;
+    case "buyer": return row.buyer_display;
+    case "sold": return row.sold_price_snapshot;
+    case "base": return row.commissionable_base_amount;
+    case "granted": return row.granted_rate_fraction;
+    case "total": return row.commission_total;
+    case "status": return COMMISSION_STATUS[row.status]?.label ?? row.status;
+    default: return null;
+  }
+}
+
 export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
   const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const params = useSearchParams(); const router = useRouter();
   const selectedId = params.get("commission");
   const selected = rows.find(row => row.id === selectedId) ?? null;
+  const { sort, toggle, sorted } = useSort(rows, readCommissionColumn);
   const commissionHref = (id: string | null) => { const next = new URLSearchParams(params); if (id) next.set("commission", id); else next.delete("commission"); return `/projects/?${next}`; }; const [dialog, setDialog] = useState<"grant" | "edit" | "allocation" | "remove-allocation" | "reverse" | null>(null); const [allocation, setAllocation] = useState<CommissionAllocation | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const canPrepare = hasAnyRole(roles, COMMISSION_PREPARERS); const canRelease = hasAnyRole(roles, COMMISSION_RELEASERS);
@@ -49,8 +64,8 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
     <Card title="Commission register" description="Open a sale's commission to review its grant and beneficiary distribution." flush>
       {!loaded ? !error ? <Loading label="Loading commissions" shape="rows" /> : null : rows.length ? (
         <TableScroll label="Commission register" fixedFirst>
-          <thead><tr><th scope="col">Unit / sale</th><th scope="col">Buyer</th><th scope="col" className="num">Sold price</th><th scope="col" className="num">Commission base</th><th scope="col" className="num">Granted</th><th scope="col" className="num">Commission total</th><th scope="col">Status</th></tr></thead>
-          <tbody>{rows.map((x) => <tr key={x.id} aria-selected={selected?.id === x.id}>
+          <thead><tr><SortHeader column="unit" sort={sort} onToggle={toggle}>Unit / sale</SortHeader><SortHeader column="buyer" sort={sort} onToggle={toggle}>Buyer</SortHeader><SortHeader column="sold" sort={sort} onToggle={toggle} className="num">Sold price</SortHeader><SortHeader column="base" sort={sort} onToggle={toggle} className="num">Commission base</SortHeader><SortHeader column="granted" sort={sort} onToggle={toggle} className="num">Granted</SortHeader><SortHeader column="total" sort={sort} onToggle={toggle} className="num">Commission total</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader></tr></thead>
+          <tbody>{sorted.map((x) => <tr key={x.id} aria-selected={selected?.id === x.id}>
             <th scope="row"><Link className="button-link" href={commissionHref(x.id)} scroll={false} aria-label={`Open ${x.unit_reference} commission`}><IdentityCell icon="inventory" name={x.unit_reference} meta={x.sale_reference} /></Link></th>
             <td>{x.buyer_display}</td>
             <td className="num">{money(x.sold_price_snapshot, currencyCodes[x.currency_id])}</td>
