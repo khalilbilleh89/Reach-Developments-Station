@@ -20,6 +20,12 @@ const COST_LINES = [
 ] as const;
 
 /** A single server answer shared by Construction and Unit Economics. */
+
+/** Every missing input in one notice; six stacked warnings pushed the figures below the fold. */
+function IssueList({ issues }: { issues: string[] }) {
+  if (!issues.length) return null;
+  return <Notice tone="warning"><strong>Inputs needed ({issues.length})</strong><ul className="notice-list">{issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul></Notice>;
+}
 export function CurrentCostAnalysis({ projectId, roles }: { projectId: string; roles: Set<string> }) {
   const answer = useAnswer(hasAnyRole(roles, ECONOMICS_READERS), () => unitEconomics.currentCosts(projectId), [projectId]);
   if (answer.status === "off" || answer.status === "denied") return <EmptyState title="Current cost analysis unavailable" hint="This analysis requires an economics reader role and access to the whole project." />;
@@ -41,7 +47,7 @@ export function AnalysisView({ report, projectId, canWrite, onRefresh }: { repor
       <KeyValueGrid><KeyValue label="Construction cost / sqm" value={money(selected.hard_cost_per_sqm, code)} /><KeyValue label="Total cost / sqm" value={money(selected.total_cost_per_sqm, code)} /></KeyValueGrid>
       <Card title="Unit cost and profit breakdown"><KeyValueGrid>{COST_LINES.map(([key, label]) => <KeyValue key={key} label={label} value={money(selected[key], code)} />)}</KeyValueGrid></Card>
       <p>Commission basis: {selected.commission_basis}. Shared costs follow gross built area. Profit tax applies to positive profit only, with no assumed credit for losses.</p>
-      {[...report.issues, ...selected.issues].map((issue, i) => <Notice key={i} tone="warning">{issue}</Notice>)}
+      <IssueList issues={[...report.issues, ...selected.issues]} />
     </div>
   </RecordPage>;
   const rows: { key: string; label: string; figures: CurrentCostFigures; unit?: CurrentUnitCost; basis: string }[] = level === "units"
@@ -60,7 +66,7 @@ export function AnalysisView({ report, projectId, canWrite, onRefresh }: { repor
       <p>Area basis: {report.gross_area_label ?? "Not selected"}. Profit tax: {percent(report.settings?.profit_tax_rate_fraction)}. Commission provision: {percent(report.settings?.commission_rate_fraction)}.</p>
       <p className="footnote">Cost coverage: {report.project.cost_complete_count} of {report.project.unit_count} units. Net profit coverage: {report.project.net_profit_complete_count} of {report.project.unit_count}. Missing inputs remain unavailable. These are current management estimates; approved historical sale allocations remain in the Approved basis view.</p>
     </Card>
-    {report.issues.map((issue, i) => <Notice key={i} tone="warning">{issue}</Notice>)}
+    <IssueList issues={report.issues} />
     <Tabs label="Cost breakdown level" tabs={[{ key: "units", label: "Units" }, { key: "floors", label: "Floors" }, { key: "buildings", label: "Buildings" }]} active={level} onSelect={setLevel} />
     <Field label="Building"><select className="input" value={building} onChange={e => setBuilding(e.target.value)}><option value="">All buildings</option>{report.buildings.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></Field>
     <TableScroll label="Current cost and profit breakdown"><thead><tr>{["Unit / group", "Revenue basis", "Gross built sqm", "Build cost / sqm", "Total cost", "Total cost / sqm", "Sale / forecast", "Pre-tax profit", "Profit tax", "Net profit estimate"].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(({ key, label, figures: r, unit, basis }) => <tr key={key}>
