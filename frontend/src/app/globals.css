@@ -6397,3 +6397,68 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
   letter-spacing: 0;
   white-space: normal;
 }
+
+/* Row actions: one quiet trigger per row; the list is fixed to it (RowMenu
+ * sets top/right), so a register's scroll box never clips it. */
+.row-menu {
+  display: inline-flex;
+}
+
+.row-menu-trigger {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.row-menu-trigger:hover,
+.row-menu-trigger[aria-expanded="true"] {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.row-menu-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.row-menu-list {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  min-width: 11rem;
+  padding: var(--space-1);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-control);
+  background-color: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.row-menu-list[hidden] {
+  display: none;
+}
+
+.row-menu-list > .button {
+  justify-content: flex-start;
+  width: 100%;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.row-menu-list > .button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+/* The actions column shrinks to its trigger and sits at the row's end. */
+.row-menu-cell {
+  width: 1%;
+  text-align: right;
+}

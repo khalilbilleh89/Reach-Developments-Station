@@ -4,7 +4,7 @@ import { ApiError } from "@/lib/api";
 import { useState } from "react";
 import type { TeamKind, TeamMember } from "@/lib/api/team";
 import { team } from "@/lib/api/team";
-import { Badge, Button, Card, Disclosure, EmptyState, Icon, RegisterPagination, SectionHeader, Notice } from "@/components/ui";
+import { Badge, Button, Card, Disclosure, EmptyState, Icon, RegisterPagination, SectionHeader, Notice, RowMenu } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 const PAGE_SIZE = 12;
@@ -58,10 +58,10 @@ export function TeamSection({ projectId, kind, members, query, canManage, onAdd,
             {member.job_description ? "Manage job description" : "Attach job description"}</Button> : null}
         </div>
         {canManage ? <div className="team-member-actions">
-          <Button variant="default" onClick={() => onEdit(member)} aria-label={`Edit ${member.name}`}>Edit</Button>
+          <RowMenu label={`Actions for ${member.name}`}><Button onClick={() => onEdit(member)} aria-label={`Edit ${member.name}`}>Edit</Button>
           <DeleteRecordButton label="member" recordName={member.name} confirmLabel="Delete member" destructive
             description="Remove this person from the project directory. Their details and change history will be retained."
-            onDelete={reason => team.remove(projectId, member, reason)} onDeleted={() => onDeleted(member.name)} />
+            onDelete={reason => team.remove(projectId, member, reason)} onDeleted={() => onDeleted(member.name)} /></RowMenu>
         </div> : null}
       </div></Card>)}</div>}
     {members.length > PAGE_SIZE ? <RegisterPagination offset={offset} total={members.length} pageSize={PAGE_SIZE} onChange={next => setPage({ query, offset: next })} /> : null}

@@ -15,6 +15,7 @@ import {
   Notice,
   PromptDialog,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
 import { ApiError, settings } from "@/lib/api";
@@ -139,7 +140,7 @@ export function CurrencySection() {
                 <td>{currency.symbol ?? "—"}</td>
                 <td className="figure">{currency.minor_units}</td>
                 <td><Badge tone={currency.is_active ? "success" : "neutral"}>{currency.is_active ? "Active" : "Inactive"}</Badge></td>
-                <td><div className="button-row"><Button small onClick={() => { setError(null); setSymbol(currency.symbol ?? ""); setEditing(currency); }}>Edit symbol</Button><Button small variant="danger" onClick={() => { setError(null); setRemoving(currency); }}>Delete</Button></div></td>
+                <td className="row-menu-cell"><RowMenu label={`Actions for ${currency.code}`}><Button onClick={() => { setError(null); setSymbol(currency.symbol ?? ""); setEditing(currency); }}>Edit symbol</Button><Button variant="danger" onClick={() => { setError(null); setRemoving(currency); }}>Delete</Button></RowMenu></td>
               </tr>
             ))}</tbody>
           </TableScroll>

@@ -6,7 +6,7 @@ import { faqs } from "@/lib/api/faqs";
 import type { Faq } from "@/lib/api/faqs";
 import { useAnswer } from "@/lib/answer";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
-import { Button, Card, DataToolbar, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PageHeader, RecordPage } from "@/components/ui";
+import { Button, Card, DataToolbar, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PageHeader, RecordPage, RowMenu } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 import { SalesImport } from "./sales/SalesImport";
 
@@ -51,9 +51,9 @@ export function FaqCard({row, projectId, canEdit, onEdit, onChanged}: {
           try { await navigator.clipboard.writeText(row.answer); setCopied(true); }
           catch { setCopyError(true); setExpanded(true); }
         }}>Copy answer</Button>
-        {canEdit ? <><Button onClick={onEdit}>Edit</Button>
+        {canEdit ? <RowMenu label={`Actions for ${row.question}`}><Button onClick={onEdit}>Edit</Button>
         <DeleteRecordButton label="FAQ" recordName={row.question} description="This removes the question and answer from the FAQ library. Its audit history is retained." destructive onDelete={reason => faqs.delete(projectId, row, reason)} onDeleted={onChanged} />
-        </> : null}
+        </RowMenu> : null}
       </div>
     </div>
   </Card></div>;

@@ -5,7 +5,7 @@ import { SalesImport } from "./SalesImport";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesAgent } from "@/lib/api";
 import { Button, DataToolbar, DraftBoundary, EmptyState, Field, FieldRow, FormActions,
-  Loading, Notice, RecordPage, TableScroll } from "@/components/ui";
+  Loading, Notice, RecordPage, RowMenu, TableScroll } from "@/components/ui";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 
 function AgentForm({projectId, agent, onSaved, onCancel}: {
@@ -80,9 +80,9 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
         <tbody>{agents.map(agent => <tr key={agent.id}>
           <th scope="row">{agent.display_name}</th><td>{agent.country ?? "—"}</td><td>{agent.branch ?? "—"}</td><td>{agent.branch_leader ?? "—"}</td>
           <td>{agent.is_active ? "Active" : "Inactive"}</td>
-          {canWrite ? <td><div className="buyer-actions"><Button small onClick={() => setEditing(agent)}>Edit Agent</Button>
-            <DeleteRecordButton label={`Agent ${agent.display_name}`} description="This removes an Agent with no buyer, transaction, commission or attribution history. Otherwise deactivate the Agent instead. The audit trail is retained." onDelete={reason => sales.deleteAgent(projectId, agent.id, reason)} onDeleted={async () => { setNotice("Unused Agent deleted."); await load(); }} />
-          </div></td> : null}
+          {canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${agent.display_name}`}><Button onClick={() => setEditing(agent)}>Edit agent</Button>
+            <DeleteRecordButton label="agent" recordName={agent.display_name} description="This removes an Agent with no buyer, transaction, commission or attribution history. Otherwise deactivate the Agent instead. The audit trail is retained." onDelete={reason => sales.deleteAgent(projectId, agent.id, reason)} onDeleted={async () => { setNotice("Unused Agent deleted."); await load(); }} />
+          </RowMenu></td> : null}
         </tr>)}</tbody>
       </TableScroll>}
   </div>;

@@ -5,7 +5,7 @@ import { agreements, type Agreement, type AgreementFields } from "@/lib/api/agre
 import { useAnswer } from "@/lib/answer";
 import { businessDate } from "@/lib/format";
 import { AGREEMENT_READERS, AGREEMENT_WRITERS, hasAnyRole, type Roles } from "@/lib/roles";
-import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, PageHeader, RecordPage, TableScroll } from "@/components/ui";
+import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, PageHeader, RecordPage, RowMenu, TableScroll } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 export function AgreementForm({ row, onSave, onSaved, onClose }: {
@@ -67,9 +67,9 @@ export function AgreementsTab({ projectId, roles }: { projectId: string; roles: 
               catch (caught) { setDownloadError(caught instanceof Error ? caught.message : "Could not download the document."); }
               finally { setDownloading(null); }
             }}>{downloading === row.id ? "Downloading…" : row.filename}</Button></td>
-            {canWrite ? <td><div className="row-actions"><Button variant="default" onClick={() => setEditor({ row })}>Edit</Button>
+            {canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${row.name}`}><Button onClick={() => setEditor({ row })}>Edit</Button>
               <DeleteRecordButton label="agreement" recordName={row.name} confirmLabel="Delete agreement" description="Remove this final draft from the register. The document and audit history will be retained." onDelete={reason => agreements.remove(projectId, row, reason)} onDeleted={async () => { answer.retry(); }} />
-            </div></td> : null}
+            </RowMenu></td> : null}
           </tr>)}</tbody>
         </TableScroll>}
     </Card> : null}

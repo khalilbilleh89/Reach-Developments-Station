@@ -4,7 +4,7 @@ import { ApiError } from "@/lib/api";
 import { escalations, type EscalationEntry } from "@/lib/api/escalations";
 import { useAnswer } from "@/lib/answer";
 import { businessDate, decimalText } from "@/lib/format";
-import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, FormSection, Loading, Notice, PageHeader, RecordPage, ValidationSummary } from "@/components/ui";
+import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, FormSection, Loading, Notice, PageHeader, RecordPage, RowMenu, ValidationSummary } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 export function PriceEscalationTab({ projectId }: { projectId: string }) {
@@ -31,11 +31,11 @@ export function PriceEscalationTab({ projectId }: { projectId: string }) {
           <div><dt>Price escalation %</dt><dd>{decimalText(row.escalation_percent)}%</dd></div>
           <div><dt>Project status</dt><dd>{row.project_status}</dd></div>
         </dl>
-        {canManage ? <div className="form-actions"><Button variant="default" onClick={() => setEditor({ entry: row })}>Edit price escalation</Button>
+        {canManage ? <div className="form-actions"><RowMenu label={`Actions for ${businessDate(row.effective_date)}`}><Button onClick={() => setEditor({ entry: row })}>Edit price escalation</Button>
           <DeleteRecordButton label="price escalation" recordName={businessDate(row.effective_date) + " / " + row.project_status}
             description="Remove this entry from the register. Its values and audit history are retained. Unit prices are unchanged."
             confirmLabel="Delete entry" onDelete={reason => escalations.remove(projectId, row, reason)}
-            onDeleted={async () => { setNotice("Price escalation deleted."); answer.retry(); }} />
+            onDeleted={async () => { setNotice("Price escalation deleted."); answer.retry(); }} /></RowMenu>
         </div> : null}
       </div></Card>)}
     </> : null}
