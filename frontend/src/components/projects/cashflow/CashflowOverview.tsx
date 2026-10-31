@@ -16,6 +16,7 @@ import {
   StatStrip,
   StatStripNote,
   SubPanel,
+  TableScroll,
 } from "@/components/ui";
 import type { CashflowSummary } from "@/lib/api";
 import { businessDate, isPositive, money, percent } from "@/lib/format";
@@ -195,53 +196,43 @@ function FundingWindows({ summary }: { summary: CashflowSummary }) {
       title="Funding position"
       description="What the project must raise to get through the next 30, 60 and 90 days."
     >
-      <div className="grid-12">
-        {summary.funding_windows.map((window) => {
-          const needed = isPositive(window.funding_requirement);
-          return (
-            <div className="span-12" key={window.days}>
-            <SubPanel title={`Next ${window.days} days`}>
-              <Position compact>
-                <PositionFigure
-                  lead
-                  label="Funding required"
-                  value={money(window.funding_requirement, currency)}
-                  tone={needed ? "danger" : "success"}
-                  note={needed ? "Goes below zero in this window" : "Stays in credit"}
-                />
-              </Position>
-              <KeyValueGrid columns={2}>
-                <KeyValue
-                  label="Opening usable cash"
-                  value={money(window.opening_unrestricted_cash, currency)}
-                  mono
-                />
-                <KeyValue
-                  label="Expected usable inflows"
-                  value={money(window.usable_inflows, currency)}
-                  mono
-                />
-                <KeyValue label="Expected outflows" value={money(window.outflows, currency)} mono />
-                <KeyValue
-                  label="Lowest projected position"
-                  value={money(window.minimum_projected_unrestricted_cash, currency)}
-                  mono
-                />
-                <KeyValue
-                  label="Closing projected position"
-                  value={money(window.closing_projected_unrestricted_cash, currency)}
-                  mono
-                />
-                <KeyValue
-                  label="To"
-                  value={businessDate(window.to_date)}
-                />
-              </KeyValueGrid>
-            </SubPanel>
-            </div>
-          );
-        })}
-      </div>
+      {/* One row per window: three hero cards repeated the same six facts and
+          made "nothing needed" the largest thing on the page. */}
+      <TableScroll label="Funding by window">
+        <thead>
+          <tr>
+            <th scope="col">Window</th>
+            <th scope="col" className="num">Funding required</th>
+            <th scope="col" className="num">Opening usable cash</th>
+            <th scope="col" className="num">Expected usable inflows</th>
+            <th scope="col" className="num">Expected outflows</th>
+            <th scope="col" className="num">Lowest projected</th>
+            <th scope="col" className="num">Closing projected</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summary.funding_windows.map((window) => {
+            const needed = isPositive(window.funding_requirement);
+            return (
+              <tr key={window.days}>
+                <th scope="row">
+                  Next {window.days} days
+                  <span className="cell-secondary">To {businessDate(window.to_date)}</span>
+                </th>
+                <td className="num">
+                  <span className={needed ? "figure-danger" : undefined}>{money(window.funding_requirement, currency)}</span>
+                  <span className="cell-secondary">{needed ? "Goes below zero in this window" : "Stays in credit"}</span>
+                </td>
+                <td className="num">{money(window.opening_unrestricted_cash, currency)}</td>
+                <td className="num">{money(window.usable_inflows, currency)}</td>
+                <td className="num">{money(window.outflows, currency)}</td>
+                <td className="num">{money(window.minimum_projected_unrestricted_cash, currency)}</td>
+                <td className="num">{money(window.closing_projected_unrestricted_cash, currency)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </TableScroll>
       <StatStrip>
         <StatStripNote>
           Literal day windows from {businessDate(summary.basis.as_of_date)}, not calendar months.

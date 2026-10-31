@@ -6563,3 +6563,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .permit-next-action-empty {
   margin: var(--space-4) 0;
 }
+
+/* Several related warnings, listed inside one notice. */
+.notice-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+}
