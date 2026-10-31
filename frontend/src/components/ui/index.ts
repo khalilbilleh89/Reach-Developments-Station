@@ -43,10 +43,10 @@ export {
   StatStrip,
   StatStripItem,
   StatStripNote,
-  TableScroll,
   Waterfall,
   WaterfallRow,
 } from "./Data";
+export { TableScroll } from "./TableScroll";
 export { ExternalLink, isUrl } from "./Link";
 export type { BandHeat, MetricTone } from "./Data";
 export { EmptyState, Loading, Notice } from "./Feedback";

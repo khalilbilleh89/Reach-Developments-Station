@@ -856,7 +856,7 @@ class TestRecordsAndDialogsKeepTheirSemantics:
         assert "UnitStanding" not in read(PROJECTS / "inventory" / "unit" / "UnitSummary.tsx")
 
     def test_every_table_has_a_caption(self) -> None:
-        table = read(UI / "Data.tsx")
+        table = read(UI / "TableScroll.tsx")
         assert '<caption className="visually-hidden">{label}</caption>' in table
 
     def test_the_page_header_composes_title_status_actions_and_facts(self) -> None:
