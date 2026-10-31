@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
+import { NextBar, RecordStrip } from "./RecordStrip";
+import { RowMenu } from "./RowMenu";
 import { TabPanel, Tabs } from "./Tabs";
 import { requestFormLeave } from "./UnsavedChangesGuard";
 
@@ -45,6 +47,9 @@ export function RecordPage({
   headline,
   facts,
   actions,
+  more,
+  strip,
+  next,
   tabs,
   activeTab,
   onSelectTab,
@@ -62,6 +67,12 @@ export function RecordPage({
   facts?: RecordPageFact[];
   /** Contextual actions beside Close: the one or two things this record invites. */
   actions?: ReactNode;
+  /** The record's further actions, behind one control so the head keeps two (design system K4). */
+  more?: ReactNode;
+  /** The figures the record is opened for, the lead on gold (design system K4). Replaces headline and facts in the head. */
+  strip?: { lead: RecordPageFact; items: RecordPageFact[] };
+  /** What the record needs next, with the one action that does it. */
+  next?: { text: ReactNode; action?: ReactNode };
   tabs?: { key: string; label: string; icon?: IconName }[];
   activeTab?: string;
   onSelectTab?: (key: string) => void;
@@ -113,7 +124,7 @@ export function RecordPage({
               {subtitle ? <p className="record-page-subtitle">{subtitle}</p> : null}
               {meta ? <div className="record-page-meta">{meta}</div> : null}
             </div>
-            {headline ? (
+            {headline && !strip ? (
               <div className={headline.tone ? `record-page-headline record-page-headline-${headline.tone}` : "record-page-headline"}>
                 <p className="record-page-headline-value">{headline.value}</p>
                 <p className="record-page-headline-label">{headline.label}</p>
@@ -121,11 +132,13 @@ export function RecordPage({
             ) : null}
             <div className="record-page-head-actions">
               {actions}
-
+              {more ? <RowMenu label="More actions">{more}</RowMenu> : null}
             </div>
           </div>
           {status ? <div className="record-page-state">{status}</div> : null}
-          {shownFacts.length > 0 ? (
+          {strip ? <div className="record-page-strip"><RecordStrip lead={strip.lead} items={strip.items} /></div> : null}
+          {next ? <div className="record-page-next"><NextBar action={next.action}>{next.text}</NextBar></div> : null}
+          {shownFacts.length > 0 && !strip ? (
             <dl className="record-page-facts">
               {shownFacts.map((fact) => (
                 <div key={fact.label} className={fact.tone ? `record-page-fact-${fact.tone}` : undefined}>

@@ -288,9 +288,12 @@ export function UnitWorkspace({
       headline={headline}
       actions={
         <>
-        <Button variant="primary" onClick={() => setSection(unit.release_blockers.length ? "release" : "detail")}>
-          {unit.release_blockers.length ? "Review requirements" : "View property"}
-        </Button>
+        <Button variant="primary" onClick={() => setSection("detail")}>View property</Button>
+        {seesListPrice ? <Button onClick={() => setSection("pricing")}>Pricing</Button> : null}
+        </>
+      }
+      more={
+        <>
         <UnitRemovalAction projectId={projectId} unitId={unitId} reference={unit.unit_reference} roles={roles}
           onRemoved={async () => { router.replace(`/projects/?project=${projectId}&section=inventory`); await onChanged(); }} />
         {roles.has("master_admin") ? <UnitPermanentDeletionAction projectId={projectId} unitId={unitId} reference={unit.unit_reference}
@@ -298,7 +301,14 @@ export function UnitWorkspace({
         </>
       }
       meta={<Badge tone={unit.is_active ? "success" : "neutral"}>{unit.is_active ? "Active unit" : "Inactive unit"}</Badge>}
+      strip={headline ? { lead: { label: headline.label, value: headline.value, tone: headline.tone }, items: facts } : undefined}
       facts={facts}
+      next={{
+        text: unit.release_blockers.length
+          ? `${unit.release_blockers.length} requirement${unit.release_blockers.length === 1 ? "" : "s"} before this unit can be released: ${unit.release_blockers.join("; ")}.`
+          : unit.release_eligible ? "Every release requirement is met." : "Release readiness is decided on the Release tab.",
+        action: <Button small onClick={() => setSection("release")}>{unit.release_blockers.length ? "Review requirements" : "Release"}</Button>,
+      }}
       tabs={sections}
       activeTab={activeSection}
       onSelectTab={setSection}

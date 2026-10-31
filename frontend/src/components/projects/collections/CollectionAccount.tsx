@@ -225,7 +225,15 @@ export function CollectionAccount({
           </>
         ) : null
       }
-      facts={facts}
+      strip={facts ? { lead: facts[0], items: facts.slice(1) } : undefined}
+      next={summary ? {
+        text: summary.oldest_overdue_days > 0
+          ? `${money(summary.overdue_total, currencyCode)} is overdue, the oldest by ${summary.oldest_overdue_days} days${summary.next_action_date ? ` · follow-up on ${businessDate(summary.next_action_date)}` : ""}.`
+          : summary.next_action_date
+            ? `Nothing overdue · next follow-up on ${businessDate(summary.next_action_date)}.`
+            : "Nothing overdue and no follow-up booked.",
+        action: <Button small onClick={() => setTab("receipts")}>Receipts</Button>,
+      } : undefined}
       tabs={TABS}
       activeTab={tab}
       onSelectTab={setTab}

@@ -17,31 +17,33 @@ import { businessDate, money, todayISO } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
-  Icon,
   Button,
   ButtonRow,
   Card,
   CardRow,
   CardRows,
+  ConfirmDialog,
   DataToolbar,
   Disclosure,
-  ConfirmDialog,
-  Tabs,
-  TabPanel,
   EmptyState,
   Field,
   FieldRow,
   FormActions,
+  Icon,
   KeyValue,
   KeyValueGrid,
   Loading,
-  StatStrip,
-  StatStripItem,
+  NextBar,
   Notice,
   PageHeader,
+  RecordStrip,
   SectionHeader,
-  StatusDot,
   Segmented,
+  StatStrip,
+  StatStripItem,
+  StatusDot,
+  TabPanel,
+  Tabs,
   Timeline,
   TimelineItem,
   ToolbarFilter,
@@ -595,12 +597,18 @@ function PermitFile({
         {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
         {permit.sla_overdue ? <Badge tone="danger">{slaLabel(permit)}</Badge> : null}
       </div>
-      <KeyValueGrid columns={3}>
-        <KeyValue label="Status since" value={businessDate(permit.status_effective_date)} />
-        <KeyValue label="Days in stage" value={permit.days_in_stage} />
-        <KeyValue label="Statutory period" value={slaLabel(permit)} />
-        {permit.financials_visible ? <KeyValue label="Fee" value={money(permit.fee_amount, permit.base_currency_code)} /> : null}
-      </KeyValueGrid>
+      <RecordStrip
+        lead={{ label: "Statutory period", value: slaLabel(permit), note: permit.sla_overdue ? "Past the period the law allows" : `In ${STATUS_LABELS[permit.status]?.toLowerCase() ?? permit.status} since ${businessDate(permit.status_effective_date)}`, tone: permit.sla_overdue ? "danger" : undefined }}
+        items={[
+          { label: "Days in stage", value: permit.days_in_stage },
+          { label: "Required by", value: businessDate(permit.planned_issue_date) },
+          { label: permit.issue_date ? "Received" : "Forecast", value: businessDate(permit.issue_date ?? permit.forecast_issue_date) },
+          ...(permit.financials_visible ? [{ label: "Fee", value: money(permit.fee_amount, permit.base_currency_code) }] : []),
+        ]}
+      />
+      <NextBar action={canWrite && !editing ? <Button small data-leaves-editor onClick={() => setEditing(true)}>Edit permit</Button> : undefined}>
+        {permit.next_action ?? (permit.prerequisite_satisfied ? "No next action recorded." : "A prerequisite permit is still open.")}
+      </NextBar>
       <Tabs label="Permit sections" tabs={SECTIONS} active={section} onSelect={setSection} />
       <TabPanel group="Permit sections" tab={section}>
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -655,25 +663,9 @@ function PermitFile({
             </Card>
           ) : null}
 
-          {/* What somebody has to do next, above the dates and the reference
-              numbers. A permit file read top to bottom should say where the
-              consent stands, then what is waiting on whom — a next action
-              seventeen fields down is one nobody acts on. */}
-          {permit.next_action || !permit.prerequisite_satisfied ? (
-            <Card
-              title="Next action"
-              headingLevel={3}
-              tone={permit.is_blocking || permit.sla_overdue ? "attention" : undefined}
-            >
-              <p className="subtle">{permit.next_action ?? "No next action recorded."}</p>
-              {!permit.prerequisite_satisfied ? (
-                <p className="subtle">
-                  <StatusDot tone="warning">
-                    A permit this one depends on has not been issued.
-                  </StatusDot>
-                </p>
-              ) : null}
-            </Card>
+          {/* The next action sits in the bar under the head; only a prerequisite still open is repeated here. */}
+          {!permit.prerequisite_satisfied ? (
+            <Notice tone="warning">A permit this one depends on has not been issued.</Notice>
           ) : null}
 
           <section className="permit-date-groups">

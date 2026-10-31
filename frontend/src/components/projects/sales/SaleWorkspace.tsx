@@ -5,6 +5,7 @@ import { LegalSummary } from "@/components/projects/sales/LegalSummary";
 import { SpaDetailsForm } from "@/components/projects/sales/SpaDetailsForm";
 import { RequoteForm } from "@/components/projects/sales/RequoteForm";
 import { SaleAgent } from "./SaleAgent";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, sales } from "@/lib/api";
@@ -170,6 +171,18 @@ type PartyRow = {
  * and is still moving; a cancelled or expired record shows as neither, and the
  * badge beside the title says what happened instead.
  */
+/** The stage the deal is at, as the one line under its head, with the tab that moves it. */
+function nextStep(steps: ReturnType<typeof lifecycle>, open: (section: string) => void): { text: string; action: ReactNode } | undefined {
+  const current = steps.find((step) => step.state === "current") ?? steps.find((step) => step.state === "pending");
+  if (!current) return { text: "Every stage of this deal is complete.", action: undefined };
+  const tab: Record<string, string> = { reserved: "commercial", contracted: "contract", registered: "legal", handover: "handover" };
+  const done = steps.filter((step) => step.state === "done").map((step) => step.label.toLowerCase());
+  return {
+    text: `${current.state === "current" ? "In progress" : "Not started"}: ${current.label.toLowerCase()}${done.length ? ` · ${done.join(", ")} done` : ""}.`,
+    action: <Button small onClick={() => open(tab[current.key] ?? "overview")}>{current.label}</Button>,
+  };
+}
+
 function lifecycle(terms: Reservation | null, sale: SaleDetail | null) {
   const state = (done: boolean, current: boolean): "done" | "current" | "pending" =>
     done ? "done" : current ? "current" : "pending";
@@ -731,14 +744,20 @@ export function SaleWorkspace({
       subtitle={<>{unitLabel || "Property transaction"}{client?.display_name ? ` · ${client.display_name}` : ""}</>}
       actions={<>
         <Button disabled={busy} onClick={() => void load()}>Refresh transaction</Button>
+        {sale && canCancel && !sale.cancellation && ["signature_pending", "active"].includes(sale.sale.status) ? <Button disabled={busy} onClick={() => {setSection("contract"); setCancelling(true);}}>Start cancellation</Button> : null}
+      </>}
+      more={<>
         {!sale && terms && roles.has("master_admin") && ["draft", "deposit_pending", "active", "extended"].includes(terms.status) ? <Button variant="danger" disabled={busy} onClick={() => askThen({title: `Delete reservation ${terms.reservation_number}?`, label: "Reason for removal", confirmLabel: "Delete reservation", hint: "Removes this reservation from current Sales. Buyer details and transaction history are retained."}, reason => sales.cancelReservation(projectId, terms.id, reason), "Reservation removed from current Sales.")}>Delete reservation</Button> : null}
         {sale && sale.sale.status !== "cancelled" && roles.has("master_admin") ? <Button variant="danger" disabled={busy} onClick={() => askThen({
           title: `Delete sale ${sale.sale.sale_number}?`, label: "Reason for removal", confirmLabel: "Delete sale",
           hint: "Removes an unsigned sale from current Sales and releases its unit where eligible. Buyer details and all history are retained. Sales with legal or collection activity use Cancellation.",
         }, reason => sales.removeSale(projectId, sale.sale.id, reason), "Sale removed from current Sales.")}>Delete sale</Button> : null}
-        {sale && canCancel && !sale.cancellation && ["signature_pending", "active"].includes(sale.sale.status) ? <Button disabled={busy} onClick={() => {setSection("contract"); setCancelling(true);}}>Start cancellation</Button> : null}
       </>}
       headline={sale ? { value: money(sale.sale.total_contract_price, saleCode), label: "Contract value · buyer payable" } : terms ? { value: money(terms.total_buyer_payable, quoteCode), label: "Reservation · buyer payable" } : undefined}
+      strip={sale
+        ? { lead: { label: "Contract value", value: money(sale.sale.total_contract_price, saleCode), note: "Buyer payable" }, items: facts.slice(1) }
+        : terms ? { lead: { label: "Buyer payable", value: money(terms.total_buyer_payable, quoteCode), note: "Reservation terms" }, items: facts.filter((fact) => fact.label !== "Total buyer payable") } : undefined}
+      next={nextStep(lifecycle(terms, sale), setSection)}
       meta={
         <>
           {terms ? <Badge tone={reservationTone(terms.status)}>{reservationLabel(terms.status)}</Badge> : null}

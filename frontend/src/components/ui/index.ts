@@ -76,6 +76,7 @@ export type { TimelineState } from "./Timeline";
 
 export { Disclosure } from "./Disclosure";
 export { Views } from "./Views";
+export { NextBar, RecordStrip } from "./RecordStrip";
 export { FlowActions, FlowSteps } from "./Flow";
 export type { FlowStep } from "./Flow";
 export { BulkBar, CardRow, CardRows, DATE_PRESETS, DatePoint, DateRange, FilterChips, InlineEdit, SelectAllCell, SelectCell, SortHeader, useSelection, useSort } from "./Register";
