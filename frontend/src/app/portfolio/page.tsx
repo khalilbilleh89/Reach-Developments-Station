@@ -24,7 +24,7 @@ function PortfolioScreen() {
   if (state.user.must_change_password) return <PasswordGate onChanged={() => router.replace("/login/")} />;
   const allowed = hasAnyRole(roleSet(state.user.roles), PORTFOLIO_READERS);
   const canWrite = hasAnyRole(roleSet(state.user.roles), PROJECT_WRITERS);
-  return <AppShell area="portfolio" user={state.user} crumbs={[{ label: "Portfolio", href: "/portfolio/" }, { label: id ? "Project management summary" : section }]}>
+  return <AppShell area="portfolio" user={state.user} crumbs={[{ label: "Portfolio", href: "/portfolio/" }, { label: id ? "Project management summary" : PORTFOLIO_LABELS[section] ?? section }]}>
     {section !== "reporting" || !allowed ? <PageHeader icon="projects" eyebrow="Across developments" title={projectDetail ? "Portfolio project" : "Portfolio"} subtitle="Capital position, forward outlook and accountable management actions." /> : null}
     {!allowed ? <Notice tone="info">Portfolio is not available to your role.</Notice> : projectDetail && id ? <PortfolioProject key={id} id={id} /> : <>
       <Tabs label="Portfolio sections" tabs={[{ key: "overview", label: "Overview" }, { key: "projects", label: "Projects" }, { key: "outlook", label: "Outlook" }, { key: "exceptions", label: "Exceptions" }, { key: "actions", label: "Actions" }, { key: "reporting", label: "Reporting" }]} active={section} onSelect={(key) => router.push(`/portfolio/?section=${key}`)} />
@@ -33,6 +33,11 @@ function PortfolioScreen() {
   </AppShell>;
 }
 
+
+/** Breadcrumb names for the portfolio's views; the query value is not a label. */
+const PORTFOLIO_LABELS: Record<string, string> = {
+  overview: "Overview", projects: "Projects", outlook: "Outlook", exceptions: "Exceptions", actions: "Actions", reporting: "Reporting",
+};
 export default function PortfolioPage() {
   return <Suspense fallback={<SessionScreen status="loading" />}><PortfolioScreen /></Suspense>;
 }

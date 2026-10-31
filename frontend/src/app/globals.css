@@ -4984,9 +4984,10 @@ input[type="file"].input {
   font-weight: 600;
 }
 
+/* A password form needs a field's width, not the page's. */
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(14rem, 0.65fr) minmax(0, 1.6fr);
+  grid-template-columns: minmax(14rem, 0.65fr) minmax(0, 34rem);
   gap: var(--space-7);
   max-width: 72rem;
   align-items: start;
@@ -6598,4 +6599,19 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
   .marketing-document {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* A filter whose control cannot name itself (a date) carries a short visible prefix. */
+.field.toolbar-filter:has(.toolbar-filter-prefix) {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.toolbar-filter-prefix {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
 }
