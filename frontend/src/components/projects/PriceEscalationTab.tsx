@@ -1,4 +1,6 @@
 "use client";
+
+import * as ui from "@/components/ui";
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { escalations, type EscalationEntry } from "@/lib/api/escalations";
@@ -10,7 +12,9 @@ import { DeleteRecordButton } from "./DeleteRecordButton";
 export function PriceEscalationTab({ projectId }: { projectId: string }) {
   const answer = useAnswer(true, () => escalations.list(projectId), [projectId]);
   const [editor, setEditor] = useState<{ entry?: EscalationEntry } | null>(null);
-  const [notice, setNotice] = useState("");
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const rows = answer.status === "ready" ? answer.data.entries : [];
   const suggestions = [...new Set(["Pre-launch", "Launch", "Construction", "Foundation", ...rows.map(row => row.project_status)])];
   const canManage = answer.status === "ready" && answer.data.can_manage;
@@ -18,7 +22,6 @@ export function PriceEscalationTab({ projectId }: { projectId: string }) {
     <PageHeader title="Price Escalation" icon="money" subtitle="Record each price escalation, its effective date and the project stage at that time."
       actions={canManage ? <Button onClick={() => setEditor({})}>Add price escalation</Button> : undefined} />
     <Notice tone="info">These entries track your pricing strategy. Unit prices are maintained separately in Inventory.</Notice>
-    {notice ? <div role="status"><Notice tone="success">{notice}</Notice></div> : null}
     {answer.status === "loading" ? <Loading label="Loading price escalations…" /> : null}
     {answer.status === "denied" || answer.status === "off" ? <Notice tone="info">Price escalation strategy is unavailable to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}

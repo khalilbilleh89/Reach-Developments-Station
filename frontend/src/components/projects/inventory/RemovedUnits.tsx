@@ -1,5 +1,7 @@
 "use client";
 
+import * as ui from "@/components/ui";
+
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, inventory } from "@/lib/api";
 import type { RemovedUnit } from "@/lib/api";
@@ -27,7 +29,9 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [message, setMessage] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setMessage = (text: string | null) => { if (text) toast({ title: text }); };
   const reload = useCallback(() => setRevision(value => value + 1), []);
 
   useEffect(() => {
@@ -77,7 +81,6 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
     subtitle="Recover a retained unit using its original number, reference and history.">
     <div className="stack">
       <Notice tone="info">Removed units are excluded from Active and inactive. Their numbers and references remain reserved. Permanently deleted unused units do not appear here.</Notice>
-      {message ? <Notice tone="success">{message}</Notice> : null}
       <DataToolbar search={{ value: search, onChange: value => { setSearch(value); setOffset(0); }, label: "Search removed units", placeholder: "Unit reference or number" }} />
       {error ? <><Notice tone="error">{error}</Notice><Button onClick={reload}>Retry</Button></> : null}
       {!rows && !error ? <Loading label="Loading removed units" /> : null}

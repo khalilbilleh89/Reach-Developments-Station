@@ -1,5 +1,7 @@
 "use client";
 
+import * as ui from "@/components/ui";
+
 import { useState } from "react";
 import { team, type TeamKind, type TeamMember } from "@/lib/api/team";
 import { useAnswer } from "@/lib/answer";
@@ -14,7 +16,9 @@ export function TeamTab({ projectId }: { projectId: string }) {
   const [query, setQuery] = useState("");
   const [editor, setEditor] = useState<{ team: TeamKind; member?: TeamMember } | null>(null);
   const [documentMember, setDocumentMember] = useState<TeamMember | null>(null);
-  const [notice, setNotice] = useState("");
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const rows = answer.status === "ready" ? answer.data.members : [];
   const search = query.trim().toLocaleLowerCase();
   const filtered = rows.filter(row => [row.name, row.title, row.scope_of_work, row.email].some(value => value?.toLocaleLowerCase().includes(search)));
@@ -22,7 +26,6 @@ export function TeamTab({ projectId }: { projectId: string }) {
   return <div className="stack">
     <PageHeader title="Team" icon="user" subtitle="The people behind this project. Find a person, understand their role and get in touch."
       actions={canManage ? <Button onClick={() => setEditor({ team: "operations" })}><Icon name="plus" /> Add team member</Button> : undefined} />
-    {notice ? <div role="status"><Notice tone="success">{notice}</Notice></div> : null}
     {answer.status === "loading" ? <Loading label="Loading project team…" /> : null}
     {answer.status === "off" || answer.status === "denied" ? <Notice tone="info">This project directory is not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}

@@ -12,19 +12,19 @@ import {
   Button,
   Card,
   DataToolbar,
-  RecordPage,
   EmptyState,
   Field,
   FieldRow,
-  FormDialog,
   FormActions,
+  FormDialog,
   FormSection,
-  Icon,
   IdentityCell,
   Loading,
   Notice,
   PageHeader,
   PlaceCell,
+  RecordPage,
+  RowMenu,
   StatusDot,
   TableScroll,
   ToolbarFilter,
@@ -298,7 +298,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                   <th scope="col">Land and consents</th>
                   <th scope="col">Flags</th>
                   <th scope="col">
-                    <span className="visually-hidden">Open</span>
+                    <span className="visually-hidden">Actions</span>
                   </th>
                 </tr>
               </thead>
@@ -361,8 +361,14 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                         ) : null}
                         {!flagged ? <span className="muted">—</span> : null}
                       </td>
-                      <td className="row-go" aria-hidden="true">
-                        <Icon name="chevron" />
+                      <td className="row-menu-cell">
+                        <RowMenu label={`Actions for ${project.name}`}>
+                          <button type="button" onClick={() => onOpen(project.id)}>Open overview</button>
+                          <a href={`/projects/?project=${encodeURIComponent(project.id)}&section=inventory`}>Inventory</a>
+                          <a href={`/projects/?project=${encodeURIComponent(project.id)}&section=sales`}>Sales</a>
+                          <a href={`/projects/?project=${encodeURIComponent(project.id)}&section=collections`}>Collections</a>
+                          <a href={`/projects/?project=${encodeURIComponent(project.id)}&section=permits`}>Permits</a>
+                        </RowMenu>
                       </td>
                     </tr>
                   );
