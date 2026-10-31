@@ -1,8 +1,16 @@
 "use client";
+import { todayISO } from "@/lib/format";
 
 import { useCallback, useState } from "react";
 
-import { Field, Notice, PageHeader, Tabs, TabPanel } from "@/components/ui";
+import {
+  DatePoint,
+  Field,
+  Notice,
+  PageHeader,
+  TabPanel,
+  Tabs,
+} from "@/components/ui";
 import { sectionDescription } from "@/components/shell/navigation";
 import { CashflowDrilldown } from "@/components/projects/cashflow/CashflowDrilldown";
 import type { DrilldownQuery } from "@/components/projects/cashflow/CashflowDrilldown";
@@ -214,13 +222,7 @@ export function CashflowTab({
         subtitle={sectionDescription("cashflow")}
         actions={
           <Field label="Position as at" className="toolbar-filter">
-            <input
-              className="input"
-              type="date"
-              value={asOf}
-              max={undefined}
-              onChange={(event) => setAsOf(event.target.value)}
-            />
+            <DatePoint label="Position as at" value={asOf || todayISO()} onChange={(value) => setAsOf(value === todayISO() ? "" : value)} />
           </Field>
         }
       />

@@ -6786,7 +6786,26 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
   display: none;
 }
 
-.row-menu-list > .button {
+/* A plain button or link in the list takes the button's shape, so a menu
+ * item written as a link to a screen reads the same as one that acts. */
+.row-menu-list > button,
+.row-menu-list > a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font: 500 var(--text-sm) var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.row-menu-list > .button,
+.row-menu-list > button,
+.row-menu-list > a {
   justify-content: flex-start;
   width: 100%;
   border-color: transparent;
@@ -6796,7 +6815,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
   white-space: nowrap;
 }
 
-.row-menu-list > .button:hover:not(:disabled) {
+.row-menu-list > .button:hover:not(:disabled),
+.row-menu-list > button:hover:not(:disabled),
+.row-menu-list > a:hover {
   background-color: var(--surface-hover);
 }
 
