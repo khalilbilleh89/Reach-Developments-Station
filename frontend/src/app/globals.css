@@ -1240,6 +1240,33 @@ textarea {
   text-align: center;
 }
 
+/* ---- Sign-in split (design system M1) ---------------------------------- */
+
+.shell-signin { padding: 0; }
+.signin-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); width: 100%; min-height: 100dvh; }
+.signin-side { display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-8); padding: clamp(2rem, 5vw, 4rem); background: var(--nav-bg); color: var(--nav-text); }
+.signin-side .signin-brand { margin-bottom: 0; }
+.signin-side .brand-mark { width: 2.75rem; height: 2.75rem; color: var(--brand-gold); }
+.signin-side .signin-brand-name { color: var(--nav-text-strong); font-size: var(--text-xl); }
+.signin-side .signin-brand-sub { color: var(--nav-text-muted); }
+.signin-side-text { display: grid; gap: var(--space-3); max-width: 28rem; }
+.signin-headline { margin: 0; color: var(--nav-text-strong); font-size: clamp(1.6rem, 2.6vw, 2.4rem); font-weight: 650; letter-spacing: -0.03em; line-height: 1.15; }
+.signin-sub { margin: 0; color: var(--nav-text); font-size: var(--text-sm); line-height: 1.6; }
+.signin-side-foot { margin: 0; color: var(--nav-text-muted); font-size: var(--text-xs); }
+.signin-form { display: flex; flex-direction: column; justify-content: center; padding: clamp(2rem, 5vw, 4rem) var(--space-5); }
+.signin-form .panel { width: min(26rem, 100%); margin: 0 auto; }
+.signin-form .signin-foot { width: min(26rem, 100%); margin-left: auto; margin-right: auto; }
+.signin-hint { margin: var(--space-4) 0 0; color: var(--text-muted); font-size: var(--text-xs); }
+@media (width < 45rem) {
+  .shell-signin { justify-content: flex-start; }
+  .signin-split { grid-template-columns: minmax(0, 1fr); min-height: auto; }
+  .signin-side { gap: var(--space-4); padding: var(--space-5) var(--space-4); }
+  .signin-side-text { max-width: none; }
+  .signin-headline { font-size: var(--text-xl); }
+  .signin-sub, .signin-side-foot { display: none; }
+  .signin-form { padding: var(--space-5) var(--space-4) var(--space-8); }
+}
+
 /* --------------------------------------------------------------------------
  * Page structure
  *

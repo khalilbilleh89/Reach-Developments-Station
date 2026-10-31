@@ -14,6 +14,7 @@ import { AppSidebar, MobileNavigation } from "./AppSidebar";
 import { CommandPalette } from "./CommandPalette";
 import { ContextBar } from "./ContextBar";
 import { PhoneTabs } from "./PhoneTabs";
+import { SignInFrame } from "./SignInFrame";
 import type { Crumb } from "./ContextBar";
 import {
   PROJECT_NAVIGATION,
@@ -218,26 +219,14 @@ export function SessionScreen({ status, onRetry }: { status: "loading" | "anonym
  */
 export function PasswordGate({ onChanged }: { onChanged: () => void }) {
   return (
-    <div className="shell">
-      <main className="signin">
-        <div className="signin-brand">
-          <span className="brand-mark" aria-hidden="true">
-            R
-          </span>
-          <span>
-            <span className="signin-brand-name">Reach</span>
-            <br />
-            <span className="signin-brand-sub">Developments Station</span>
-          </span>
-        </div>
-        <div className="panel">
-          <h1 className="panel-title">Choose a new password</h1>
-          <p className="panel-lead">
-            Your account was created with a temporary password. Replace it to continue.
-          </p>
-          <ChangePasswordForm requireCurrent={false} onChanged={onChanged} />
-        </div>
-      </main>
-    </div>
+    <SignInFrame>
+      <div className="panel">
+        <h1 className="panel-title">Choose a new password</h1>
+        <p className="panel-lead">
+          Your account was created with a temporary password. Replace it to continue.
+        </p>
+        <ChangePasswordForm requireCurrent={false} onChanged={onChanged} />
+      </div>
+    </SignInFrame>
   );
 }
