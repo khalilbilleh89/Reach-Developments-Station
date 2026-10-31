@@ -29,9 +29,10 @@ merge evidence. Full preserves every test file; Backend is its aggregate check.
 Frontend runs for every supported event. Render remains on main.
 
 Implement on the roadmap's appropriate branch/base. Run relevant PostgreSQL
-tests, Ruff check/format, compile and frontend checks. Open the PR as Draft and
-stop for independent review. Only after review accepts the candidate may it be
-marked Ready through the applicable authorized path. Never recommend a main
+tests, Ruff check/format, compile and frontend checks. Once those pass, open the
+PR ready for review (owner direction, 31 Oct 2026): a Draft-then-Ready cycle
+runs CI twice on the same head. Use Draft only for knowingly incomplete work,
+then stop for independent review as before. Never recommend a main
 merge before exact-head Full Backend and Frontend conclude successfully.
 **Never merge: a human merges.** Pending post-merge main CI permits Draft work;
 a failure takes priority. Do not change Render's branch or use production data.
