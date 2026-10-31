@@ -16,6 +16,7 @@ import {
   PageHeader,
   StatusDot,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 import { PhaseAccessEditor } from "@/components/projects/inventory/PhaseAccessEditor";
 import { eventTime } from "@/lib/format";
@@ -180,25 +181,21 @@ export function AccessTab({ projectId }: { projectId: string }) {
                       )}
                     </td>
                     <td className="figure">{eventTime(row.granted_at)}</td>
-                    <td>
-                      <div className="row-actions">
-                        <Button
-                          small
-                          variant="quiet"
+                    <td className="row-menu-cell">
+                      <RowMenu label="More actions">
+                        <Button variant="quiet"
                           onClick={() => setScopeFor(scopeFor?.user_id === row.user_id ? null : row)}
                           aria-expanded={scopeFor?.user_id === row.user_id}
                         >
                           {scopeFor?.user_id === row.user_id ? "Close phases" : "Phases"}
                         </Button>
-                        <Button
-                          small
-                          variant="quiet"
+                        <Button variant="quiet"
                           disabled={busy}
                           onClick={() => void act(row.user_id, !row.is_active)}
                         >
                           {row.is_active ? "Revoke" : "Restore"}
                         </Button>
-                      </div>
+                      </RowMenu>
                     </td>
                   </tr>
                 ))}

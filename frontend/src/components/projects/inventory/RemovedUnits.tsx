@@ -8,6 +8,7 @@ import { UnitPurgePage } from "./UnitPurgePage";
 import {
   Button, Card, DataToolbar, EmptyState, Loading, Notice, PromptDialog,
   RecordPage, TableScroll,
+  RowMenu,
 } from "@/components/ui";
 
 const PAGE = 50;
@@ -88,11 +89,11 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
           <td>{[unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" / ")}</td>
           <td>{unit.commercial_status.replaceAll("_", " ")}</td>
           <td>{new Date(unit.removed_at).toLocaleString()}</td>
-          <td><div className="button-row"><Button disabled={busy} onClick={() => { setSelected(unit); setRestoreError(null); }}>Restore {unit.unit_reference}</Button>
+          <td className="row-menu-cell"><RowMenu label="More actions"><Button disabled={busy} onClick={() => { setSelected(unit); setRestoreError(null); }}>Restore {unit.unit_reference}</Button>
             <UnitPermanentDeletionAction projectId={projectId} unitId={unit.id} reference={unit.unit_reference}
               onDeleted={async () => { setOffset(0); reload(); await onRestored(); }} />
             <Button variant="danger" disabled={busy} onClick={() => setPurging(unit)}>Purge unit and linked history</Button>
-          </div></td>
+          </RowMenu></td>
         </tr>)}</tbody></TableScroll> : <EmptyState title="No removed units found" hint="Try another reference or return to Inventory to check the current units." />}
       </Card> : null}
       <div className="button-row">

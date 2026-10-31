@@ -5,7 +5,7 @@ import { construction } from "@/lib/api";
 import type { ContractDetail, ConstructionInvoice, ConstructionPayment, Variation } from "@/lib/api";
 import { hasAnyRole } from "@/lib/roles";
 import { money, businessDate } from "@/lib/format";
-import { Button, ButtonRow, DraftBoundary, Field, MoneyInput, Notice, PromptDialog, RecordPage, TableScroll } from "@/components/ui";
+import { Button, ButtonRow, DraftBoundary, Field, MoneyInput, Notice, PromptDialog, RecordPage, RowMenu, TableScroll } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 type Props = {
@@ -40,8 +40,8 @@ export function ContractTransactions({ projectId, contract, roles, invoices, var
     </ButtonRow>
     <p>Payments update paid to date immediately. Changes adjust the contract value after approval. Use Certificates to value completed work, then Invoices & payments to record the related invoice. Advance invoices identify advance cash separately.</p>
     <TableScroll label="Contract variations and reductions"><thead><tr><th scope="col">Reference</th><th scope="col">Description</th><th scope="col">Change excluding tax</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>
-      {variations?.map(row => <tr key={row.id}><th scope="row">{row.variation_number}</th><td>{row.description}</td><td>{money(row.total_value_ex_tax, contract.currency_code)}</td><td>{row.status}</td><td>
-        {prepare && row.status === "draft" ? <><Button disabled={busy || unavailable} onClick={() => void act(() => construction.submitVariation(projectId, row.id))}>Submit change</Button><DeleteRecordButton label="draft change" recordName={row.variation_number} description="Delete this draft change and its lines. The audit trail remains." onDelete={reason => construction.deleteDraftVariation(projectId, row.id, reason)} onDeleted={onChanged} /></> : null}
+      {variations?.map(row => <tr key={row.id}><th scope="row">{row.variation_number}</th><td>{row.description}</td><td>{money(row.total_value_ex_tax, contract.currency_code)}</td><td>{row.status}</td><td className="row-menu-cell">
+        {prepare && row.status === "draft" ? <RowMenu label="More actions"><Button disabled={busy || unavailable} onClick={() => void act(() => construction.submitVariation(projectId, row.id))}>Submit change</Button><DeleteRecordButton label="draft change" recordName={row.variation_number} description="Delete this draft change and its lines. The audit trail remains." onDelete={reason => construction.deleteDraftVariation(projectId, row.id, reason)} onDeleted={onChanged} /></RowMenu> : null}
         {check && row.status === "submitted" ? <Button disabled={busy || unavailable} onClick={() => void act(() => construction.approveVariation(projectId, row.id))}>Approve change</Button> : null}
         {prepare && row.status === "submitted" ? <Button disabled={busy || unavailable} onClick={() => { setError(null); setReasonAction({ title: `Withdraw ${row.variation_number}`, run: reason => construction.withdrawVariation(projectId, row.id, reason) }); }}>Withdraw</Button> : null}
         {row.status === "approved" ? "Retained. Add an opposite variation to correct it." : null}

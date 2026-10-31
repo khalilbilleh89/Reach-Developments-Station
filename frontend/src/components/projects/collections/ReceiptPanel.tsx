@@ -6,7 +6,6 @@ import {
   DraftBoundary,
   Badge,
   Button,
-  ButtonRow,
   EmptyState,
   Field,
   FieldRow,
@@ -18,6 +17,7 @@ import {
   PromptDialog,
   SubPanel,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 import { ApiError, cashflow, collections } from "@/lib/api";
 import type {
@@ -287,8 +287,8 @@ export function ReceiptPanel({
                     ) : null}
                   </td>
                   <td>{receipt.bank_reference ?? "—"}</td>
-                  <td>
-                    <ButtonRow>
+                  <td className="row-menu-cell">
+                    <RowMenu label="More actions">
                       {canRecord && receipt.status === "recorded" ? (
                         <Button variant="danger" disabled={busy} onClick={() => setRemoving(receipt)}>
                           Delete
@@ -325,7 +325,7 @@ export function ReceiptPanel({
                           Restrict cash
                         </Button>
                       ) : null}
-                    </ButtonRow>
+                    </RowMenu>
                   </td>
               </tr>
             ))}

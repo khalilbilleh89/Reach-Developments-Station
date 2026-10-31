@@ -9,7 +9,7 @@ import { money, percent, percentInput, fractionFromPercent } from "@/lib/format"
 import { COMMISSION_PREPARERS, COMMISSION_RELEASERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { sectionDescription } from "@/components/shell/navigation";
-import { Badge, Button, ButtonRow, Card, RecordPage, EmptyState, Field, FieldRow, ConfirmDialog, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, SectionHeader, TableScroll } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, RecordPage, RowMenu, SectionHeader, TableScroll } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 
 const COMMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {
@@ -107,10 +107,10 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
             <td>{a.beneficiary_branch_snapshot ?? "—"}</td>
             <td className="num">{percent(a.rate_fraction)}</td>
             <td className="num">{money(a.calculated_amount, currencyCodes[selected.currency_id])}</td>
-            <td>{canPrepare && selected.status === "draft" ? <ButtonRow>
-              <Button small variant="quiet" disabled={busy} onClick={() => { setAllocation(a); setDialog("allocation"); }}>Edit Beneficiary</Button>
-              <Button small variant="danger" disabled={busy} onClick={() => { setError(null); setAllocation(a); setDialog("remove-allocation"); }}>Remove Beneficiary</Button>
-            </ButtonRow> : "Read only"}</td>
+            <td className="row-menu-cell">{canPrepare && selected.status === "draft" ? <RowMenu label="More actions">
+              <Button variant="quiet" disabled={busy} onClick={() => { setAllocation(a); setDialog("allocation"); }}>Edit Beneficiary</Button>
+              <Button variant="danger" disabled={busy} onClick={() => { setError(null); setAllocation(a); setDialog("remove-allocation"); }}>Remove Beneficiary</Button>
+            </RowMenu> : "Read only"}</td>
           </tr>)}</tbody>
         </TableScroll> : <EmptyState compact title="No beneficiaries assigned" hint="The distribution records each beneficiary's percentage against the base." />}
       </section>
