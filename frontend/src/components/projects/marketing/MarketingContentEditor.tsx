@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import type { Bio, Branding, Nearby } from "@/lib/api/marketing";
-import { Button, DraftBoundary, Field, FieldRow, FormActions, FormSection, Notice, RecordPage } from "@/components/ui";
+import { Button, DraftBoundary, Field, FieldRow, FormOutline, FormSection, Notice, RecordPage, Segmented, StickyActions } from "@/components/ui";
 
 const sections = [["country", "About Country"], ["area", "About Area"], ["project", "About Project"], ["location", "About Location"]] as const;
 const lines = (value: string) => value.split("\n");
@@ -19,7 +19,7 @@ export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kin
   const updateBrand = (patch: Partial<Branding>) => setData({ ...brand, ...patch });
   return <RecordPage title={kind === "bio" ? "Edit Project Bio" : "Edit Branding"} onClose={onClose}>
     <DraftBoundary dirty={JSON.stringify(initial) !== JSON.stringify(data)} busy={busy}>
-      <form className="stack" onSubmit={async event => {
+      <form className="form-layout" onSubmit={async event => {
         event.preventDefault(); if (busy) return; setBusy(true); setError(null);
         try {
           const saved = kind === "bio" ? { ...bio, country: { ...bio.country, bullets: cleanLines(bio.country.bullets) }, area: { ...bio.area, bullets: cleanLines(bio.area.bullets) }, project: { ...bio.project, bullets: cleanLines(bio.project.bullets) }, location: { ...bio.location, bullets: cleanLines(bio.location.bullets) }, amenities: cleanLines(bio.amenities) } : brand;
@@ -27,6 +27,8 @@ export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kin
         } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save. Your entries have been kept."); }
         finally { setBusy(false); }
       }}>
+        <FormOutline sections={kind === "bio" ? [...sections.map(([, label]) => label), "Nearby Locations", "Project Amenities", "Indicative ROI Range", "Supporting Source"] : ["Project Name Definition", "Colour Scheme", "Font Types", "Supporting Source"]} />
+        <div className="form-layout-body stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
         <fieldset disabled={busy} className="marketing-fieldset stack">
           {kind === "bio" ? <>
@@ -38,7 +40,7 @@ export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kin
               {bio.nearby.map((place, i) => <div key={i} className="marketing-entry stack">
                 <FieldRow><Field label="Location"><input className="input" required maxLength={320} value={place.name} onChange={e => updateBio({ nearby: bio.nearby.map((p, j) => j === i ? { ...p, name: e.target.value } : p) })} /></Field>
                   <Field label="Duration (minutes)" optional><input className="input" type="number" min="0" max="10080" step="1" value={place.duration_minutes ?? ""} onChange={e => updateBio({ nearby: bio.nearby.map((p, j) => j === i ? { ...p, duration_minutes: e.target.value === "" ? null : e.target.valueAsNumber } : p) })} /></Field>
-                  <Field label="Travel mode"><select className="input" value={place.travel_mode} onChange={e => updateBio({ nearby: bio.nearby.map((p, j) => j === i ? { ...p, travel_mode: e.target.value as Nearby["travel_mode"] } : p) })}><option value="drive">Drive</option><option value="walk">Walk</option><option value="transit">Public transport</option><option value="cycle">Cycle</option></select></Field></FieldRow>
+                  <Field label="Travel mode"><Segmented label="Travel mode" value={place.travel_mode} options={[{ value: "drive", label: "Drive" }, { value: "walk", label: "Walk" }, { value: "transit", label: "Public transport" }, { value: "cycle", label: "Cycle" }]} onChange={value => updateBio({ nearby: bio.nearby.map((p, j) => j === i ? { ...p, travel_mode: value as Nearby["travel_mode"] } : p) })} /></Field></FieldRow>
                 <Field label="Journey notes" optional><input className="input" maxLength={4000} value={place.note} onChange={e => updateBio({ nearby: bio.nearby.map((p, j) => j === i ? { ...p, note: e.target.value } : p) })} /></Field>
                 <Button variant="danger" onClick={() => updateBio({ nearby: bio.nearby.filter((_, j) => j !== i) })}>Delete location {i + 1}</Button>
               </div>)}
@@ -66,7 +68,8 @@ export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kin
           </>}
           <FormSection title="Supporting Source"><Field label="Source or reference" optional><textarea className="input" maxLength={4000} value={data.source} onChange={e => setData({ ...data, source: e.target.value })} /></Field><Field label="As-at date" optional><input className="input" type="date" value={data.as_of ?? ""} onChange={e => setData({ ...data, as_of: e.target.value || null })} /></Field></FormSection>
         </fieldset>
-        <FormActions><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button><Button variant="default" data-leaves-editor onClick={onClose} disabled={busy}>Cancel</Button></FormActions>
+        <StickyActions dirty={JSON.stringify(initial) !== JSON.stringify(data)} submitLabel="Save" busy={busy} onCancel={onClose} />
+        </div>
       </form>
     </DraftBoundary>
   </RecordPage>;

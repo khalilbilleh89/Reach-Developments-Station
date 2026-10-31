@@ -4,21 +4,25 @@ import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  DraftBoundary,
   Badge,
   Button,
+  DraftBoundary,
   EmptyState,
   Field,
   FieldRow,
+  FlowActions,
+  FlowSteps,
   Form,
   FormActions,
   FormDialog,
+  KeyValue,
+  KeyValueGrid,
   MoneyInput,
   Notice,
   PromptDialog,
+  RowMenu,
   SubPanel,
   TableScroll,
-  RowMenu,
 } from "@/components/ui";
 import { ApiError, cashflow, collections } from "@/lib/api";
 import type {
@@ -77,6 +81,12 @@ export function ReceiptPanel({
   const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
+  // Two steps (design system J4): the receipt, then a review of what is recorded.
+  const RECEIPT_STEPS = [
+    { key: "receipt", label: "Receipt", hint: "Amount and date" },
+    { key: "review", label: "Review", hint: "What will be recorded" },
+  ];
+  const [receiptStep, setReceiptStep] = useState(0);
   const [form, setForm] = useState({
     amount: "",
     receipt_date: todayISO(),
@@ -162,7 +172,7 @@ export function ReceiptPanel({
         <SubPanel
           title="Receipt journal"
           actions={
-            <Button data-leaves-editor={recording || undefined} onClick={() => setRecording(!recording)}>
+            <Button data-leaves-editor={recording || undefined} onClick={() => { setRecording(!recording); setReceiptStep(0); }}>
               {recording ? "Cancel" : "Record a receipt"}
             </Button>
           }
@@ -171,6 +181,7 @@ export function ReceiptPanel({
             <Form
               onSubmit={(event) => {
                 event.preventDefault();
+                if (receiptStep === 0) { if (form.amount && form.receipt_date) setReceiptStep(1); return; }
                 void act(
                   () =>
                     collections.recordReceipt(projectId, saleId, {
@@ -183,6 +194,7 @@ export function ReceiptPanel({
                 ).then((saved) => {
                   if (!saved) return;
                   setRecording(false);
+                  setReceiptStep(0);
                   setForm({
                     amount: "",
                     receipt_date: todayISO(),
@@ -192,6 +204,8 @@ export function ReceiptPanel({
                 });
               }}
             >
+              <FlowSteps label="Receipt steps" steps={RECEIPT_STEPS} current={receiptStep} />
+              {receiptStep === 0 ? <>
               <FieldRow columns={3}>
                 <Field label="Amount" hint="In the contract's currency. Nothing is converted.">
                   <MoneyInput
@@ -227,11 +241,16 @@ export function ReceiptPanel({
                   onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 />
               </Field>
-              <FormActions>
-                <Button type="submit" variant="primary" disabled={busy}>
-                  Record receipt
-                </Button>
-              </FormActions>
+              </> : <section className="flow-review" aria-label="Review">
+                <KeyValueGrid>
+                  <KeyValue label="Amount" value={money(form.amount, currencyCode)} />
+                  <KeyValue label="Date received" value={businessDate(form.receipt_date)} />
+                  <KeyValue label="Bank reference" value={form.bank_reference || "None"} />
+                  <KeyValue label="Notes" value={form.notes || "None"} />
+                </KeyValueGrid>
+                <p className="muted">A recorded receipt is a claim that money arrived. It changes no balance until Finance confirms it.</p>
+              </section>}
+              <FlowActions step={receiptStep} count={RECEIPT_STEPS.length} busy={busy} nextDisabled={receiptStep === 0 && !(form.amount && form.receipt_date)} submitLabel="Record receipt" onBack={() => setReceiptStep(0)} onNext={() => { if (form.amount && form.receipt_date) setReceiptStep(1); }} />
             </Form>
           ) : (
             <p className="hint">
