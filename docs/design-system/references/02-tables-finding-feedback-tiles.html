@@ -1,0 +1,446 @@
+<title>Reach Component Options 2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one long sheet, a section per component family, options as cards in a 2-up grid. Single light theme, matching the app. */
+:root {
+  --canvas: #f5f5f2;
+  --surface: #ffffff;
+  --surface-2: #f3f3f0;
+  --hover: #f7f7f4;
+  --ink: #1c1d20;
+  --ink-2: #4a4b50;
+  --muted: #818286;
+  --line: #e6e6e1;
+  --line-soft: #efefea;
+  --gold: #dcc263;
+  --gold-text: #8a6d14;
+  --gold-soft: #faf5e2;
+  --teal: #0f7b67;
+  --teal-soft: #e3f3ef;
+  --amber: #b7791f;
+  --amber-soft: #fbf1dc;
+  --danger: #b4232c;
+  --danger-soft: #fbe7e8;
+  --slate: #9a9ca3;
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { background: var(--canvas); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+.page { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px; }
+header.intro { display: grid; gap: 8px; }
+.eyebrow { margin: 0; color: var(--gold-text); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(26px, 4vw, 34px); font-weight: 600; letter-spacing: -.025em; text-wrap: balance; }
+.lede { margin: 0; max-width: 68ch; color: var(--ink-2); }
+section.group { display: grid; gap: 16px; }
+.group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.group-head h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.015em; }
+.group-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid .wide { grid-column: 1 / -1; }
+@media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.option { min-width: 0; display: grid; gap: 14px; align-content: start; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.option.current { background: var(--surface-2); border-style: dashed; }
+.tag { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.code { display: inline-grid; place-items: center; min-width: 34px; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--ink); color: #fff; font: 600 12px var(--mono); }
+.option.current .code { background: var(--slate); }
+.tag strong { font-size: 14px; font-weight: 600; }
+.tag .note { color: var(--muted); font-size: 12px; }
+.new { display: inline-flex; padding: 1px 7px; border-radius: 999px; background: var(--gold-soft); color: var(--gold-text); font-size: 11px; font-weight: 600; }
+.why { margin: 0; color: var(--ink-2); font-size: 12.5px; }
+.demo { min-width: 0; }
+.num { font-variant-numeric: tabular-nums; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: 500 13px var(--font); cursor: pointer; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+.btn.primary:hover { background: #2d2e33; }
+.btn.danger { color: var(--danger); }
+.btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn:focus-visible, .input:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--teal-soft); color: var(--teal); }
+.pill.warn { background: var(--amber-soft); color: var(--amber); }
+.pill.bad { background: var(--danger-soft); color: var(--danger); }
+.pill.grey { background: var(--surface-2); color: var(--ink-2); }
+.input { height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: 400 13px var(--font); color: var(--ink); }
+
+/* ---------- tables ---------- */
+.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.tbl th, .tbl td { padding: 10px 10px; border-bottom: 1px solid var(--line-soft); text-align: left; white-space: nowrap; }
+.tbl th { color: var(--muted); font-weight: 500; font-size: 11.5px; letter-spacing: .02em; background: var(--surface-2); position: sticky; top: 0; }
+.tbl th:first-child, .tbl td:first-child { padding-left: 14px; }
+.tbl th:last-child, .tbl td:last-child { padding-right: 14px; }
+.tbl .n { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl tbody tr:hover td { background: var(--hover); }
+.tbl td .sub { display: block; color: var(--muted); font-size: 11.5px; }
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.tbl .sort { cursor: pointer; user-select: none; }
+.tbl .sort::after { content: "↕"; margin-left: 5px; color: var(--line); }
+.tbl .sort[data-dir="asc"]::after { content: "↑"; color: var(--ink); }
+.tbl .sort[data-dir="desc"]::after { content: "↓"; color: var(--ink); }
+.tbl tr.sel td { background: var(--gold-soft); }
+.tbl input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--ink); margin: 0; vertical-align: middle; }
+.bulkbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 13px; margin-bottom: 8px; }
+.bulkbar[hidden] { display: none; }
+.bulkbar .btn { height: 28px; border-color: rgb(255 255 255 / 20%); background: rgb(255 255 255 / 8%); color: #fff; font-size: 12px; }
+.bulkbar .btn.gold { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+.dense .tbl th, .dense .tbl td { padding: 6px 8px; font-size: 12.5px; }
+.inline-cell { position: relative; }
+.inline-cell input { width: 110px; height: 26px; padding: 0 6px; border: 1px solid var(--gold-text); border-radius: 6px; font: 500 13px var(--mono); text-align: right; background: var(--surface); color: var(--ink); }
+.inline-hint { color: var(--muted); font-size: 11.5px; margin-top: 8px; }
+.tbl td .edit-k { color: var(--gold-text); font-size: 11px; margin-left: 6px; opacity: 0; }
+.tbl tbody tr:hover .edit-k { opacity: 1; }
+.exp td { background: var(--surface-2) !important; }
+.exp .inner { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 4px 0 6px; white-space: normal; }
+.exp .inner div { font-size: 12px; color: var(--ink-2); }
+.exp .inner b { display: block; color: var(--ink); font-size: 13px; }
+.tbl .chev-btn { width: 22px; height: 22px; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 6px; }
+.tbl .chev-btn:hover { background: var(--line-soft); color: var(--ink); }
+.tbl .chev-btn svg { width: 14px; height: 14px; transition: transform .15s; }
+.tbl .chev-btn[aria-expanded="true"] svg { transform: rotate(90deg); }
+.card-list { display: grid; gap: 8px; }
+.card-row { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.card-row:hover { border-color: var(--slate); }
+.card-row .k { display: block; color: var(--muted); font-size: 11px; }
+.card-row b { font-weight: 600; }
+@media (max-width: 640px) { .card-row { grid-template-columns: 1fr 1fr; } .exp .inner { grid-template-columns: 1fr; } }
+.dots { width: 28px; height: 28px; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; }
+.dots:hover { background: var(--line-soft); color: var(--ink); }
+.search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); }
+.search input { flex: 1; border: 0; background: none; font: inherit; font-size: 13px; color: var(--ink); outline: none; min-width: 0; }
+.search kbd { font: 500 11px var(--mono); padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.chipf { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 12.5px; cursor: pointer; }
+.chipf.on { border-color: var(--ink); background: var(--ink); color: #fff; }
+.chipf .x { opacity: .7; }
+
+/* ---------- drawer / sheet ---------- */
+.drawer-stage { position: relative; height: 300px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); overflow: hidden; }
+.drawer-stage .ghost { padding: 14px; color: var(--muted); font-size: 12px; }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(360px, 90%); transform: translateX(100%); transition: transform .22s ease; background: var(--surface); border-left: 1px solid var(--line); box-shadow: -12px 0 30px rgb(28 29 32 / 8%); display: grid; grid-template-rows: auto 1fr auto; }
+.drawer.open { transform: none; }
+.drawer header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
+.drawer header b { font-size: 14px; }
+.drawer .body { padding: 14px 16px; display: grid; gap: 10px; font-size: 13px; }
+.drawer .kv { display: flex; justify-content: space-between; gap: 10px; }
+.drawer .kv span:first-child { color: var(--muted); }
+.drawer footer { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--line-soft); }
+
+/* ---------- command palette ---------- */
+.cmd { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 16px 40px rgb(28 29 32 / 12%); overflow: hidden; max-width: 520px; }
+.cmd .search { border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; height: 44px; padding: 0 14px; }
+.cmd ul { list-style: none; margin: 0; padding: 6px; max-height: 240px; overflow: auto; }
+.cmd li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+.cmd li .k { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.cmd li.active, .cmd li:hover { background: var(--surface-2); }
+.cmd li .grp { color: var(--muted); font-size: 11px; }
+.cmd .hdr { padding: 8px 10px 2px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+
+/* ---------- toasts ---------- */
+.toast-stage { position: relative; height: 150px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); overflow: hidden; }
+.toasts { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 8px; width: min(320px, 90%); }
+.toast { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 13px; box-shadow: 0 8px 24px rgb(28 29 32 / 18%); animation: up .18s ease; }
+.toast .ic { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex: none; font-size: 11px; font-weight: 700; }
+.toast .ic.ok { background: var(--teal); } .toast .ic.bad { background: var(--danger); }
+.toast .t b { display: block; font-weight: 600; }
+.toast .t span { color: rgb(255 255 255 / 70%); font-size: 12px; }
+.toast .undo { margin-left: auto; color: var(--gold); font-weight: 600; background: none; border: 0; cursor: pointer; font: inherit; }
+@keyframes up { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+.banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--amber); background: var(--amber-soft); color: var(--ink); font-size: 13px; }
+.banner .btn { margin-left: auto; }
+
+/* ---------- stat tiles ---------- */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.tile { padding: 14px 16px; background: var(--surface); display: grid; gap: 4px; }
+.tile .k { color: var(--muted); font-size: 11.5px; font-weight: 500; }
+.tile .v { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.tile .d { font-size: 12px; color: var(--teal); }
+.tile .d.down { color: var(--danger); }
+.tile svg { width: 100%; height: 26px; display: block; margin-top: 2px; }
+@media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.hero-tile { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.hero-tile .lead { padding: 18px 20px; background: var(--ink); color: #fff; }
+.hero-tile .lead .k { color: rgb(255 255 255 / 60%); font-size: 11.5px; }
+.hero-tile .lead .v { font-size: 30px; font-weight: 600; letter-spacing: -.03em; }
+.hero-tile .lead .sub { color: rgb(255 255 255 / 60%); font-size: 12px; margin-top: 4px; }
+.hero-tile .ledger { padding: 14px 18px; display: grid; align-content: center; gap: 8px; background: var(--surface); font-size: 13px; }
+.hero-tile .ledger div { display: flex; justify-content: space-between; gap: 10px; }
+.hero-tile .ledger span:first-child { color: var(--muted); }
+@media (max-width: 640px) { .hero-tile { grid-template-columns: 1fr; } }
+
+/* ---------- progress / steps ---------- */
+.steps { display: flex; align-items: center; gap: 0; }
+.steps .s { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.steps .s i { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line); display: grid; place-items: center; font-size: 11px; font-weight: 600; font-style: normal; background: var(--surface); }
+.steps .s.done i { background: var(--teal); border-color: var(--teal); color: #fff; }
+.steps .s.now { color: var(--ink); font-weight: 600; } .steps .s.now i { border-color: var(--ink); color: var(--ink); }
+.steps .ln { flex: 1; height: 1.5px; background: var(--line); margin: 0 8px; min-width: 14px; }
+.steps .ln.done { background: var(--teal); }
+.segbar { display: flex; gap: 3px; height: 8px; }
+.segbar i { flex: 1; border-radius: 3px; background: var(--line-soft); }
+.segbar i.on { background: var(--teal); }
+.ring-sm { width: 44px; height: 44px; }
+.prog-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+
+/* ---------- skeleton & empty ---------- */
+.skel { display: grid; gap: 10px; }
+.skel i { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--line-soft) 25%, var(--surface-2) 50%, var(--line-soft) 75%); background-size: 200% 100%; animation: sh 1.3s infinite; }
+@keyframes sh { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.empty { display: grid; justify-items: center; gap: 6px; padding: 22px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; }
+.empty svg { width: 28px; height: 28px; color: var(--slate); }
+.empty b { font-size: 13.5px; } .empty p { margin: 0; color: var(--muted); font-size: 12.5px; max-width: 32ch; }
+.empty-inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); color: var(--ink-2); font-size: 13px; }
+
+/* ---------- date range ---------- */
+.dr { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.dr button { height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--ink-2); font: 500 12.5px var(--font); cursor: pointer; }
+.dr button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(28 29 32 / 10%); }
+.dr-out { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- switches ---------- */
+.sw { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+.sw input { appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--line); position: relative; margin: 0; cursor: pointer; transition: background .15s; }
+.sw input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgb(0 0 0 / 20%); }
+.sw input:checked { background: var(--teal); } .sw input:checked::after { transform: translateX(14px); }
+.avatars { display: flex; }
+.avatars span { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -8px; display: grid; place-items: center; font-size: 10px; font-weight: 600; background: var(--gold-soft); color: var(--gold-text); }
+.avatars span:first-child { margin-left: 0; }
+.kbd { font: 500 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); color: var(--ink-2); }
+.tt { position: relative; display: inline-block; border-bottom: 1px dotted var(--slate); cursor: help; }
+.tt .tip { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); padding: 6px 9px; border-radius: 7px; background: var(--ink); color: #fff; font-size: 12px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.tt:hover .tip, .tt:focus .tip { opacity: 1; }
+.rowgap { display: grid; gap: 14px; }
+footer.pick { padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+footer.pick p { margin: 0; color: var(--ink-2); }
+footer.pick code { font-family: var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<main class="page">
+  <header class="intro">
+    <p class="eyebrow">Reach · Page 2 of the component review</p>
+    <h1>Tables, feedback and the parts you don't have yet</h1>
+    <p class="lede">Everything here is clickable. Cards marked <span class="new">new</span> are components the system doesn't have today. Reply with codes, for example <b>E1 E3 F1 G2 H1</b>. Your page-1 picks (A1 A2 A3 · B1 B3 B4 B5 · C1 C2 C4 · D1 D2 D4) are saved.</p>
+  </header>
+
+  <!-- ================= E. Tables ================= -->
+  <section class="group" aria-labelledby="e-h">
+    <div class="group-head"><h2 id="e-h">E · Tables (registers)</h2><p>Collections register · Pyla Pearl style data</p></div>
+    <div class="grid">
+      <article class="option wide">
+        <div class="tag"><span class="code">E1</span><strong>Sortable, selectable register</strong><span class="new">new</span><span class="note">click headers to sort · tick rows for a bulk bar</span></div>
+        <p class="why">Sticky grey header, sortable columns, checkbox selection with a floating action bar, status pills, row hover and the ⋯ menu you already approved. The standard for a modern admin table.</p>
+        <div class="demo">
+          <div class="filters"><label class="search" style="flex:1 1 220px;max-width:320px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7.25 12.5a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5ZM11 11l3.5 3.5"/></svg><input id="e1-search" placeholder="Search buyer or unit"><kbd>/</kbd></label><button type="button" class="chipf" data-f="overdue">Overdue <span class="x">×</span></button><button type="button" class="chipf" data-f="paid">Part paid <span class="x">×</span></button><span style="margin-left:auto;color:var(--muted);font-size:12.5px" id="e1-count">9 accounts</span></div>
+          <div class="bulkbar" id="bulk" hidden><span><b id="bulk-n">0</b> selected · EUR <span id="bulk-sum">0</span> outstanding</span><span style="display:flex;gap:6px"><button type="button" class="btn">Send reminder</button><button type="button" class="btn gold">Export</button><button type="button" class="btn" id="bulk-clear">Clear</button></span></div>
+          <div class="tbl-wrap"><table class="tbl" id="e1"><thead><tr><th style="width:32px"><input type="checkbox" id="e1-all" aria-label="Select all"></th><th class="sort" data-k="unit">Unit</th><th>Buyer</th><th class="sort n" data-k="sched">Scheduled</th><th class="sort n" data-k="out">Outstanding</th><th class="sort n" data-k="over">Overdue</th><th>State</th><th style="width:40px"></th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">E2</span><strong>Expandable rows</strong><span class="new">new</span><span class="note">click the arrow</span></div>
+        <p class="why">Each row opens a detail strip beneath it (schedule, last receipt, follow-up) so you don't leave the list for a quick look.</p>
+        <div class="demo"><div class="tbl-wrap"><table class="tbl" id="e2"><thead><tr><th style="width:30px"></th><th>Unit</th><th class="n">Outstanding</th><th>State</th></tr></thead><tbody></tbody></table></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">E3</span><strong>Inline editing</strong><span class="new">new</span><span class="note">double-click a price</span></div>
+        <p class="why">Edit a value in place, confirm with Enter, cancel with Escape. Saves a form page for small corrections like a list price or a follow-up date.</p>
+        <div class="demo"><div class="tbl-wrap"><table class="tbl" id="e3"><thead><tr><th>Unit</th><th>Type</th><th class="n">List price</th></tr></thead><tbody></tbody></table></div><p class="inline-hint">Double-click or press Enter on a price to edit it. Changes here are not saved anywhere.</p></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">E4</span><strong>Dense mode</strong><span class="note">toggle</span></div>
+        <p class="why">A compact density for long registers (units, audit) and a comfortable one for review. One switch, remembered per person.</p>
+        <div class="demo"><label class="sw" style="margin-bottom:10px"><input type="checkbox" id="dense-sw"> Compact rows</label><div id="dense-host"><div class="tbl-wrap"><table class="tbl" id="e4"><thead><tr><th>Unit</th><th>Type</th><th class="n">Area</th><th class="n">List price</th><th>Status</th></tr></thead><tbody></tbody></table></div></div></div>
+      </article>
+      <article class="option wide">
+        <div class="tag"><span class="code">E5</span><strong>Card rows</strong><span class="note">for records with few columns</span></div>
+        <p class="why">Each record is a slim card instead of a table row. Reads well on phone without stacking, and suits things like permits, agreements and documents.</p>
+        <div class="demo"><div class="card-list"><div class="card-row"><div><b>BLD-SYN-001</b><span class="k">Building permit · Limassol Municipality</span></div><div><span class="k">Stage</span><b>Authority review</b></div><div><span class="k">Required by</span><b>30 Sep 2026</b></div><div><span class="k">Status</span><span class="pill warn"><i></i>Comments received</span></div><button type="button" class="dots" aria-label="More actions">⋯</button></div><div class="card-row"><div><b>DEM-SYN-001</b><span class="k">Demolition permit · Limassol Municipality</span></div><div><span class="k">Stage</span><b>Authority review</b></div><div><span class="k">Required by</span><b>1 Sep 2026</b></div><div><span class="k">Status</span><span class="pill grey"><i></i>Submitted</span></div><button type="button" class="dots" aria-label="More actions">⋯</button></div><div class="card-row"><div><b>PLN-SYN-001</b><span class="k">Planning permit · Limassol Municipality</span></div><div><span class="k">Stage</span><b>Issued</b></div><div><span class="k">Required by</span><b>—</b></div><div><span class="k">Status</span><span class="pill ok"><i></i>Completed</span></div><button type="button" class="dots" aria-label="More actions">⋯</button></div></div></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= F. Record access ================= -->
+  <section class="group" aria-labelledby="f-h">
+    <div class="group-head"><h2 id="f-h">F · Opening a record and finding things</h2><p>Today every record opens a full page</p></div>
+    <div class="grid">
+      <article class="option">
+        <div class="tag"><span class="code">F1</span><strong>Side drawer (peek)</strong><span class="new">new</span><span class="note">click a row</span></div>
+        <p class="why">A panel slides in from the right with the record's summary and main actions; the list stays visible behind it. Full page stays one click away.</p>
+        <div class="demo"><div class="drawer-stage" id="dstage"><div class="ghost">Register stays here. Click a unit:</div><div style="padding:0 14px;display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn small" data-open="A-203">A-203 · Maria Fictional</button><button type="button" class="btn small" data-open="B-102">B-102 · Theo Testopoulos</button></div>
+          <aside class="drawer" id="drawer" aria-label="Record preview"><header><b id="d-title">A-203</b><button type="button" class="dots" id="d-close" aria-label="Close">×</button></header><div class="body"><div class="kv"><span>Buyer</span><b id="d-buyer">Maria Fictional</b></div><div class="kv"><span>Outstanding</span><b class="num" id="d-out">EUR 332,205.30</b></div><div class="kv"><span>Overdue</span><b class="num" style="color:var(--danger)" id="d-over">EUR 66,441.06 · 55 d</b></div><div class="kv"><span>Next follow-up</span><b>5 Nov 2026</b></div><div><span class="pill bad"><i></i>Overdue</span></div></div><footer><button type="button" class="btn">Open full record</button><button type="button" class="btn primary">Record payment</button></footer></aside></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">F2</span><strong>Command palette</strong><span class="new">new</span><span class="note">type to filter · ↑↓ Enter</span></div>
+        <p class="why">Press <span class="kbd">⌘K</span> anywhere to jump to a project, unit, buyer or action. The fastest way around a system with 40 screens.</p>
+        <div class="demo"><div class="cmd" id="cmd"><label class="search"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7.25 12.5a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5ZM11 11l3.5 3.5"/></svg><input id="cmd-in" placeholder="Jump to a unit, buyer, screen or action…" autocomplete="off"><kbd>esc</kbd></label><ul id="cmd-list"></ul></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">F3</span><strong>Filter chips + saved views</strong><span class="new">new</span></div>
+        <p class="why">Active filters show as removable chips; a view (filters + sort) can be saved and pinned, like "Overdue over 30 days".</p>
+        <div class="demo"><div class="filters"><button type="button" class="chipf on" data-chip>Overdue <span class="x">×</span></button><button type="button" class="chipf on" data-chip>Building A <span class="x">×</span></button><button type="button" class="chipf" data-chip>+ Filter</button><span style="margin-left:auto"></span><button type="button" class="btn small" id="save-view">Save view</button></div><div class="filters" id="views"><span style="color:var(--muted);font-size:12px">Saved views:</span><button type="button" class="chipf" data-chip>All accounts</button><button type="button" class="chipf on" data-chip>Overdue &gt; 30 d</button></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">F4</span><strong>Date-range control</strong><span class="new">new</span><span class="note">click</span></div>
+        <p class="why">Presets with a custom option instead of two bare date boxes. Used by the "as at" and observation period filters.</p>
+        <div class="demo"><div class="dr" role="group" aria-label="Period"><button type="button" aria-pressed="false">30 d</button><button type="button" aria-pressed="false">90 d</button><button type="button" aria-pressed="true">12 months</button><button type="button" aria-pressed="false">YTD</button><button type="button" aria-pressed="false">Custom…</button></div><p class="dr-out" id="dr-out">1 Nov 2025 — 31 Oct 2026</p></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= G. Feedback ================= -->
+  <section class="group" aria-labelledby="g-h">
+    <div class="group-head"><h2 id="g-h">G · Feedback (toasts, banners, loading, empty)</h2><p>Today: a green notice box at the top of the page</p></div>
+    <div class="grid">
+      <article class="option">
+        <div class="tag"><span class="code">G1</span><strong>Toasts with undo</strong><span class="new">new</span><span class="note">press the buttons</span></div>
+        <p class="why">A small dark notice in the corner that fades out; destructive actions get an Undo for a few seconds. Replaces the full-width notice box.</p>
+        <div class="demo"><div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn" data-toast="ok">Save → success</button><button type="button" class="btn danger" data-toast="undo">Delete → undo</button><button type="button" class="btn" data-toast="bad">Fail → error</button></div><div class="toast-stage"><div class="toasts" id="toasts"></div></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">G2</span><strong>Sticky banner</strong><span class="new">new</span></div>
+        <p class="why">For things a person must deal with before carrying on: unsaved changes, a stale forecast, a blocked permit. Stays at the top until acted on.</p>
+        <div class="demo rowgap"><div class="banner"><span>⚠</span><span>The forecast was taken before 3 cashflow movements were confirmed.</span><button type="button" class="btn small">Refresh forecast</button></div><div class="banner" style="border-color:var(--ink);background:var(--surface-2)"><span>✎</span><span>You have unsaved changes on this unit.</span><button type="button" class="btn small primary">Save</button></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">G3</span><strong>Skeleton loading</strong><span class="new">new</span></div>
+        <p class="why">Grey shimmering shapes in the layout's own form while data loads, instead of a "Loading…" line. Feels faster.</p>
+        <div class="demo"><div class="skel"><i style="width:40%"></i><i style="width:70%"></i><i style="width:55%"></i><i style="width:85%;height:40px;border-radius:8px"></i><i style="width:60%"></i></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">G4</span><strong>Empty states, two sizes</strong></div>
+        <p class="why">A small illustrated block with the one action that fills it; and a one-line version for inside a card.</p>
+        <div class="demo rowgap"><div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7h16M4 12h16M4 17h10"/></svg><b>No receipts yet</b><p>Payments appear here once the first instalment is received.</p><button type="button" class="btn small primary">Record payment</button></div><div class="empty-inline"><span>No follow-ups scheduled</span><button type="button" class="btn small">Add follow-up</button></div></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= H. Stat tiles & progress ================= -->
+  <section class="group" aria-labelledby="h-h">
+    <div class="group-head"><h2 id="h-h">H · Stat tiles and progress</h2><p>Replaces the uneven "42 · 16.00% · 41 · 8" row</p></div>
+    <div class="grid">
+      <article class="option wide">
+        <div class="tag"><span class="code">H1</span><strong>Equal tiles with trend</strong><span class="note">hover a sparkline</span></div>
+        <p class="why">One strip of equal cells: label above, number below, a change figure and a tiny trend line. Everything on one baseline.</p>
+        <div class="demo"><div class="tiles"><div class="tile"><span class="k">Remaining eligible units</span><span class="v num">42</span><span class="d down">−8 since Jul</span><svg viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,6 25,6 50,6 75,20 100,22" fill="none" stroke="#9a9ca3" stroke-width="1.5"/></svg></div><div class="tile"><span class="k">Commercial penetration</span><span class="v num">16%</span><span class="d">8 of 50</span><svg viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,22 25,22 50,22 75,6 100,5" fill="none" stroke="#0f7b67" stroke-width="1.5"/></svg></div><div class="tile"><span class="k">Available units</span><span class="v num">41</span><span class="d" style="color:var(--muted)">unchanged</span><svg viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,14 25,14 50,14 75,14 100,14" fill="none" stroke="#9a9ca3" stroke-width="1.5"/></svg></div><div class="tile"><span class="k">Active sold units</span><span class="v num">8</span><span class="d">+8 in Sep</span><svg viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,22 25,22 50,22 75,4 100,4" fill="none" stroke="#0f7b67" stroke-width="1.5"/></svg></div></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">H2</span><strong>One lead + ledger</strong></div>
+        <p class="why">The answer on a dark stage, the supporting figures as a quiet ledger beside it. Matches your approved command card.</p>
+        <div class="demo"><div class="hero-tile"><div class="lead"><span class="k">Contracted</span><span class="v num">EUR 3.96M</span><span class="sub">8 of 30 units sold</span></div><div class="ledger"><div><span>Sold</span><b class="num">8</b></div><div><span>Reserved</span><b class="num">2</b></div><div><span>Available</span><b class="num">20</b></div><div><span>Unreleased</span><b class="num">0</b></div></div></div></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">H3</span><strong>Progress: steps, segments, ring</strong><span class="new">new</span></div>
+        <p class="why">Three ways to show "how far along": a stepper for workflows (permits, SPA), a segmented bar for stages, a ring for a single percentage.</p>
+        <div class="demo rowgap"><div class="steps"><span class="s done"><i>✓</i>Preparation</span><span class="ln done"></span><span class="s now"><i>2</i>Authority review</span><span class="ln"></span><span class="s"><i>3</i>Decision</span><span class="ln"></span><span class="s"><i>4</i>Issued</span></div><div><div class="segbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div><p style="margin:6px 0 0;color:var(--muted);font-size:12px">4 of 9 construction stages complete</p></div><div class="prog-row"><svg class="ring-sm" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="#efefea" stroke-width="5"/><circle cx="22" cy="22" r="18" fill="none" stroke="#0f7b67" stroke-width="5" stroke-dasharray="113" stroke-dashoffset="68" stroke-linecap="round" transform="rotate(-90 22 22)"/><text x="22" y="26" text-anchor="middle" font-size="11" font-weight="600" fill="#1c1d20" font-family="Geist, sans-serif">40%</text></svg><span>Collected: <b>EUR 624k</b> of EUR 1.56M contracted</span></div></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= I. Small parts ================= -->
+  <section class="group" aria-labelledby="i-h">
+    <div class="group-head"><h2 id="i-h">I · Small parts worth adding</h2><p>Each one is used across many screens</p></div>
+    <div class="grid">
+      <article class="option">
+        <div class="tag"><span class="code">I1</span><strong>Status pills with a dot</strong></div>
+        <p class="why">One pill style for every status in the system: colour only for meaning, grey for neutral.</p>
+        <div class="demo" style="display:flex;flex-wrap:wrap;gap:8px"><span class="pill ok"><i></i>Active</span><span class="pill ok"><i></i>Part paid</span><span class="pill warn"><i></i>Awaiting deposit</span><span class="pill bad"><i></i>Overdue</span><span class="pill bad"><i></i>Disputed</span><span class="pill grey"><i></i>Draft</span><span class="pill grey"><i></i>Not started</span></div>
+      </article>
+      <article class="option">
+        <div class="tag"><span class="code">I2</span><strong>Tooltips, switches, avatars, shortcuts</strong><span class="new">new</span></div>
+        <p class="why">Hover the dotted term for a definition. Switches for on/off settings. Avatar stacks for "who's involved". Keyboard hints.</p>
+        <div class="demo rowgap"><p style="margin:0;font-size:13px">Commercial <span class="tt" tabindex="0">penetration<span class="tip">Sold units ÷ eligible units</span></span> is 16%.</p><label class="sw"><input type="checkbox" checked> Show inactive units</label><div style="display:flex;align-items:center;gap:10px;font-size:13px"><div class="avatars"><span>PM</span><span>CF</span><span>SA</span></div>3 people on this deal</div><p style="margin:0;font-size:13px;color:var(--ink-2)">Press <span class="kbd">⌘</span> <span class="kbd">K</span> to search · <span class="kbd">N</span> new reservation</p></div>
+      </article>
+    </div>
+  </section>
+
+  <footer class="pick"><p>Reply with the codes you want, e.g. <code>E1 E2 E3 F1 F2 G1 G3 H1 H3 I2</code>. Page-1 picks stay as saved. All figures are Pyla Pearl's or clearly sample data; nothing here writes to the system.</p></footer>
+</main>
+
+<script>
+(function () {
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var eur = function (n) { return "EUR " + n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  // ---- E1 sortable/selectable ----
+  var rows = [
+    { unit: "A-101", buyer: "Alex Placeholder", sched: 203146.65, out: 121887.98, over: 0, st: "Part paid", tone: "ok" },
+    { unit: "A-203", buyer: "Maria Fictional", sched: 442940.40, out: 332205.30, over: 66441.06, st: "Overdue", tone: "bad" },
+    { unit: "A-304", buyer: "Jonas Beispiel", sched: 614401.20, out: 552961.08, over: 184320.36, st: "Overdue", tone: "bad" },
+    { unit: "A-401", buyer: "Nora Sampleton", sched: 1138221.00, out: 939032.32, over: 256099.72, st: "Overdue", tone: "bad" },
+    { unit: "B-102", buyer: "Theo Testopoulos", sched: 410130.00, out: 410130.00, over: 102532.50, st: "Disputed", tone: "bad" },
+    { unit: "B-203", buyer: "Ingrid Mockdottir", sched: 568890.00, out: 426667.50, over: 0, st: "Part paid", tone: "ok" },
+    { unit: "B-301", buyer: "Lena Dummyova", sched: 271456.50, out: 271456.50, over: 0, st: "Awaiting signature", tone: "warn" },
+    { unit: "A-102", buyer: "Omar Exampleson", sched: 284634.00, out: 203273.46, over: 44829.86, st: "Overdue", tone: "bad" },
+    { unit: "A-302", buyer: "Hugo Notreal", sched: 284634.00, out: 284634.00, over: 0, st: "Awaiting deposit", tone: "warn" }
+  ];
+  var sortK = "unit", sortD = "asc", sel = {}, filt = {}, q = "";
+  function pill(r) { return '<span class="pill ' + r.tone + '"><i></i>' + r.st + '</span>'; }
+  function renderE1() {
+    var list = rows.filter(function (r) { if (filt.overdue && r.over <= 0) return false; if (filt.paid && r.st !== "Part paid") return false; if (q && (r.unit + r.buyer).toLowerCase().indexOf(q) < 0) return false; return true; });
+    list.sort(function (a, b) { var x = a[sortK], y = b[sortK]; var c = typeof x === "string" ? x.localeCompare(y) : x - y; return sortD === "asc" ? c : -c; });
+    $("#e1 tbody").innerHTML = list.map(function (r) { return '<tr class="' + (sel[r.unit] ? "sel" : "") + '"><td><input type="checkbox" data-u="' + r.unit + '" ' + (sel[r.unit] ? "checked" : "") + ' aria-label="Select ' + r.unit + '"></td><td><b>' + r.unit + '</b></td><td>' + r.buyer + '<span class="sub">SPA-SYN-' + r.unit.replace(/\D/g, "").slice(0, 4) + '</span></td><td class="n">' + eur(r.sched) + '</td><td class="n">' + eur(r.out) + '</td><td class="n">' + (r.over ? '<span style="color:var(--danger)">' + eur(r.over) + '</span>' : '—') + '</td><td>' + pill(r) + '</td><td><button type="button" class="dots" aria-label="More actions for ' + r.unit + '">⋯</button></td></tr>'; }).join("");
+    $("#e1-count").textContent = list.length + " of " + rows.length + " accounts";
+    var n = Object.keys(sel).length, sum = rows.filter(function (r) { return sel[r.unit]; }).reduce(function (a, r) { return a + r.out; }, 0);
+    $("#bulk").hidden = n === 0; $("#bulk-n").textContent = n; $("#bulk-sum").textContent = sum.toLocaleString("en-GB", { maximumFractionDigits: 0 });
+    $("#e1-all").checked = n > 0 && n === list.length;
+  }
+  $$("#e1 .sort").forEach(function (th) { th.addEventListener("click", function () { var k = th.getAttribute("data-k"); if (sortK === k) sortD = sortD === "asc" ? "desc" : "asc"; else { sortK = k; sortD = "asc"; } $$("#e1 .sort").forEach(function (x) { x.removeAttribute("data-dir"); }); th.setAttribute("data-dir", sortD); renderE1(); }); });
+  $("#e1").addEventListener("change", function (e) { var u = e.target.getAttribute && e.target.getAttribute("data-u"); if (u) { if (e.target.checked) sel[u] = 1; else delete sel[u]; renderE1(); } });
+  $("#e1-all").addEventListener("change", function (e) { var on = e.target.checked; $$("#e1 tbody input").forEach(function (c) { var u = c.getAttribute("data-u"); if (on) sel[u] = 1; else delete sel[u]; }); renderE1(); });
+  $("#bulk-clear").addEventListener("click", function () { sel = {}; renderE1(); });
+  $$("[data-f]").forEach(function (b) { b.addEventListener("click", function () { var k = b.getAttribute("data-f"); filt[k] = !filt[k]; b.classList.toggle("on", !!filt[k]); renderE1(); }); });
+  $("#e1-search").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); renderE1(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "/" && document.activeElement.tagName !== "INPUT") { e.preventDefault(); $("#e1-search").focus(); } });
+  $$("#e1 .sort")[0].setAttribute("data-dir", "asc"); renderE1();
+
+  // ---- E2 expandable ----
+  var chev = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"/></svg>';
+  $("#e2 tbody").innerHTML = rows.slice(1, 5).map(function (r, i) { return '<tr><td><button type="button" class="chev-btn" aria-expanded="false" aria-controls="x' + i + '" aria-label="Show detail">' + chev + '</button></td><td><b>' + r.unit + '</b><span class="sub">' + r.buyer + '</span></td><td class="n">' + eur(r.out) + '</td><td>' + pill(r) + '</td></tr><tr class="exp" id="x' + i + '" hidden><td></td><td colspan="3"><div class="inner"><div>Next instalment<b>' + eur(r.sched * 0.15) + ' · 1 Jan 2027</b></div><div>Last receipt<b>' + (r.over ? "12 Aug 2026" : "20 Oct 2026") + '</b></div><div>Follow-up<b>' + (r.over ? "Call booked · 5 Nov" : "None needed") + '</b></div></div></td></tr>'; }).join("");
+  $$("#e2 .chev-btn").forEach(function (b) { b.addEventListener("click", function () { var x = $("#" + b.getAttribute("aria-controls")); x.hidden = !x.hidden; b.setAttribute("aria-expanded", String(!x.hidden)); }); });
+
+  // ---- E3 inline edit ----
+  var units = [["A-001", "Retail", 559440], ["A-101", "Studio", 193473], ["A-203", "2-bed", 421848], ["A-401", "Penthouse", 1084020]];
+  function renderE3() { $("#e3 tbody").innerHTML = units.map(function (u, i) { return '<tr><td><b>' + u[0] + '</b></td><td>' + u[1] + '</td><td class="n inline-cell" tabindex="0" data-i="' + i + '" title="Double-click to edit"><span class="num">' + eur(u[2]) + '</span><span class="edit-k">edit</span></td></tr>'; }).join(""); }
+  function startEdit(td) { if (td.querySelector("input")) return; var i = +td.getAttribute("data-i"); td.innerHTML = '<input type="text" value="' + units[i][2] + '" aria-label="List price">'; var inp = td.querySelector("input"); inp.focus(); inp.select(); function done(save) { if (save) { var v = parseFloat(inp.value.replace(/[^\d.]/g, "")); if (!isNaN(v)) units[i][2] = v; } renderE3(); } inp.addEventListener("keydown", function (e) { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); }); inp.addEventListener("blur", function () { done(true); }); }
+  $("#e3").addEventListener("dblclick", function (e) { var td = e.target.closest(".inline-cell"); if (td) startEdit(td); });
+  $("#e3").addEventListener("keydown", function (e) { var td = e.target.closest && e.target.closest(".inline-cell"); if (td && e.key === "Enter" && e.target === td) startEdit(td); });
+  renderE3();
+
+  // ---- E4 dense ----
+  var inv = [["A-001", "Retail", "120 sqm", 559440, "Available", "ok"], ["A-101", "Studio", "38.5 sqm", 193473, "Sold", "grey"], ["A-102", "1-bed", "58 sqm", 284634, "Sold", "grey"], ["A-103", "2-bed", "86 sqm", 421848, "Available", "ok"], ["A-104", "3-bed", "118 sqm", 585144, "Available", "ok"], ["A-202", "1-bed", "58 sqm", 284634, "Reserved", "warn"]];
+  $("#e4 tbody").innerHTML = inv.map(function (u) { return '<tr><td><b>' + u[0] + '</b></td><td>' + u[1] + '</td><td class="n">' + u[2] + '</td><td class="n">' + eur(u[3]) + '</td><td><span class="pill ' + u[5] + '"><i></i>' + u[4] + '</span></td></tr>'; }).join("");
+  $("#dense-sw").addEventListener("change", function (e) { $("#dense-host").classList.toggle("dense", e.target.checked); });
+
+  // ---- F1 drawer ----
+  var recs = { "A-203": ["Maria Fictional", "EUR 332,205.30", "EUR 66,441.06 · 55 d"], "B-102": ["Theo Testopoulos", "EUR 410,130.00", "EUR 102,532.50 · 143 d"] };
+  $$("[data-open]").forEach(function (b) { b.addEventListener("click", function () { var k = b.getAttribute("data-open"), r = recs[k]; $("#d-title").textContent = k; $("#d-buyer").textContent = r[0]; $("#d-out").textContent = r[1]; $("#d-over").textContent = r[2]; $("#drawer").classList.add("open"); }); });
+  $("#d-close").addEventListener("click", function () { $("#drawer").classList.remove("open"); });
+
+  // ---- F2 command palette ----
+  var items = [["Unit", "A-203 · Maria Fictional", "unit"], ["Unit", "B-102 · Theo Testopoulos", "unit"], ["Buyer", "Nora Sampleton", "buyer"], ["Screen", "Collections", "go"], ["Screen", "Inventory · Building stack", "go"], ["Screen", "Cashflow · Funding position", "go"], ["Action", "New reservation", "N"], ["Action", "Record payment", "P"], ["Action", "Export statement", ""]];
+  var ci = 0;
+  function renderCmd() { var v = $("#cmd-in").value.toLowerCase(), list = items.filter(function (x) { return !v || (x[0] + " " + x[1]).toLowerCase().indexOf(v) >= 0; }); if (ci >= list.length) ci = 0; var grp = ""; $("#cmd-list").innerHTML = list.map(function (x, i) { var h = x[0] !== grp ? '<li class="hdr" style="cursor:default;background:none">' + x[0] + 's</li>' : ""; grp = x[0]; return h + '<li class="' + (i === ci ? "active" : "") + '" data-i="' + i + '">' + x[1] + '<span class="k">' + (x[2] === "unit" || x[2] === "buyer" ? "open" : x[2] === "go" ? "go to" : x[2] ? "⌘" + x[2] : "run") + '</span></li>'; }).join("") || '<li style="color:var(--muted)">No matches</li>'; }
+  $("#cmd-in").addEventListener("input", function () { ci = 0; renderCmd(); });
+  $("#cmd-in").addEventListener("keydown", function (e) { var n = $$("#cmd-list li[data-i]").length; if (e.key === "ArrowDown") { e.preventDefault(); ci = (ci + 1) % n; renderCmd(); } if (e.key === "ArrowUp") { e.preventDefault(); ci = (ci - 1 + n) % n; renderCmd(); } if (e.key === "Enter") { var a = $("#cmd-list li.active"); if (a) { toast("ok", "Opened", a.firstChild.textContent); } } if (e.key === "Escape") { e.target.value = ""; renderCmd(); } });
+  $("#cmd-list").addEventListener("click", function (e) { var li = e.target.closest("li[data-i]"); if (li) toast("ok", "Opened", li.firstChild.textContent); });
+  document.addEventListener("keydown", function (e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("#cmd-in").focus(); $("#cmd").scrollIntoView({ block: "center", behavior: "smooth" }); } });
+  renderCmd();
+
+  // ---- F3 chips ----
+  $$("[data-chip]").forEach(function (b) { b.addEventListener("click", function () { if (b.textContent.trim().indexOf("+") === 0) { toast("ok", "Filter picker", "Would open the filter list"); return; } b.classList.toggle("on"); }); });
+  $("#save-view").addEventListener("click", function () { var b = document.createElement("button"); b.type = "button"; b.className = "chipf on"; b.setAttribute("data-chip", ""); b.textContent = "Overdue · Building A"; b.addEventListener("click", function () { b.classList.toggle("on"); }); $("#views").appendChild(b); toast("ok", "View saved", "Overdue · Building A"); });
+
+  // ---- F4 date range ----
+  var ranges = { "30 d": "2 Oct 2026 — 31 Oct 2026", "90 d": "3 Aug 2026 — 31 Oct 2026", "12 months": "1 Nov 2025 — 31 Oct 2026", "YTD": "1 Jan 2026 — 31 Oct 2026", "Custom…": "Pick two dates (a calendar would open here)" };
+  $$(".dr button").forEach(function (b) { b.addEventListener("click", function () { $$(".dr button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); $("#dr-out").textContent = ranges[b.textContent]; }); });
+
+  // ---- G1 toasts ----
+  function toast(kind, title, sub, undo) { var t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.innerHTML = '<span class="ic ' + (kind === "bad" ? "bad" : "ok") + '">' + (kind === "bad" ? "!" : "✓") + '</span><div class="t"><b>' + title + '</b><span>' + sub + '</span></div>' + (undo ? '<button type="button" class="undo">Undo</button>' : ""); var host = $("#toasts"); host.appendChild(t); if (undo) t.querySelector(".undo").addEventListener("click", function () { t.remove(); toast("ok", "Restored", "Receipt R-0412 is back"); }); setTimeout(function () { t.style.opacity = "0"; t.style.transition = "opacity .3s"; setTimeout(function () { t.remove(); }, 320); }, undo ? 5000 : 3000); while (host.children.length > 3) host.firstChild.remove(); }
+  $$("[data-toast]").forEach(function (b) { b.addEventListener("click", function () { var k = b.getAttribute("data-toast"); if (k === "ok") toast("ok", "Saved", "A-203 list price updated"); if (k === "undo") toast("ok", "Receipt deleted", "R-0412 · EUR 12,500", true); if (k === "bad") toast("bad", "Could not save", "The unit is locked by an active contract"); }); });
+})();
+</script>

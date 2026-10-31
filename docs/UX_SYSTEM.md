@@ -209,6 +209,21 @@ The frontend remains a Next.js static export served by FastAPI from `frontend/ou
 
 Run lint, TypeScript, the production build, Product Experience guards and the relevant frontend contract checks. Review the console, responsive results and interaction evidence. When integration advances during a horizontal redesign, synchronize carefully and visually integrate new screens without changing their business implementation. Describe material limitations and remaining visual debt in the handoff.
 
+## 12. Experience 6 component catalogue
+
+The owner reviewed every data, register, form, record, shell and feedback
+component on 31 Oct 2026 and chose a style for each. Those decisions live in
+[docs/design-system/README.md](design-system/README.md) with four interactive
+reference pages under `docs/design-system/references/`. Every new or changed
+screen is built from that catalogue: a chart is an approved chart, a register
+an approved register, a record page the approved record page. Where this
+document and the catalogue disagree on a component, the catalogue is newer and
+wins; composition (§1), tokens (§2), typography (§3) and the financial boundary
+(§9) are unchanged by it.
+
+The catalogue is delivered in the numbered PRs its README lists; until a PR
+merges, the primitive it names keeps its current form.
+
 ## Form safety and request outcomes
 
 Use `DraftBoundary` for state-owned inline editors, comparing against the saved
