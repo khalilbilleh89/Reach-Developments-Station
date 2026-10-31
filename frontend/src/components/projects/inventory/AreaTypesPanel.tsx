@@ -16,6 +16,7 @@ import {
   Notice,
   StatusDot,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 
 import { PHYSICAL_COMPONENTS } from "@/components/projects/inventory/unit/PhysicalRecord";
@@ -148,20 +149,18 @@ export function AreaTypesPanel({
                     <StatusDot tone="muted">Retired</StatusDot>
                   )}
                 </td>
-                <td>
-                  <div className="button-row">
-                    <Button
-                      small
-                      variant="quiet"
+                <td className="row-menu-cell">
+                  <RowMenu label="More actions">
+                    <Button variant="quiet"
                       onClick={() => void toggle(areaType, { required_for_release: !areaType.required_for_release })}
                     >
                       {areaType.required_for_release ? "Make optional" : "Require"}
                     </Button>
-                    <Button small variant="quiet" onClick={() => void toggle(areaType, { is_active: !areaType.is_active })}>
+                    <Button variant="quiet" onClick={() => void toggle(areaType, { is_active: !areaType.is_active })}>
                       {areaType.is_active ? "Retire" : "Restore"}
                     </Button>
                     {canDelete ? <DeleteRecordButton label={areaType.label} description="Delete this unused area type permanently. Existing measurements and pricing references are protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "area-types", areaType.id, reason)} onDeleted={onChanged} /> : null}
-                  </div>
+                  </RowMenu>
                 </td>
               </tr>
             ))}

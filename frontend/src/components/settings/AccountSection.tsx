@@ -11,11 +11,10 @@ export function AccountSection({ onChanged }: { onChanged: () => void }) {
         <Icon name="access" />
         <h2>Account security</h2>
         <p>Manage the credentials you use to access Reach.</p>
-        <p>Saving a new password signs out every session, including this one.</p>
       </aside>
       <Card
         title="Change password"
-        description="Choose a new password. Every session, including this one, is signed out afterwards."
+        description="Saving a new password signs out every session, including this one."
       >
         <ChangePasswordForm requireCurrent onChanged={onChanged} />
       </Card>

@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   Badge,
   Button,
-  ButtonRow,
   Card,
   EmptyState,
   Field,
@@ -16,6 +15,7 @@ import {
   Notice,
   PromptDialog,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 import type { Answer } from "@/lib/answer";
 import type { CashflowDevelopmentMovement, CashflowFinancingMovement } from "@/lib/api";
@@ -235,19 +235,19 @@ function MovementTable({
             </td>
             <td>{row.counts_as_cash ? "Yes" : "No"}</td>
             <td className="cell-prose">{row.evidence_reference ?? row.bank_reference ?? "—"}</td>
-            <td>
-              <ButtonRow>
+            <td className="row-menu-cell">
+              <RowMenu label="More actions">
                 {canConfirm && row.status === "recorded" ? (
-                  <Button small onClick={() => onConfirm(row.id)} disabled={busy}>
+                  <Button onClick={() => onConfirm(row.id)} disabled={busy}>
                     Confirm
                   </Button>
                 ) : null}
                 {canConfirm && (row.status === "recorded" || row.status === "confirmed") ? (
-                  <Button small variant="danger" onClick={() => onReverse(row)} disabled={busy}>
+                  <Button variant="danger" onClick={() => onReverse(row)} disabled={busy}>
                     {row.status === "recorded" ? "Delete" : "Reverse"}
                   </Button>
                 ) : null}
-              </ButtonRow>
+              </RowMenu>
             </td>
           </tr>
         ))}

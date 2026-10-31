@@ -22,6 +22,7 @@ import {
   PromptDialog,
   SubPanel,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 import type { RecordPageFact } from "@/components/ui";
 import { ApiError, collections, sales } from "@/lib/api";
@@ -840,9 +841,9 @@ export function ExceptionsTab({
                       </Badge>
                     </td>
                     <td>{dispute.resolution ?? "—"}</td>
-                    <td>
+                    <td className="row-menu-cell">
                       {canCollect && dispute.status === "open" ? (
-                        <ButtonRow>
+                        <RowMenu label="More actions">
                           <Button
                             disabled={busy}
                             onClick={() => setClosing({ id: dispute.id, withdraw: false })}
@@ -855,7 +856,7 @@ export function ExceptionsTab({
                           >
                             Withdraw
                           </Button>
-                        </ButtonRow>
+                        </RowMenu>
                       ) : null}
                     </td>
                   </tr>
@@ -989,9 +990,9 @@ export function ExceptionsTab({
                         <p className="hint">{waiver.revocation_reason}</p>
                       ) : null}
                     </td>
-                    <td>
+                    <td className="row-menu-cell">
                       {canDecideWaiver && waiver.status === "submitted" ? (
-                        <ButtonRow>
+                        <RowMenu label="More actions">
                           <Button
                             disabled={busy}
                             onClick={() =>
@@ -1009,7 +1010,7 @@ export function ExceptionsTab({
                           >
                             Refuse
                           </Button>
-                        </ButtonRow>
+                        </RowMenu>
                       ) : null}
                       {canDecideWaiver && waiver.status === "approved" ? (
                         <Button
@@ -1538,8 +1539,8 @@ export function RefundsTab({
                     <p className="hint">{refund.reversal_reason}</p>
                   ) : null}
                 </td>
-                <td>
-                  <ButtonRow>
+                <td className="row-menu-cell">
+                  <RowMenu label="More actions">
                     {canCollect && refund.status === "recorded" ? (
                       <Button variant="danger" disabled={busy} onClick={() => setReversing(refund)}>
                         Delete
@@ -1563,7 +1564,7 @@ export function RefundsTab({
                         Reverse
                       </Button>
                     ) : null}
-                  </ButtonRow>
+                  </RowMenu>
                 </td>
               </tr>
             ))}

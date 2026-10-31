@@ -19,6 +19,7 @@ import {
   PromptDialog,
   SubPanel,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 import type { Answer } from "@/lib/answer";
 import type { CashflowRestriction } from "@/lib/api";
@@ -261,24 +262,22 @@ function RestrictionCard({
                   )}
                 </td>
                 <td className="cell-prose">{release.certification_reference ?? "—"}</td>
-                <td>
-                  <ButtonRow>
+                <td className="row-menu-cell">
+                  <RowMenu label="More actions">
                     {canConfirm && release.status === "recorded" ? (
-                      <Button small onClick={() => onConfirmRelease(release.id)} disabled={busy}>
+                      <Button onClick={() => onConfirmRelease(release.id)} disabled={busy}>
                         Confirm
                       </Button>
                     ) : null}
                     {canConfirm && release.status !== "reversed" ? (
-                      <Button
-                        small
-                        variant="danger"
+                      <Button variant="danger"
                         onClick={() => onReverseRelease(release.id)}
                         disabled={busy}
                       >
                         Reverse
                       </Button>
                     ) : null}
-                  </ButtonRow>
+                  </RowMenu>
                 </td>
               </tr>
             ))}

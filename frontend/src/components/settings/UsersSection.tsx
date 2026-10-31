@@ -19,6 +19,7 @@ import {
   Notice,
   StatusDot,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 
 const EMPTY_DRAFT = { email: "", display_name: "", initial_password: "", role_keys: [] as string[] };
@@ -320,19 +321,15 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
                     </div>
                   </td>
                   <td className="figure">{row.last_login_at ? eventTime(row.last_login_at) : "Never"}</td>
-                  <td>
-                    <div className="row-actions">
-                      <Button
-                        small
-                        variant="quiet"
+                  <td className="row-menu-cell">
+                    <RowMenu label="More actions">
+                      <Button variant="quiet"
                         disabled={busy}
                         onClick={() => openPermissionEditor(row)}
                       >
                         Edit permissions
                       </Button>
-                      <Button
-                        small
-                        variant="quiet"
+                      <Button variant="quiet"
                         disabled={busy}
                         onClick={() =>
                           void act(
@@ -343,7 +340,7 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
                       >
                         {row.is_active ? "Deactivate" : "Reactivate"}
                       </Button>
-                    </div>
+                    </RowMenu>
                   </td>
                 </tr>
               ))}
