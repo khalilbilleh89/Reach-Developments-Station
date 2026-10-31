@@ -354,7 +354,7 @@ export function ProjectCommandCenter({
         actions={canEdit || canCorrectCurrency ? (
           <ButtonRow>
             {canEdit ? <Button onClick={onEdit}>Edit project</Button> : null}
-            {canCorrectCurrency ? <Button variant="danger" onClick={onCorrectCurrency}>Correct base currency</Button> : null}
+            {canCorrectCurrency ? <Button variant="quiet" onClick={onCorrectCurrency}>Correct base currency</Button> : null}
           </ButtonRow>
         ) : undefined}
       />
@@ -412,10 +412,7 @@ export function ProjectCommandCenter({
               </Section>
             </Card>
           ) : null}
-          <div className="stack">
-            <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
-            <Disclosure title="Management actions"><ManagementSummary key={refreshKey} project={id} /></Disclosure>
-          </div>
+          <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
         </div>
 
         {/* Where the project is, and what it is worth: two columns that stack
@@ -468,15 +465,17 @@ export function ProjectCommandCenter({
                             : undefined
                         }
                       />
-                      <PositionFigure
-                        label="Profit"
-                        value={money(economic.profit_total, economicCode)}
-                        tone={economic.profit_total.startsWith("-") ? "danger" : "neutral"}
-                        note="After finance"
-                      />
-                      <PositionFigure label="Return on cost" value={percent(economic.return_on_cost_fraction)} />
                     </Position>
                     <PositionSupport>
+                      <PositionSupportItem
+                        label="Profit after finance"
+                        value={
+                          <span className={economic.profit_total.startsWith("-") ? "figure-danger" : undefined}>
+                            {money(economic.profit_total, economicCode)}
+                          </span>
+                        }
+                      />
+                      <PositionSupportItem label="Return on cost" value={percent(economic.return_on_cost_fraction)} />
                       {dealTotals ? (
                         <PositionSupportItem
                           label="Contracted"
@@ -547,9 +546,9 @@ export function ProjectCommandCenter({
             director opens the overview to read. */}
         <ProjectAnalysis key={id} projectId={id} roles={roles} />
 
-        {operational ? (
+        <Card title="More about this project" description="Each department's position, management actions and report coverage.">
+          {operational ? (
           <Disclosure title="Department positions" context="Commercial · development · delivery · finance">
-          <Card title="Departments" description="Each module's own position, and the way into it.">
             <div className="module-band">
               <ModuleSection
                 title="Commercial"
@@ -731,11 +730,12 @@ export function ProjectCommandCenter({
                 </ModuleSection>
               ) : null}
             </div>
-          </Card>
+          
           </Disclosure>
-        ) : null}
-
-        {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
+          ) : null}
+          <Disclosure title="Management actions"><ManagementSummary key={refreshKey} project={id} /></Disclosure>
+          {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
+        </Card>
 
       </div>
     </>

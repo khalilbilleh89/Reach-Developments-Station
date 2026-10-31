@@ -137,8 +137,13 @@ export function ProjectImages({ projectId, canEdit, managementHref }: {
       {answer.status === "denied" ? (
         <EmptyState title="Project images are not available to your role" />
       ) : null}
+      {/* Read-only views show what exists; the editor keeps every category as a place to add to. */}
+      {answer.status === "ready" && !canEdit && answer.data.length === 0 ? (
+        <EmptyState compact title="No project images yet" />
+      ) : null}
       {answer.status === "ready" ? CATEGORIES.map(option => {
         const categoryImages = answer.data.filter(image => image.category === option.value);
+        if (!canEdit && !categoryImages.length) return null;
         return (
           <section key={option.value} className="project-images-section" aria-label={`${option.label} images`}>
             <h3>{option.label}</h3>
