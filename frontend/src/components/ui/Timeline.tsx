@@ -50,17 +50,22 @@ export function Steps({
   steps,
 }: {
   label: string;
-  steps: { key: string; label: string; state: "done" | "current" | "pending" }[];
+  /** `hint` is one line under the step: when it was done, how long it has waited. */
+  steps: { key: string; label: string; state: "done" | "current" | "pending"; hint?: ReactNode }[];
 }) {
   return (
     <ol className="steps" aria-label={label}>
-      {steps.map((step) => (
+      {steps.map((step, index) => (
         <li
           key={step.key}
           className={step.state === "pending" ? "step" : `step step-${step.state}`}
           aria-current={step.state === "current" ? "step" : undefined}
         >
-          {step.label}
+          <span className="step-mark" aria-hidden="true">{step.state === "done" ? "✓" : index + 1}</span>
+          <span className="step-text">
+            <span className="step-label">{step.label}</span>
+            {step.hint ? <span className="step-hint">{step.hint}</span> : null}
+          </span>
         </li>
       ))}
     </ol>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Disclosure, Badge, Button, Card, Field, FieldRow, FormActions, Loading, Notice, SubPanel } from "@/components/ui";
+import { Badge, Button, Card, Disclosure, Field, FieldRow, FormActions, Loading, Notice, StageBar, SubPanel } from "@/components/ui";
 import { stages } from "@/lib/api/stages";
 import type { Stage, UnitProgress, UnitStage } from "@/lib/api/stages";
 import { businessDate, eventTime, todayISO } from "@/lib/format";
@@ -118,7 +118,7 @@ export function UnitStages({ projectId, unitId, roles }: { projectId: string; un
     {error ? <Notice tone="error">{error}</Notice> : null}
     {!progress && !error ? <Loading label="Loading unit progress" /> : null}
     {progress ? <>
-      <p>Delivery: {progress.delivery_status.replaceAll("_", " ")} · {progress.completed_count} of {progress.stage_count} stages complete</p>
+      <StageBar label={`Delivery: ${progress.delivery_status.replaceAll("_", " ")}`} done={progress.completed_count} total={progress.stage_count} note={`${progress.completed_count} of ${progress.stage_count} stages complete`} />
       <p className="footnote">Physical stage completion records progress. Delivery readiness and payment milestone certification have their own approvals.</p>
       {progress.stage_count === 0 ? <p>No stages configured. A Project Manager can add them in the project overview.</p> : null}
       <div className="stack">{progress.stages.map((stage) => <StageRecord key={`${unitId}:${stage.id}`} stage={stage} canWrite={canWrite}
