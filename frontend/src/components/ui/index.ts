@@ -76,6 +76,7 @@ export type { TimelineState } from "./Timeline";
 
 export { Disclosure } from "./Disclosure";
 export { Views } from "./Views";
+export { ProgressRing, StageBar } from "./Progress";
 export { NextBar, RecordStrip } from "./RecordStrip";
 export { FlowActions, FlowSteps } from "./Flow";
 export type { FlowStep } from "./Flow";

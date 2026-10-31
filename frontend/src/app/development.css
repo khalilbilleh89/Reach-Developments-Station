@@ -286,14 +286,6 @@
 .briefing-dates li > div > span { font-size: var(--text-xs); color: var(--text-secondary); }
 .briefing-dates h3 { margin: 5px 0 0; font-size: var(--text-sm); font-weight: 550; overflow-wrap: anywhere; }
 .permit-journey { padding: 20px 0 0; }
-.permit-journey ol { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); list-style: none; margin: 16px 0 0; padding: 0; }
-.permit-journey li { position: relative; display: flex; flex-direction: column; gap: 10px; color: var(--text-secondary); font-size: .7rem; padding-right: 10px; }
-.permit-journey li:not(:last-child)::before { content: ""; position: absolute; top: 14px; left: 29px; right: 0; border-top: 1px solid var(--line-default); }
-.permit-journey li > span { position: relative; display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--line-default); border-radius: 50%; background: var(--surface); }
-.permit-journey strong { font-weight: 450; }
-.permit-journey li[data-current="true"] { color: var(--accent); }
-.permit-journey li[data-current="true"] > span { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
-.permit-journey li[data-current="true"] strong { font-weight: 650; }
 .stage-deliverables { margin: 20px 0; padding-top: 18px; border-top: 1px solid var(--line-default); }
 .stage-deliverables h4 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); margin: 0 0 12px; font-weight: 550; }
 .stage-deliverables ul { list-style: none; padding: 0; margin: 0; }
@@ -308,7 +300,6 @@
   .briefing-dates li > button { grid-column: 2; justify-self: start; }
   .stage-deliverables li { grid-template-columns: 1fr; gap: 10px; }
   .stage-deliverables li > button { justify-self: start; }
-  .permit-journey ol { gap: 6px; }
 }
 /* Secondary surfaces are a quiet neutral ground; records and primary reading areas stay white.
  * Shared primitives (buttons, tabs, page glyphs, rail icons) are styled once, in globals.css. */

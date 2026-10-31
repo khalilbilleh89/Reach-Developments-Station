@@ -3131,10 +3131,12 @@ input[type="file"].input {
 /* A flex row rather than an equal-column grid, so a wide figure takes the room
  * it needs and a narrow one gives it up. A figure is never broken across two
  * lines: "1,668,701.3 / 8" is not a number anybody should read. */
+/* Equal tiles, label above and number below, everything on one baseline
+ * (design system H1). The compact variant stays an inline row of figures. */
 .metric-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4) var(--space-6);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
 
@@ -3143,16 +3145,25 @@ input[type="file"].input {
 }
 
 .metric-group-compact {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3) var(--space-6);
 }
 
 .metric {
-  flex: 1 1 7rem;
-  min-width: max-content;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-card);
+  background-color: var(--surface);
 }
 
 .metric-group-compact .metric {
   flex: 0 1 auto;
+  min-width: max-content;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .metric-label {
@@ -3344,28 +3355,29 @@ input[type="file"].input {
 
 /* A ruled band rather than a box: the counts sit on the page, separated by
  * hairlines, and the rule beneath hands over to the register. */
+/* The counts that describe a register, as equal cells with the label above
+ * the number (design system H1). */
 .stat-strip {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: var(--space-3);
   max-width: 100%;
-  margin: 0;
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--line-soft);
+  margin: 0 0 var(--space-4);
 }
 
 .stat-strip-item {
   display: flex;
-  flex: 0 0 auto;
-  gap: var(--space-2);
-  align-items: baseline;
-  min-width: max-content;
-  padding: 0.25rem var(--space-5) 0.25rem 0;
-  margin-right: var(--space-5);
-  border-right: 1px solid var(--line-soft);
+  flex-direction: column-reverse;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-card);
+  background-color: var(--surface);
 }
 
 .stat-strip-item:last-of-type {
-  border-right: 0;
+  border-right: 1px solid var(--line-soft);
 }
 
 .stat-strip-value {
@@ -3748,6 +3760,29 @@ input[type="file"].input {
   font-size: var(--text-xs);
 }
 
+/* ---- Stage bar and ring (design system H3c) ------------------------------ */
+
+.stage-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--space-4); row-gap: 2px; align-items: center; margin-bottom: var(--space-3); }
+.stage-bar-label { color: var(--text-secondary); font-size: var(--text-sm); font-weight: 500; }
+.stage-bar-segments { display: flex; gap: 3px; min-width: 0; }
+.stage-bar-segments i { flex: 1 1 0; height: 0.5rem; border-radius: 2px; background-color: var(--line-default); }
+.stage-bar-segments i.stage-bar-done { background-color: var(--success); }
+.stage-bar-segments i.stage-bar-current { background-color: var(--brand-gold); }
+.stage-bar-value { font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stage-bar-note { grid-column: 1 / -1; color: var(--text-muted); font-size: var(--text-xs); }
+
+.ring { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--line-soft); border-radius: var(--radius-card); background-color: var(--surface); }
+.ring-focus { border-color: var(--brand-gold); background-color: var(--accent-soft); }
+.ring-svg { flex: none; width: 4rem; height: 4rem; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: var(--line-default); stroke-width: 6; }
+.ring-arc { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset var(--motion-base) var(--ease); }
+.ring-focus .ring-arc { stroke: var(--brand-gold-text); }
+.ring-text { fill: var(--text-primary); font-size: 13px; font-weight: 650; transform: rotate(90deg); transform-origin: 32px 32px; }
+.ring-text-block { display: grid; gap: 2px; min-width: 0; }
+.ring-label { color: var(--text-muted); font-size: var(--text-xs); font-weight: 600; }
+.ring-note { color: var(--text-muted); font-size: var(--text-xs); }
+.metric-group > .ring { margin: 0; }
+
 .table td.num .meter-block {
   align-items: flex-end;
 }
@@ -4086,82 +4121,89 @@ input[type="file"].input {
   font-size: var(--text-sm);
 }
 
-/* The named steps a record passes, as one connected track. The server decides
- * which step has been reached; this only draws it. */
+/* The named steps a record passes (design system H3c): the one being worked
+ * sits on a gold panel with a gold ring round its number, done steps are
+ * ticked in green, the ones ahead are quiet. The server decides which step
+ * has been reached; this only draws it. */
 .steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .step {
-  position: relative;
-  display: inline-flex;
-  gap: var(--space-2);
+  display: flex;
+  gap: var(--space-3);
   align-items: center;
-  padding: 0.2rem var(--space-4) 0.2rem 0;
-  margin-right: var(--space-4);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-card);
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: 500;
+}
+
+.step-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--line-default);
+  border-radius: 50%;
+  background-color: var(--surface);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.step-text {
+  display: grid;
+  min-width: 0;
+}
+
+.step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.step::before {
-  content: "";
-  flex: none;
-  width: 0.625rem;
-  height: 0.625rem;
-  border: 2px solid var(--line-strong);
-  border-radius: 50%;
-  background-color: var(--surface);
-}
-
-.step::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: var(--space-4);
-  height: 1px;
-  background-color: var(--line-default);
-}
-
-.step:last-child {
-  margin-right: 0;
-  padding-right: 0;
-}
-
-.step:last-child::after {
-  display: none;
+.step-hint {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .step-done {
   color: var(--text-secondary);
 }
 
-.step-done::before {
+.step-done .step-mark {
   border-color: var(--success);
   background-color: var(--success);
-}
-
-.step-done::after {
-  background-color: var(--success);
+  color: var(--text-inverse);
 }
 
 .step-current {
+  border-color: var(--brand-gold);
+  background-color: var(--accent-soft);
   color: var(--text-primary);
   font-weight: 650;
 }
 
-.step-current::before {
-  border-color: var(--accent);
-  background-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.step-current .step-mark {
+  border-color: var(--brand-gold-text);
+  box-shadow: 0 0 0 3px var(--brand-gold);
+  color: var(--brand-gold-text);
 }
+
 
 /* --------------------------------------------------------------------------
  * Snapshots (audit before/after)
