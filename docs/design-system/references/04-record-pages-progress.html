@@ -1,0 +1,273 @@
+<title>Reach Record Page Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-width record page mock-ups stacked, plus the progress redo. Single light theme, matching the app. */
+:root {
+  --canvas: #f5f5f2;
+  --surface: #ffffff;
+  --surface-2: #f3f3f0;
+  --hover: #f7f7f4;
+  --ink: #1c1d20;
+  --ink-2: #4a4b50;
+  --muted: #818286;
+  --line: #e6e6e1;
+  --line-soft: #efefea;
+  --gold: #dcc263;
+  --gold-text: #8a6d14;
+  --gold-soft: #faf5e2;
+  --gold-line: #ecdfae;
+  --teal: #0f7b67;
+  --teal-soft: #e3f3ef;
+  --amber: #b7791f;
+  --amber-soft: #fbf1dc;
+  --danger: #b4232c;
+  --danger-soft: #fbe7e8;
+  --slate: #9a9ca3;
+  --nav: #17181b;
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { background: var(--canvas); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+.page { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px; }
+header.intro { display: grid; gap: 8px; }
+.eyebrow { margin: 0; color: var(--gold-text); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(26px, 4vw, 34px); font-weight: 600; letter-spacing: -.025em; text-wrap: balance; }
+.lede { margin: 0; max-width: 68ch; color: var(--ink-2); }
+section.group { display: grid; gap: 16px; }
+.group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.group-head h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.015em; }
+.group-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.option { min-width: 0; display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.tag { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.code { display: inline-grid; place-items: center; min-width: 34px; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--ink); color: #fff; font: 600 12px var(--mono); }
+.tag strong { font-size: 14px; font-weight: 600; }
+.tag .note { color: var(--muted); font-size: 12px; }
+.why { margin: 0; color: var(--ink-2); font-size: 12.5px; max-width: 90ch; }
+.num { font-variant-numeric: tabular-nums; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: 500 13px var(--font); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+.btn.primary:hover { background: #2d2e33; }
+.btn.quiet { border-color: transparent; color: var(--ink-2); }
+.btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
+button:focus-visible, [tabindex]:focus-visible, a:focus-visible { outline: 2px solid var(--gold-text); outline-offset: 2px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--teal-soft); color: var(--teal); }
+.pill.warn { background: var(--amber-soft); color: var(--amber); }
+.pill.bad { background: var(--danger-soft); color: var(--danger); }
+.pill.grey { background: var(--surface-2); color: var(--ink-2); }
+.stage { border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); overflow: hidden; }
+.ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* shared record bits */
+.crumb { color: var(--muted); font-size: 12px; }
+.crumb b { color: var(--ink); font-weight: 500; }
+.ttl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ttl h3 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.025em; }
+.sub { color: var(--muted); font-size: 13px; }
+.acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { padding: 10px 0; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); font: 500 13px var(--font); cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs button .n { margin-left: 6px; color: var(--muted); font-size: 11.5px; }
+.card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.card h5 { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+.card h5 .btn { height: 26px; font-size: 12px; }
+.card .b { padding: 14px 16px; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 18px; font-size: 13px; }
+.facts div { display: grid; gap: 2px; min-width: 0; }
+.facts .k { color: var(--muted); font-size: 11.5px; }
+.facts b { font-weight: 500; overflow-wrap: anywhere; }
+.act { display: grid; }
+.act > div { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; padding: 8px 0; font-size: 12.5px; position: relative; }
+.act > div::before { content: ""; position: absolute; left: 6px; top: 22px; bottom: -8px; width: 1.5px; background: var(--line-soft); }
+.act > div:last-child::before { display: none; }
+.act i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--surface); background: var(--slate); margin-top: 3px; box-shadow: 0 0 0 1.5px var(--line); }
+.act i.ok { background: var(--teal); } .act i.gold { background: var(--gold); } .act i.bad { background: var(--danger); }
+.act b { font-weight: 500; } .act span { display: block; color: var(--muted); font-size: 11.5px; }
+.sched { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sched th, .sched td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: left; white-space: nowrap; }
+.sched th { color: var(--muted); font-weight: 500; font-size: 11.5px; background: var(--surface-2); }
+.sched .n { text-align: right; font-variant-numeric: tabular-nums; }
+.sched tr:last-child td { border-bottom: 0; }
+.money-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.money-strip div { padding: 14px 16px; background: var(--surface); display: grid; gap: 2px; }
+.money-strip .k { color: var(--muted); font-size: 11.5px; }
+.money-strip .v { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.money-strip .d { font-size: 12px; color: var(--muted); }
+.money-strip .lead { background: var(--gold-soft); }
+.money-strip .lead .v { font-size: 24px; }
+.money-strip .lead .k { color: var(--gold-text); }
+.p-bar { height: 6px; border-radius: 999px; background: var(--line-soft); overflow: hidden; margin-top: 8px; }
+.p-bar i { display: block; height: 100%; border-radius: 999px; background: var(--teal); }
+@media (max-width: 760px) { .money-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* K4: workspace */
+.k4 { background: var(--surface); }
+.k4 .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 18px 24px 0; }
+.k4 .head .meta { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.k4 .head .meta b { color: var(--ink); font-weight: 500; }
+.k4 .tabs { padding: 0 24px; margin-top: 14px; }
+.k4 .body { padding: 20px 24px; display: grid; gap: 16px; background: var(--canvas); }
+.k4 .split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .k4 .split { grid-template-columns: 1fr; } }
+.next { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--gold-line); border-radius: 10px; background: var(--gold-soft); font-size: 13px; }
+.next b { font-weight: 600; }
+.next .btn { margin-left: auto; }
+
+/* K5: two-pane */
+.k5 { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 460px; background: var(--surface); }
+.k5 .left { padding: 20px; border-right: 1px solid var(--line); display: grid; align-content: start; gap: 16px; background: var(--surface); }
+.k5 .left .id { display: grid; gap: 6px; }
+.k5 .left .big { font-size: 26px; font-weight: 600; letter-spacing: -.025em; }
+.k5 .left .ledger { display: grid; gap: 8px; font-size: 13px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.k5 .left .ledger div { display: flex; justify-content: space-between; gap: 10px; }
+.k5 .left .ledger span:first-child { color: var(--muted); }
+.k5 .left .lead { padding: 12px 14px; border-radius: 10px; background: var(--nav); color: #fff; display: grid; gap: 2px; }
+.k5 .left .lead .k { color: rgb(255 255 255 / 60%); font-size: 11.5px; }
+.k5 .left .lead .v { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.k5 .left .lead .s { color: var(--gold); font-size: 12px; }
+.k5 .right { padding: 20px; display: grid; gap: 16px; align-content: start; background: var(--canvas); }
+.k5 .right .tabs { background: var(--surface); padding: 0 16px; border: 1px solid var(--line); border-radius: 10px 10px 0 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) { .k5 { grid-template-columns: 1fr; } .k5 .left { border-right: 0; border-bottom: 1px solid var(--line); } }
+
+/* K6: timeline-led */
+.k6 { background: var(--surface); }
+.k6 .head { padding: 18px 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 20px; align-items: flex-start; border-bottom: 1px solid var(--line-soft); }
+.k6 .body { padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; background: var(--canvas); }
+@media (max-width: 760px) { .k6 .body { grid-template-columns: 1fr; } }
+.journey { display: grid; gap: 0; }
+.journey > div { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; padding: 10px 0; position: relative; font-size: 13px; }
+.journey > div::before { content: ""; position: absolute; left: 12px; top: 34px; bottom: -10px; width: 2px; background: var(--line); }
+.journey > div:last-child::before { display: none; }
+.journey > div.done::before { background: var(--teal); }
+.journey i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 600; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); z-index: 1; }
+.journey .done i { background: var(--teal); border-color: var(--teal); color: #fff; }
+.journey .now i { border-color: var(--gold-text); border-width: 2px; color: var(--gold-text); background: var(--gold-soft); }
+.journey .now { background: var(--gold-soft); margin: 0 -10px; padding: 10px; border-radius: 10px; }
+.journey b { display: block; font-weight: 600; }
+.journey span { color: var(--muted); font-size: 12px; }
+.journey .now span { color: var(--ink-2); }
+
+/* H3c progress redo */
+.stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.stepper .st { display: grid; justify-items: center; align-content: start; gap: 10px; position: relative; padding: 16px 10px 14px; border-radius: 12px; font-size: 13px; color: var(--muted); text-align: center; }
+.stepper .st::before, .stepper .st::after { content: ""; position: absolute; top: 30px; height: 2px; background: var(--line); width: calc(50% + 5px); }
+.stepper .st::before { left: -5px; } .stepper .st::after { right: -5px; }
+.stepper .st:first-child::before, .stepper .st:last-child::after { display: none; }
+.stepper .st.done::before, .stepper .st.done::after, .stepper .st.now::before { background: var(--teal); }
+.stepper .st i { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); display: grid; place-items: center; font-size: 12px; font-weight: 600; font-style: normal; }
+.stepper .st.done i { background: var(--teal); border-color: var(--teal); color: #fff; }
+.stepper .st.now { background: var(--gold-soft); border: 1px solid var(--gold-line); color: var(--ink); font-weight: 600; }
+.stepper .st.now i { border-color: var(--gold-text); color: var(--gold-text); background: var(--surface); box-shadow: 0 0 0 4px var(--gold-soft); }
+.stepper .st small { display: block; color: var(--muted); font-weight: 400; font-size: 11.5px; margin-top: 2px; }
+.stepper .st.now small { color: var(--gold-text); }
+.prog { display: grid; gap: 18px; padding: 4px 0; }
+.p-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 72px; align-items: center; gap: 16px; font-size: 13px; }
+.p-row .k { color: var(--ink-2); }
+.p-row .v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.p-segs { display: flex; gap: 4px; height: 10px; }
+.p-segs i { flex: 1; border-radius: 3px; background: var(--line-soft); }
+.p-segs i.on { background: var(--teal); }
+.p-segs i.now { background: var(--gold); }
+.p-track { height: 10px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
+.p-track i { display: block; height: 100%; border-radius: 999px; background: var(--teal); }
+.ring-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ring-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; font-size: 13px; background: var(--surface); }
+.ring-card.now { background: var(--gold-soft); border-color: var(--gold-line); }
+.ring-card svg { width: 52px; height: 52px; flex: none; }
+.ring-card b { display: block; font-size: 14px; }
+.ring-card span { color: var(--muted); font-size: 12px; }
+.redo-box { display: grid; gap: 28px; }
+.redo-box .lbl { margin: 0 0 10px; color: var(--muted); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+@media (max-width: 640px) { .stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stepper .st::before, .stepper .st::after { display: none; } .ring-row { grid-template-columns: 1fr; } .p-row { grid-template-columns: 1fr; } .p-row .v { text-align: left; } }
+footer.pick { padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+footer.pick p { margin: 0; color: var(--ink-2); }
+footer.pick code { font-family: var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main class="page">
+  <header class="intro">
+    <p class="eyebrow">Reach · Page 4 · Record page redo</p>
+    <h1>Three new record page layouts, and the progress parts with gold</h1>
+    <p class="lede">All three use the same sale: SALE-000006, unit A-203, Maria Fictional. Each answers "where does this deal stand?" in a different way. Reply with one K code and whether H3c is right.</p>
+  </header>
+
+  <!-- K4 -->
+  <section class="group" aria-labelledby="k4-h">
+    <div class="group-head"><h2 id="k4-h">K4 · Workspace: money strip, next action, facts and activity</h2><p>Click the tabs</p></div>
+    <article class="option">
+      <div class="tag"><span class="code">K4</span><strong>Workspace</strong><span class="note">the record as a working desk</span></div>
+      <p class="why">A clean head with the status and two actions. Under it a money strip with the one figure that matters highlighted in gold, a "what's next" bar, then facts on the left and activity on the right. Everything a person needs to act is on the first screen.</p>
+      <div class="stage k4">
+        <div class="head"><div><div class="crumb">Pyla Pearl / Sales / <b>SALE-000006</b></div><div class="ttl"><h3>A-203 · Maria Fictional</h3><span class="pill ok"><i></i>Active</span><span class="pill bad"><i></i>Overdue 55 d</span></div><div class="meta"><span>SPA <b>SPA-SYN-0006 · fully signed</b></span><span>Plan <b>10 / 15 / 15 / 20 / 40</b></span><span>Agent <b>Example Realty · 3%</b></span><span>Signed <b>12 Mar 2026</b></span></div></div><div class="acts"><button type="button" class="btn">Open unit</button><button type="button" class="btn primary">Record payment</button><button type="button" class="btn quiet" aria-label="More">⋯</button></div></div>
+        <div class="tabs" role="tablist" id="t4"><button role="tab" aria-selected="true">Overview</button><button role="tab" aria-selected="false">Schedule<span class="n">5</span></button><button role="tab" aria-selected="false">Receipts<span class="n">2</span></button><button role="tab" aria-selected="false">Documents<span class="n">3</span></button><button role="tab" aria-selected="false">Commission</button><button role="tab" aria-selected="false">History</button></div>
+        <div class="body">
+          <div class="money-strip"><div class="lead"><span class="k">Outstanding</span><span class="v num">EUR 332,205</span><span class="d">75% of the agreed price</span><div class="p-bar"><i style="width:25%"></i></div></div><div><span class="k">Agreed price</span><span class="v num">EUR 442,940</span><span class="d">At list</span></div><div><span class="k">Collected</span><span class="v num">EUR 110,735</span><span class="d">2 receipts</span></div><div><span class="k">Overdue</span><span class="v num" style="color:var(--danger)">EUR 66,441</span><span class="d">Instalment 3 · since 6 Sep</span></div></div>
+          <div class="next"><svg class="ic" viewBox="0 0 16 16" style="color:var(--gold-text)"><path d="M8 2.5v11M3.5 8h9"/></svg><span><b>Next:</b> instalment 3 is 55 days overdue · follow-up call booked for 5 Nov</span><button type="button" class="btn small">Add follow-up</button></div>
+          <div class="split">
+            <div class="card"><h5>Deal facts<button type="button" class="btn quiet">Edit</button></h5><div class="b facts"><div><span class="k">Unit</span><b>A-203 · 2-bed · 86 sqm · Sea view</b></div><div><span class="k">Buyer</span><b>Maria Fictional · CLI-000002</b></div><div><span class="k">Reservation</span><b>RES-000004 · 2 Feb 2026</b></div><div><span class="k">Next instalment</span><b>EUR 88,588 · 1 Jan 2027</b></div><div><span class="k">Handover</span><b>Not scheduled</b></div><div><span class="k">VAT</span><b>5% · EUR 22,147</b></div></div></div>
+            <div class="card"><h5>Activity<button type="button" class="btn quiet">All</button></h5><div class="b act"><div><i class="ok"></i><div><b>Receipt confirmed · EUR 44,294</b><span>Today 09:12 · Cora Sample</span></div></div><div><i class="gold"></i><div><b>Follow-up call booked</b><span>5 Nov · Collections</span></div></div><div><i class="bad"></i><div><b>Instalment 3 became overdue</b><span>6 Sep 2026</span></div></div><div><i></i><div><b>SPA fully signed</b><span>12 Mar 2026</span></div></div></div></div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- K5 -->
+  <section class="group" aria-labelledby="k5-h">
+    <div class="group-head"><h2 id="k5-h">K5 · Two-pane: identity on the left, work on the right</h2><p>Click the tabs</p></div>
+    <article class="option">
+      <div class="tag"><span class="code">K5</span><strong>Two-pane</strong><span class="note">like a CRM contact page</span></div>
+      <p class="why">The left column is the record's identity card: name, status, the one figure on a dark stage and the ledger beneath it. It stays put while the right side switches between schedule, receipts and documents. Good for records people keep open for a while.</p>
+      <div class="stage k5">
+        <div class="left"><div class="id"><div class="crumb">Sales / Contracts</div><div class="big">A-203</div><div class="sub">SALE-000006 · Maria Fictional</div><div class="acts"><span class="pill ok"><i></i>Active</span><span class="pill bad"><i></i>Overdue 55 d</span></div></div><div class="lead"><span class="k">Outstanding</span><span class="v num">EUR 332,205</span><span class="s">EUR 66,441 overdue</span></div><div class="ledger"><div><span>Agreed</span><b class="num">EUR 442,940</b></div><div><span>Collected</span><b class="num">EUR 110,735</b></div><div><span>Next due</span><b>1 Jan 2027</b></div><div><span>Plan</span><b>10/15/15/20/40</b></div><div><span>Agent</span><b>Example Realty</b></div><div><span>SPA</span><b>Fully signed</b></div></div><div class="acts"><button type="button" class="btn primary" style="flex:1">Record payment</button><button type="button" class="btn" aria-label="More">⋯</button></div></div>
+        <div class="right"><div class="tabs" role="tablist" id="t5"><button role="tab" aria-selected="true">Schedule</button><button role="tab" aria-selected="false">Receipts<span class="n">2</span></button><button role="tab" aria-selected="false">Documents<span class="n">3</span></button><button role="tab" aria-selected="false">Activity</button></div><div class="card" style="border-radius:0 0 10px 10px;border-top:0;margin-top:-16px"><table class="sched"><thead><tr><th>Instalment</th><th>Due</th><th class="n">Amount</th><th>State</th></tr></thead><tbody><tr><td>1 · 10%</td><td>12 Mar 2026</td><td class="n">EUR 44,294</td><td><span class="pill ok"><i></i>Paid</span></td></tr><tr><td>2 · 15%</td><td>18 Jun 2026</td><td class="n">EUR 66,441</td><td><span class="pill ok"><i></i>Paid</span></td></tr><tr><td>3 · 15%</td><td>6 Sep 2026</td><td class="n">EUR 66,441</td><td><span class="pill bad"><i></i>Overdue 55 d</span></td></tr><tr><td>4 · 20%</td><td>1 Jan 2027</td><td class="n">EUR 88,588</td><td><span class="pill grey"><i></i>Due</span></td></tr><tr><td>5 · 40%</td><td>On handover</td><td class="n">EUR 177,176</td><td><span class="pill grey"><i></i>Due</span></td></tr></tbody></table></div></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- K6 -->
+  <section class="group" aria-labelledby="k6-h">
+    <div class="group-head"><h2 id="k6-h">K6 · Journey-led: the deal's stages as the spine</h2><p>The current stage is highlighted in gold</p></div>
+    <article class="option">
+      <div class="tag"><span class="code">K6</span><strong>Journey-led</strong><span class="note">reservation → SPA → instalments → handover</span></div>
+      <p class="why">The left half is the deal's journey, with the step it's on highlighted; the right half holds the money strip and facts. Best for people who think in stages (sales ops, legal) rather than in balances.</p>
+      <div class="stage k6">
+        <div class="head"><div><div class="crumb">Pyla Pearl / Sales / <b>SALE-000006</b></div><div class="ttl"><h3>A-203 · Maria Fictional</h3><span class="pill ok"><i></i>Active</span></div><div class="sub">Reserved 2 Feb 2026 · signed 12 Mar 2026 · Example Realty</div></div><div class="acts"><button type="button" class="btn">Open unit</button><button type="button" class="btn primary">Record payment</button></div></div>
+        <div class="body">
+          <div class="card"><h5>Deal journey</h5><div class="b journey"><div class="done"><i>✓</i><div><b>Reserved</b><span>2 Feb 2026 · deposit EUR 44,294</span></div></div><div class="done"><i>✓</i><div><b>SPA signed</b><span>12 Mar 2026 · fully signed, stamped</span></div></div><div class="done"><i>✓</i><div><b>Instalments 1–2 paid</b><span>EUR 110,735 collected</span></div></div><div class="now"><i>4</i><div><b>Instalment 3 overdue</b><span>EUR 66,441 · 55 days · call booked 5 Nov</span></div></div><div><i>5</i><div><b>Instalments 4–5</b><span>EUR 265,764 · Jan 2027 and handover</span></div></div><div><i>6</i><div><b>Handover</b><span>Not scheduled</span></div></div></div></div>
+          <div style="display:grid;gap:16px"><div class="money-strip" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="lead"><span class="k">Outstanding</span><span class="v num">EUR 332,205</span><span class="d">75% of agreed</span></div><div><span class="k">Overdue</span><span class="v num" style="color:var(--danger)">EUR 66,441</span><span class="d">Since 6 Sep</span></div><div><span class="k">Agreed price</span><span class="v num">EUR 442,940</span><span class="d">At list</span></div><div><span class="k">Collected</span><span class="v num">EUR 110,735</span><span class="d">25%</span></div></div><div class="card"><h5>Deal facts</h5><div class="b facts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div><span class="k">Unit</span><b>A-203 · 2-bed · 86 sqm</b></div><div><span class="k">Plan</span><b>10 / 15 / 15 / 20 / 40</b></div><div><span class="k">SPA</span><b>SPA-SYN-0006</b></div><div><span class="k">VAT</span><b>5% · EUR 22,147</b></div></div></div></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- H3c -->
+  <section class="group" aria-labelledby="h3-h">
+    <div class="group-head"><h2 id="h3-h">H3c · Progress parts, gold on the current stage</h2><p>More spacing, the live step on a gold panel</p></div>
+    <article class="option">
+      <div class="tag"><span class="code">H3c</span><strong>Stepper, stage bars, rings</strong></div>
+      <p class="why">The step being worked sits on a gold panel with a gold ring around its number; done steps are teal. In the stage bar the current segment is gold. Rows are spaced at 18px and every value column lines up.</p>
+      <div class="redo-box">
+        <div><p class="lbl">Stepper · permit BLD-SYN-001</p><div class="stepper"><div class="st done"><i>✓</i><span>Preparation<small>Done 2 Aug</small></span></div><div class="st done"><i>✓</i><span>Submitted<small>Done 15 Aug</small></span></div><div class="st now"><i>3</i><span>Authority review<small>62 days in stage</small></span></div><div class="st"><i>4</i><span>Issued<small>Forecast 15 Dec</small></span></div></div></div>
+        <div><p class="lbl">Stage bars</p><div class="prog"><div class="p-row"><span class="k">Construction stages</span><div class="p-segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="now"></i><i></i><i></i><i></i><i></i></div><span class="v">4 / 9</span></div><div class="p-row"><span class="k">Collected</span><div class="p-track"><i style="width:40%"></i></div><span class="v">40%</span></div><div class="p-row"><span class="k">Units sold</span><div class="p-track"><i style="width:16%;background:var(--ink)"></i></div><span class="v">8 / 50</span></div></div></div>
+        <div><p class="lbl">Rings · the one in focus on gold</p><div class="ring-row"><div class="ring-card now"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="21" fill="none" stroke="#ecdfae" stroke-width="6"/><circle cx="26" cy="26" r="21" fill="none" stroke="#8a6d14" stroke-width="6" stroke-dasharray="132" stroke-dashoffset="79" stroke-linecap="round" transform="rotate(-90 26 26)"/><text x="26" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="#1c1d20" font-family="Geist, sans-serif">40%</text></svg><div><b>Collected</b><span>EUR 624k of 1.56M</span></div></div><div class="ring-card"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="21" fill="none" stroke="#efefea" stroke-width="6"/><circle cx="26" cy="26" r="21" fill="none" stroke="#1c1d20" stroke-width="6" stroke-dasharray="132" stroke-dashoffset="111" stroke-linecap="round" transform="rotate(-90 26 26)"/><text x="26" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="#1c1d20" font-family="Geist, sans-serif">16%</text></svg><div><b>Sold</b><span>8 of 50 units</span></div></div><div class="ring-card"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="21" fill="none" stroke="#efefea" stroke-width="6"/><circle cx="26" cy="26" r="21" fill="none" stroke="#0f7b67" stroke-width="6" stroke-dasharray="132" stroke-dashoffset="74" stroke-linecap="round" transform="rotate(-90 26 26)"/><text x="26" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="#1c1d20" font-family="Geist, sans-serif">44%</text></svg><div><b>Build</b><span>4 of 9 stages</span></div></div></div></div>
+      </div>
+    </article>
+  </section>
+
+  <footer class="pick"><p>Reply with one of <code>K4</code> <code>K5</code> <code>K6</code> and <code>H3c yes</code> or what to change. All figures are the sample deal's.</p></footer>
+</main>
+
+<script>
+(function () {
+  ["t4", "t5"].forEach(function (id) { var tabs = document.getElementById(id); Array.prototype.forEach.call(tabs.querySelectorAll("button"), function (b) { b.addEventListener("click", function () { Array.prototype.forEach.call(tabs.querySelectorAll("button"), function (x) { x.setAttribute("aria-selected", String(x === b)); }); }); }); });
+})();
+</script>
