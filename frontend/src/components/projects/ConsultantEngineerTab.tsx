@@ -120,7 +120,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
           <KeyValue label="Planned start" value={businessDate(selected.planned_start_date)} />
           <KeyValue label="Planned completion" value={businessDate(selected.planned_completion_date)} />
         </KeyValueGrid>
-        {selected.scope_summary ? <p>{selected.scope_summary}</p> : null}
+        {selected.scope_summary ? <div className="scope-summary"><p className="eyebrow">Scope of services</p><p className="specification-description">{selected.scope_summary}</p></div> : null}
         {selected.notes ? <p className="footnote">{selected.notes}</p> : null}
         {!agreementEditable ? <p className="footnote">Read-only agreement. Its programme and delivery records remain available in their tabs.</p> : selected.status === "completed" ? <p className="footnote">Correct completed agreement details here. Reopen the agreement to resume programme editing; existing stages, payments and PDFs remain unchanged.</p> : null}
         <ButtonRow>
