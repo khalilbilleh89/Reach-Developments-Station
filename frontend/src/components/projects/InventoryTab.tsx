@@ -11,6 +11,7 @@ import type { AreaType, Building, Floor, Phase, UnitRegister } from "@/lib/api";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
+  Banner,
   Button,
   Card,
   DataToolbar,
@@ -27,6 +28,8 @@ SavedViews,
   PlaceCell,
   Position,
   PositionFigure,
+  Segmented,
+  SourceNote,
   StatusDot,
   TableScroll,
   Tabs,
@@ -374,14 +377,13 @@ export function InventoryTab({
 
         {view === "units" && register ? (
           <section className="asset-position" aria-label="Inventory position">
-            <div className="asset-position-identity"><Icon name="inventory" /><span>Property inventory<span className="cell-secondary">Unit features · launch prices</span></span></div>
+            <div className="asset-position-identity"><Icon name="inventory" /><span>Property inventory<span className="cell-secondary">Unit features · launch prices</span></span><SourceNote coverage="available" label="What these totals cover" method="Totals cover all matching inventory, including previously released units. Only current approved list prices contribute; unpriced units and prices requiring review are excluded." /></div>
             <Position compact>
               <PositionFigure lead label="Units" value={register.total} />
               {launchValues ? <><PositionFigure label="Priced units" value={launchValues.priced_count} /><PositionFigure label="Needs price" value={launchValues.unpriced_count} /><PositionFigure label="Needs repricing" value={launchValues.repricing_count} />{launchValues.totals.map(total=><PositionFigure key={total.currency_id} label="Launch list value · ex tax" value={money(total.amount,codeOf(total.currency_id))} />)}</> : null}
             </Position>
             {priceError ? <Notice tone="error">{priceError}</Notice> : null}
-            <p className="footnote">Totals cover all matching inventory, including previously released units. Only current approved list prices contribute; unpriced units and prices requiring review are excluded.</p>
-            {areaTypes.length === 0 ? <p className="footnote">No area types configured — no unit can be measured or released.</p> : null}
+            {areaTypes.length === 0 ? <Banner tone="warning" action={canConfigure ? <Button onClick={() => setOpen("areas")}>Area types</Button> : undefined}>No area types configured — no unit can be measured or released.</Banner> : null}
           </section>
         ) : null}
 
@@ -459,7 +461,7 @@ export function InventoryTab({
               ))}
             </select>
           </ToolbarFilter>
-          <ToolbarFilter label="Activity" active={filters.is_active !== ""}><select className="input" value={filters.is_active} onChange={e => setFilters({...filters, is_active: e.target.value})}><option value="">Active and inactive</option><option value="true">Active only</option><option value="false">Inactive only</option></select></ToolbarFilter>
+          <ToolbarFilter label="Activity" active={filters.is_active !== ""}><Segmented label="Activity" value={filters.is_active} onChange={value => setFilters({...filters, is_active: value})} options={[{value: "", label: "Active and inactive"}, {value: "true", label: "Active only"}, {value: "false", label: "Inactive only"}]} /></ToolbarFilter>
           <ToolbarFilter label="Property class" active={filters.asset_class !== ""}><select className="input" value={filters.asset_class} onChange={event=>setFilters({...filters,asset_class:event.target.value})}><option value="">All classes</option>{["apartment","villa","townhouse","commercial","other"].map(value=><option key={value} value={value}>{value}</option>)}</select></ToolbarFilter>
         </DataToolbar>
         <FilterChips

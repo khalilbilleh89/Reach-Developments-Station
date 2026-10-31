@@ -1,18 +1,21 @@
 "use client";
 
 import * as ui from "@/components/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Badge,
+  Banner,
   Button,
   ButtonRow,
   Card,
   ConfirmDialog,
   DataToolbar,
+  DensitySwitch,
   EmptyState,
   Field,
   FieldRow,
+  FilterChips,
   FormDialog,
   InlineMeta,
   InlineMetaItem,
@@ -27,14 +30,19 @@ import {
   Notice,
   PageHeader,
   PromptDialog,
+  Segmented,
+  SortHeader,
+  SourceNote,
   StatusDot,
   Steps,
   TableScroll,
   TabPanel,
   Tabs,
   ToolbarFilter,
+  Tooltip,
   Waterfall,
   WaterfallRow,
+  useSort,
 } from "@/components/ui";
 import { ApiError, inventory, unitEconomics } from "@/lib/api";
 import type {
@@ -90,6 +98,51 @@ const TABS = [
 ];
 
 const VERSION_SEQUENCE = ["draft", "submitted", "approved", "active"];
+
+const SHOW_LABELS: Record<string, string> = {
+  sold: "Sold basis",
+  unsold: "Forecast basis",
+  loss: "Loss-making",
+  below: "Below minimum margin",
+  incomplete: "Incomplete economics",
+};
+
+/** Orders the units already on screen; every value compared is the server's. */
+function readUnitColumn(row: UnitEconomicsRow, column: string): string | number | null {
+  switch (column) {
+    case "unit": return row.unit_reference;
+    case "basis": return basisLabel(row.basis);
+    case "revenue": return row.revenue;
+    case "land": return row.land_cost;
+    case "hard": return row.hard_cost;
+    case "soft": return row.soft_cost;
+    case "direct": return row.direct_cost;
+    case "selling": return row.variable_selling_cost;
+    case "finance": return row.finance_cost ?? row.allocated_finance_cost;
+    case "total": return row.total_cost;
+    case "profit": return row.profit_after_finance;
+    case "margin": return row.margin_fraction;
+    case "roc": return row.return_on_cost_fraction;
+    case "state": return profitabilityLabel(row.profitability_status);
+    default: return null;
+  }
+}
+
+/** Orders the costs already on screen; every value compared is the server's. */
+function readCostColumn(cost: UnitCost, column: string, reference: Map<string, string>): string | null {
+  switch (column) {
+    case "unit": return reference.get(cost.unit_id) ?? null;
+    case "cost": return costTypeLabel(cost.cost_type);
+    case "treatment": return cost.cost_class === "direct" ? "Development" : "Variable selling";
+    case "basis": return costBasisLabel(cost.basis);
+    case "date": return cost.effective_date;
+    case "amount": return cost.amount;
+    case "state": return cost.status;
+    default: return null;
+  }
+}
+
+const RETURN_ON_COST = "Return on cost: profit after finance as a share of total cost.";
 
 /**
  * The project's unit economics: what each unit costs, and the basis that says so.
@@ -302,7 +355,28 @@ function Overview({
             over total revenue, not the average of the unit ratios, and the
             difference between those two is a number somebody would have to
             defend. */}
-        <Card tone="command" title="Project result" description={`On cost basis v${version.version_number}.`}>
+        <Card
+          tone="command"
+          title="Project result"
+          description={`On cost basis v${version.version_number}.`}
+          actions={
+            <SourceNote
+              chip
+              coverage={summary.comparable_unit_count === summary.unit_count ? "available" : summary.comparable_unit_count === 0 ? "unavailable" : "partial"}
+              sampleSize={summary.unit_count}
+              sampleNoun="units"
+              reason={`Totals cover ${summary.comparable_unit_count} of ${summary.unit_count} units.`}
+              method={
+                <>
+                  Totals cover {summary.comparable_unit_count} of {summary.unit_count} units: sold units on the
+                  frozen terms and basis they were sold under, unsold units on today&rsquo;s approved price and
+                  today&rsquo;s basis. Margin is total profit over total revenue and return on cost is total
+                  profit over total cost — weighted on the server, never the average of the unit ratios.
+                </>
+              }
+            />
+          }
+        >
           <Position>
             <PositionFigure lead label="Margin" value={percent(summary.margin_fraction)} />
             <PositionFigure label="Return on cost" value={percent(summary.return_on_cost_fraction)} />
@@ -320,12 +394,6 @@ function Overview({
               value={`${summary.comparable_unit_count} of ${summary.unit_count} units`}
             />
           </PositionSupport>
-          <p className="footnote">
-            Totals cover {summary.comparable_unit_count} of {summary.unit_count} units: sold units on the
-            frozen terms and basis they were sold under, unsold units on today&rsquo;s approved price and
-            today&rsquo;s basis. Margin is total profit over total revenue and return on cost is total
-            profit over total cost — weighted on the server, never the average of the unit ratios.
-          </p>
           {summary.currency_mismatch_count > 0 ? (
             <Notice tone="warning">
               {plural(summary.currency_mismatch_count, "unit")} cannot be included because revenue and project
@@ -442,32 +510,36 @@ function UnitsRegister({ rows, code }: { rows: UnitEconomicsRow[]; code: string 
     if (only === "incomplete") return row.profitability_status !== "ready";
     return true;
   });
+  const { sort, toggle, sorted } = useSort(shown, readUnitColumn);
+  const chips = [
+    only !== "all" ? { key: "only", label: SHOW_LABELS[only], onRemove: () => setOnly("all") } : null,
+    search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+  ].filter((chip): chip is NonNullable<typeof chip> => chip !== null);
+  const reset = () => {
+    setSearch("");
+    setOnly("all");
+  };
 
   return (
     <div className="stack">
       <DataToolbar
         search={{ value: search, onChange: setSearch, placeholder: "Unit reference", label: "Search units" }}
         count={{ shown: shown.length, total: rows.length, noun: "unit" }}
-        onReset={
-          search || only !== "all"
-            ? () => {
-                setSearch("");
-                setOnly("all");
-              }
-            : undefined
-        }
+        onReset={search || only !== "all" ? reset : undefined}
+        actions={<DensitySwitch />}
       >
         <ToolbarFilter label="Show" active={only !== "all"}>
           <select className="input" value={only} onChange={(event) => setOnly(event.target.value)}>
             <option value="all">Every unit</option>
-            <option value="sold">Sold basis</option>
-            <option value="unsold">Forecast basis</option>
-            <option value="loss">Loss-making</option>
-            <option value="below">Below minimum margin</option>
-            <option value="incomplete">Incomplete economics</option>
+            {Object.entries(SHOW_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
         </ToolbarFilter>
       </DataToolbar>
+      <FilterChips chips={chips} onClearAll={reset} />
 
       <Card flush>
         {shown.length === 0 ? (
@@ -478,46 +550,26 @@ function UnitsRegister({ rows, code }: { rows: UnitEconomicsRow[]; code: string 
           <TableScroll label="Unit economics" fixedFirst>
             <thead>
               <tr>
-                <th scope="col">Unit</th>
-                <th scope="col">Basis</th>
-                <th scope="col" className="num">
-                  Revenue
-                </th>
-                <th scope="col" className="num">
-                  Land
-                </th>
-                <th scope="col" className="num">
-                  Hard
-                </th>
-                <th scope="col" className="num">
-                  Soft
-                </th>
-                <th scope="col" className="num">
-                  Direct
-                </th>
-                <th scope="col" className="num">
-                  Selling
-                </th>
-                <th scope="col" className="num">
-                  Finance
-                </th>
-                <th scope="col" className="num">
-                  Total cost
-                </th>
-                <th scope="col" className="num">
-                  Profit
-                </th>
-                <th scope="col" className="num">
-                  Margin
-                </th>
-                <th scope="col" className="num">
-                  ROC
-                </th>
-                <th scope="col">State</th>
+                <SortHeader column="unit" sort={sort} onToggle={toggle}>Unit</SortHeader>
+                <SortHeader column="basis" sort={sort} onToggle={toggle}>Basis</SortHeader>
+                <SortHeader column="revenue" sort={sort} onToggle={toggle} className="num">Revenue</SortHeader>
+                <SortHeader column="land" sort={sort} onToggle={toggle} className="num">Land</SortHeader>
+                <SortHeader column="hard" sort={sort} onToggle={toggle} className="num">Hard</SortHeader>
+                <SortHeader column="soft" sort={sort} onToggle={toggle} className="num">Soft</SortHeader>
+                <SortHeader column="direct" sort={sort} onToggle={toggle} className="num">Direct</SortHeader>
+                <SortHeader column="selling" sort={sort} onToggle={toggle} className="num">Selling</SortHeader>
+                <SortHeader column="finance" sort={sort} onToggle={toggle} className="num">Finance</SortHeader>
+                <SortHeader column="total" sort={sort} onToggle={toggle} className="num">Total cost</SortHeader>
+                <SortHeader column="profit" sort={sort} onToggle={toggle} className="num">Profit</SortHeader>
+                <SortHeader column="margin" sort={sort} onToggle={toggle} className="num">Margin</SortHeader>
+                <SortHeader column="roc" sort={sort} onToggle={toggle} className="num">
+                  <Tooltip term="ROC">{RETURN_ON_COST}</Tooltip>
+                </SortHeader>
+                <SortHeader column="state" sort={sort} onToggle={toggle}>State</SortHeader>
               </tr>
             </thead>
             <tbody>
-              {shown.map((row) => (
+              {sorted.map((row) => (
                 <tr key={row.unit_id}>
                   <th scope="row" className="mono">
                     {row.unit_reference}
@@ -896,14 +948,24 @@ function VersionFile({
             <InlineMetaItem label="Calculated">{version.calculated_at.slice(0, 10)}</InlineMetaItem>
           ) : null}
         </InlineMeta>
-        {version.rejection_reason ? <Notice tone="error">Rejected: {version.rejection_reason}</Notice> : null}
+        {version.rejection_reason ? (
+          <Banner
+            tone="danger"
+            action={canWrite && !draft ? <Button disabled={busy} onClick={onClone}>Clone to correct</Button> : undefined}
+          >
+            Rejected: {version.rejection_reason}
+          </Banner>
+        ) : null}
       </div>
 
       {detail.stale_sources.length > 0 ? (
-        <Notice tone="warning">
+        <Banner
+          tone="warning"
+          action={canWrite && draft ? <Button disabled={busy} onClick={onCalculate}>Calculate</Button> : undefined}
+        >
           This basis was calculated against sources that have since changed — {detail.stale_sources.join("; ")}.
           It cannot be made current until it is recalculated.
-        </Notice>
+        </Banner>
       ) : null}
 
       <h3 className="section-heading">Reconciliation</h3>
@@ -1056,10 +1118,15 @@ function NewVersionDialog({
         label="Finance cost"
         hint="Excluded is a statement, not an omission: the screens say finance cost is excluded rather than implying it is nil."
       >
-        <select className="input" value={treatment} onChange={(event) => setTreatment(event.target.value)}>
-          <option value="excluded">Excluded from this basis</option>
-          <option value="allocated">Allocated to units</option>
-        </select>
+        <Segmented
+          label="Finance cost"
+          value={treatment}
+          options={[
+            { value: "excluded", label: "Excluded from this basis" },
+            { value: "allocated", label: "Allocated to units" },
+          ]}
+          onChange={setTreatment}
+        />
       </Field>
     </FormDialog>
   );
@@ -1156,13 +1223,12 @@ function NewPoolDialog({
           <input className="input" value={poolNumber} onChange={(event) => setPoolNumber(event.target.value)} placeholder="HARD-01" required />
         </Field>
         <Field label="Category">
-          <select className="input" value={category} onChange={(event) => setCategory(event.target.value as PoolCategory)}>
-            {POOL_CATEGORIES.map((value) => (
-              <option key={value} value={value}>
-                {categoryLabel(value)}
-              </option>
-            ))}
-          </select>
+          <Segmented<PoolCategory>
+            label="Category"
+            value={category}
+            options={POOL_CATEGORIES.map((value) => ({ value, label: categoryLabel(value) }))}
+            onChange={setCategory}
+          />
         </Field>
       </FieldRow>
       <Field label="Name">
@@ -1179,13 +1245,12 @@ function NewPoolDialog({
             <MoneyInput code={code} value={amount} onChange={setAmount} required />
           </Field>
           <Field label="Scope" hint="A pool reaches the units in its scope and no others.">
-            <select className="input" value={scope} onChange={(event) => setScope(event.target.value as PoolScope)}>
-              {POOL_SCOPES.map((value) => (
-                <option key={value} value={value}>
-                  {scopeLabel(value)}
-                </option>
-              ))}
-            </select>
+            <Segmented<PoolScope>
+              label="Scope"
+              value={scope}
+              options={POOL_SCOPES.map((value) => ({ value, label: scopeLabel(value) }))}
+              onChange={setScope}
+            />
           </Field>
         </FieldRow>
       )}
@@ -1217,13 +1282,12 @@ function NewPoolDialog({
         label="Allocation method"
         hint="Weighted and raw area read the approved area schedule; revenue value reads the current approved price."
       >
-        <select className="input" value={method} onChange={(event) => setMethod(event.target.value as AllocationMethod)}>
-          {CREATABLE_ALLOCATION_METHODS.map((value) => (
-            <option key={value} value={value}>
-              {methodLabel(value)}
-            </option>
-          ))}
-        </select>
+        <Segmented<AllocationMethod>
+          label="Allocation method"
+          value={method}
+          options={CREATABLE_ALLOCATION_METHODS.map((value) => ({ value, label: methodLabel(value) }))}
+          onChange={setMethod}
+        />
       </Field>
       {needsArea ? (
         <Field label="Area type" hint="Raw area divides by one measured area exactly as recorded, without the weighting the price uses.">
@@ -1263,23 +1327,29 @@ function UnitCosts({
   const [recording, setRecording] = useState(false);
   const [reversing, setReversing] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const reference = new Map(rows.map((row) => [row.unit_id, row.unit_reference]));
+  const reference = useMemo(() => new Map(rows.map((row) => [row.unit_id, row.unit_reference])), [rows]);
   const needle = search.trim().toLowerCase();
   const shown = costs.filter(
     (cost) => !needle || `${reference.get(cost.unit_id) ?? ""} ${costTypeLabel(cost.cost_type)} ${cost.reference ?? ""}`.toLowerCase().includes(needle),
   );
+  const readCost = useCallback((cost: UnitCost, column: string) => readCostColumn(cost, column, reference), [reference]);
+  const { sort, toggle, sorted } = useSort(shown, readCost);
 
   return (
     <div className="stack">
       <DataToolbar
         search={{ value: search, onChange: setSearch, placeholder: "Unit, cost type or reference", label: "Search unit costs" }}
         count={{ shown: shown.length, total: costs.length, noun: "cost" }}
+        onReset={search ? () => setSearch("") : undefined}
         actions={
-          canWrite ? (
-            <Button variant="primary" disabled={busy} onClick={() => setRecording(true)}>
-              Record a cost
-            </Button>
-          ) : undefined
+          <>
+            <DensitySwitch />
+            {canWrite ? (
+              <Button variant="primary" disabled={busy} onClick={() => setRecording(true)}>
+                Record a cost
+              </Button>
+            ) : null}
+          </>
         }
       />
 
@@ -1299,15 +1369,13 @@ function UnitCosts({
           <TableScroll label="Unit costs">
             <thead>
               <tr>
-                <th scope="col">Unit</th>
-                <th scope="col">Cost</th>
-                <th scope="col">Treatment</th>
-                <th scope="col">Basis</th>
-                <th scope="col">Date</th>
-                <th scope="col" className="num">
-                  Amount
-                </th>
-                <th scope="col">State</th>
+                <SortHeader column="unit" sort={sort} onToggle={toggle}>Unit</SortHeader>
+                <SortHeader column="cost" sort={sort} onToggle={toggle}>Cost</SortHeader>
+                <SortHeader column="treatment" sort={sort} onToggle={toggle}>Treatment</SortHeader>
+                <SortHeader column="basis" sort={sort} onToggle={toggle}>Basis</SortHeader>
+                <SortHeader column="date" sort={sort} onToggle={toggle}>Date</SortHeader>
+                <SortHeader column="amount" sort={sort} onToggle={toggle} className="num">Amount</SortHeader>
+                <SortHeader column="state" sort={sort} onToggle={toggle}>State</SortHeader>
                 {canWrite ? (
                   <th scope="col">
                     <span className="visually-hidden">Actions</span>
@@ -1316,7 +1384,7 @@ function UnitCosts({
               </tr>
             </thead>
             <tbody>
-              {shown.map((cost) => (
+              {sorted.map((cost) => (
                 <tr key={cost.id}>
                   <th scope="row" className="mono">
                     {reference.get(cost.unit_id) ?? "—"}
@@ -1471,17 +1539,27 @@ function RecordCostDialog({
           label="Basis"
           hint={saleId ? "Forecast is what the unit is expected to cost; actuals are what the deal is judged on." : "An unsold unit is analysed on forecast costs."}
         >
-          <select className="input" value={basis} onChange={(event) => setBasis(event.target.value)}>
-            <option value="forecast">Forecast</option>
-            <option value="actual">Actual</option>
-          </select>
+          <Segmented
+            label="Basis"
+            value={basis}
+            options={[
+              { value: "forecast", label: "Forecast" },
+              { value: "actual", label: "Actual" },
+            ]}
+            onChange={setBasis}
+          />
         </Field>
         {basis === "actual" && saleId !== null && !isSelling ? (
           <Field label="Belongs to" hint="A cost incurred before this buyer arrived stays with the unit.">
-            <select className="input" value={chargeToDeal ? "deal" : "unit"} onChange={(event) => setChargeToDeal(event.target.value === "deal")}>
-              <option value="deal">This deal</option>
-              <option value="unit">The unit itself</option>
-            </select>
+            <Segmented
+              label="Belongs to"
+              value={chargeToDeal ? "deal" : "unit"}
+              options={[
+                { value: "deal", label: "This deal" },
+                { value: "unit", label: "The unit itself" },
+              ]}
+              onChange={(value) => setChargeToDeal(value === "deal")}
+            />
           </Field>
         ) : null}
       </FieldRow>

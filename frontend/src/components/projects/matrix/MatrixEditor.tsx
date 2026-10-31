@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { matrices, type Framework, type MatrixFields, type MatrixRecord, type MatrixPoint } from "@/lib/api/matrix";
-import { Button, ConfirmDialog, DraftBoundary, Field, FieldRow, FormActions, FormSection, Notice, PromptDialog, RecordPage, ValidationSummary } from "@/components/ui";
+import { Button, ConfirmDialog, DraftBoundary, Field, FieldRow, FormActions, FormSection, Notice, PromptDialog, RecordPage, Segmented, ValidationSummary } from "@/components/ui";
 import { MatrixCanvas } from "./MatrixCanvas";
 import { templates } from "./templates";
 
@@ -55,7 +55,9 @@ export function MatrixEditor({ projectId, framework, record, canManage, onClose,
        <div className="matrix-input-list">{values.items.map((item, index) => <div className="matrix-input-item" key={index}>
         <div className="matrix-item-number">Item {index + 1}<Button variant="quiet" onClick={() => setRemoveIndex(index)}>Delete item {index + 1}</Button></div>
         <FieldRow><Field label={framework === "bcg" ? "Product / business unit" : "Observation / idea"}><input className="input" required maxLength={300} value={item.label} onChange={e => change("items", values.items.map((row, i) => i === index ? { ...row, label: e.target.value } : row))}/></Field>
-        {framework !== "bcg" ? <Field label="Category"><select className="input" value={item.category} onChange={e => change("items", values.items.map((row, i) => i === index ? { ...row, category: e.target.value } : row))}>{template.categories.map(category => <option key={category}>{category}</option>)}</select></Field> : null}</FieldRow>
+        {framework !== "bcg" ? <Field label="Category">{template.categories.length <= 4
+         ? <Segmented label={`Category for item ${index + 1}`} value={item.category} options={template.categories.map(category => ({ value: category, label: category }))} onChange={category => change("items", values.items.map((row, i) => i === index ? { ...row, category } : row))}/>
+         : <select className="input" value={item.category} onChange={e => change("items", values.items.map((row, i) => i === index ? { ...row, category: e.target.value } : row))}>{template.categories.map(category => <option key={category}>{category}</option>)}</select>}</Field> : null}</FieldRow>
         {framework === "bcg" ? <FieldRow><Field label="Market growth (%)"><input className="input" required type="number" min="-100" max="1000" step="0.001" value={item.growth_pct ?? ""} onChange={e => change("items", values.items.map((row, i) => i === index ? { ...row, growth_pct: e.target.value || null } : row))}/></Field><Field label="Relative market share (×)"><input className="input" required type="number" min="0" max="1000" step="0.001" value={item.relative_share ?? ""} onChange={e => change("items", values.items.map((row, i) => i === index ? { ...row, relative_share: e.target.value || null } : row))}/></Field></FieldRow> : null}
         <Field label="Notes / evidence" optional><textarea className="input" rows={2} maxLength={2000} value={item.notes} onChange={e => change("items", values.items.map((row, i) => i === index ? { ...row, notes: e.target.value } : row))}/></Field>
        </div>)}</div>

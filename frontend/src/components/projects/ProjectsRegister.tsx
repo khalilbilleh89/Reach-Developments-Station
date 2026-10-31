@@ -9,14 +9,18 @@ import { PROJECT_WRITERS, ROLE_SYSTEM_ADMIN, hasAnyRole } from "@/lib/roles";
 import { businessDate } from "@/lib/format";
 import {
   Badge,
+  Banner,
   Button,
+  ButtonRow,
   Card,
   DataToolbar,
+  DensitySwitch,
   EmptyState,
   Field,
   FieldRow,
-  FormActions,
+  FilterChips,
   FormDialog,
+  FormOutline,
   FormSection,
   IdentityCell,
   Loading,
@@ -25,7 +29,9 @@ import {
   PlaceCell,
   RecordPage,
   RowMenu,
+  Segmented,
   StatusDot,
+  StickyActions,
   TableScroll,
   ToolbarFilter,
 } from "@/components/ui";
@@ -135,6 +141,11 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    // The save bar has no separate disabled state; the banner above says what is missing.
+    if (packs.length === 0 || currencies.every((currency) => !currency.is_active)) {
+      setFormError("Add an active country configuration and currency before creating the project.");
+      return;
+    }
     setBusy(true);
     setFormError(null);
     setNotice(null);
@@ -220,6 +231,10 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
 
   const configurationMissing = packs.length === 0 || activeCurrencies.length === 0;
   const filtered = search !== "" || status !== "";
+  const chips = [
+    status ? { key: "status", label: `Status: ${projectStatusLabel(status)}`, onRemove: () => setStatus("") } : null,
+    search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+  ].filter((chip): chip is NonNullable<typeof chip> => chip !== null);
 
   return (
     <>
@@ -251,6 +266,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 }
               : undefined
           }
+          actions={<DensitySwitch />}
         >
           <ToolbarFilter label="Status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -263,6 +279,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
             </select>
           </ToolbarFilter>
         </DataToolbar>
+        <FilterChips chips={chips} onClearAll={() => { setSearch(""); setStatus(""); }} />
 
         <Card flush>
           {rows === null ? (
@@ -287,7 +304,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
               />
             </div>
           ) : (
-            <TableScroll label="Project register" fixedFirst>
+            <TableScroll label="Project register" fixedFirst stickyHeader>
               <thead>
                 <tr>
                   <th scope="col">Project</th>
@@ -386,9 +403,23 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
           subtitle="The code is issued once and never changes. Everything else can be edited later."
           onClose={() => setCreating(false)}
         >
-            <form onSubmit={submit}>
+            <form onSubmit={submit} className="form-layout">
+              <FormOutline sections={["Identity", "Financial basis", "Location and programme"]} />
+              <div className="form-layout-body">
               {formError ? <Notice tone="error">{formError}</Notice> : null}
-              {configurationMissing ? <Notice tone="warning">An active country configuration and currency are required. {canConfigure ? "Add them here without closing this project form." : "Ask a System Administrator to add them; your entered project details will remain here."}</Notice> : null}
+              {configurationMissing ? (
+                <Banner
+                  tone="warning"
+                  action={canConfigure ? (
+                    <ButtonRow>
+                      {packs.length === 0 ? <Button small onClick={() => setAddingPack(true)}>Add country configuration</Button> : null}
+                      {activeCurrencies.length === 0 ? <Button small onClick={() => setAddingCurrency(true)}>Add currency</Button> : null}
+                    </ButtonRow>
+                  ) : undefined}
+                >
+                  An active country configuration and currency are required. {canConfigure ? "Add them here without closing this project form." : "Ask a System Administrator to add them; your entered project details will remain here."}
+                </Banner>
+              ) : null}
               <FormSection title="Identity">
                 <FieldRow columns={2}>
                   <Field label="Project code" hint="Letters, digits, hyphen or underscore.">
@@ -561,20 +592,21 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                   </Field>
                 </FieldRow>
               </FormSection>
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy || configurationMissing}>
-                  {busy ? "Creating…" : "Create project"}
-                </Button>
-                <Button onClick={() => setCreating(false)} disabled={busy}>
-                  Cancel
-                </Button>
-              </FormActions>
+              <StickyActions
+                dirty={JSON.stringify(form) !== JSON.stringify(emptyForm())}
+                note={configurationMissing ? "Add the missing configuration to create the project." : undefined}
+                submitLabel="Create project"
+                busy={busy}
+                disabled={configurationMissing}
+                onCancel={() => setCreating(false)}
+              />
+              </div>
             </form>
         </RecordPage>
       ) : null}
 
       {addingCurrency ? <FormDialog title="Add currency" description="Creates the normalized currency and selects it in this project. No exchange rate is created." confirmLabel="Add currency" busy={busy} disabled={!currencyForm.code || !currencyForm.name} onCancel={() => setAddingCurrency(false)} onSubmit={() => void createCurrency()}><FieldRow><Field label="ISO code"><input className="input input-short" required maxLength={3} value={currencyForm.code} onChange={(event) => setCurrencyForm({ ...currencyForm, code: event.target.value })} /></Field><Field label="Name"><input className="input" required value={currencyForm.name} onChange={(event) => setCurrencyForm({ ...currencyForm, name: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Symbol" optional><input className="input input-short" value={currencyForm.symbol} onChange={(event) => setCurrencyForm({ ...currencyForm, symbol: event.target.value })} /></Field><Field label="Minor units"><input className="input input-short" type="number" min={0} max={6} value={currencyForm.minor_units} onChange={(event) => setCurrencyForm({ ...currencyForm, minor_units: event.target.value })} /></Field></FieldRow></FormDialog> : null}
-      {addingPack ? <FormDialog title="Add country configuration" description="Creates the normalized CountryPack and selects it without clearing this project form." confirmLabel="Add configuration" busy={busy} disabled={!packForm.country_code || !packForm.name || !packForm.locale || !packForm.timezone || !packForm.default_currency_id} onCancel={() => setAddingPack(false)} onSubmit={() => void createCountryPack()}><FieldRow><Field label="Country code"><input className="input input-short" required maxLength={2} value={packForm.country_code} onChange={(event) => setPackForm({ ...packForm, country_code: event.target.value })} /></Field><Field label="Name"><input className="input" required value={packForm.name} onChange={(event) => setPackForm({ ...packForm, name: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Locale"><input className="input" required placeholder="en-JO" value={packForm.locale} onChange={(event) => setPackForm({ ...packForm, locale: event.target.value })} /></Field><Field label="Timezone"><input className="input" required placeholder="Asia/Amman" value={packForm.timezone} onChange={(event) => setPackForm({ ...packForm, timezone: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Default currency"><select className="input" required value={packForm.default_currency_id} onChange={(event) => setPackForm({ ...packForm, default_currency_id: event.target.value })}><option value="">Choose…</option>{activeCurrencies.map((currency) => <option key={currency.id} value={currency.id}>{currency.code}</option>)}</select></Field><Field label="Area unit"><select className="input" value={packForm.area_unit} onChange={(event) => setPackForm({ ...packForm, area_unit: event.target.value })}><option value="sqm">sqm</option><option value="sqft">sqft</option></select></Field></FieldRow><Field label="Fiscal year starts"><input className="input input-short" type="number" min={1} max={12} value={packForm.fiscal_year_start_month} onChange={(event) => setPackForm({ ...packForm, fiscal_year_start_month: event.target.value })} /></Field></FormDialog> : null}
+      {addingPack ? <FormDialog title="Add country configuration" description="Creates the normalized CountryPack and selects it without clearing this project form." confirmLabel="Add configuration" busy={busy} disabled={!packForm.country_code || !packForm.name || !packForm.locale || !packForm.timezone || !packForm.default_currency_id} onCancel={() => setAddingPack(false)} onSubmit={() => void createCountryPack()}><FieldRow><Field label="Country code"><input className="input input-short" required maxLength={2} value={packForm.country_code} onChange={(event) => setPackForm({ ...packForm, country_code: event.target.value })} /></Field><Field label="Name"><input className="input" required value={packForm.name} onChange={(event) => setPackForm({ ...packForm, name: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Locale"><input className="input" required placeholder="en-JO" value={packForm.locale} onChange={(event) => setPackForm({ ...packForm, locale: event.target.value })} /></Field><Field label="Timezone"><input className="input" required placeholder="Asia/Amman" value={packForm.timezone} onChange={(event) => setPackForm({ ...packForm, timezone: event.target.value })} /></Field></FieldRow><FieldRow><Field label="Default currency"><select className="input" required value={packForm.default_currency_id} onChange={(event) => setPackForm({ ...packForm, default_currency_id: event.target.value })}><option value="">Choose…</option>{activeCurrencies.map((currency) => <option key={currency.id} value={currency.id}>{currency.code}</option>)}</select></Field><Field label="Area unit"><Segmented label="Area unit" value={packForm.area_unit} onChange={(area_unit) => setPackForm({ ...packForm, area_unit })} options={[{ value: "sqm", label: "sqm" }, { value: "sqft", label: "sqft" }]} /></Field></FieldRow><Field label="Fiscal year starts"><input className="input input-short" type="number" min={1} max={12} value={packForm.fiscal_year_start_month} onChange={(event) => setPackForm({ ...packForm, fiscal_year_start_month: event.target.value })} /></Field></FormDialog> : null}
     </>
   );
 }

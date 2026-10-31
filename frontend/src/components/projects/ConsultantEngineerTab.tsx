@@ -11,7 +11,7 @@ import { CONSULTANT_EDITORS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import type { Tone } from "@/components/ui";
 const designTone = (status: string): Tone => ["completed", "accepted"].includes(status) ? "success" : ["cancelled", "terminated", "superseded"].includes(status) ? "muted" : ["active", "in_progress", "submitted"].includes(status) ? "info" : "neutral";
-import { Icon, Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, DraftBoundary, RecordPage, FormActions, MoneyInput, PromptDialog, Tabs, TabPanel, FormSection, IdentityCell, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, Position, PositionFigure, SubPanel, TableScroll } from "@/components/ui";
+import { Icon, Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, DraftBoundary, RecordPage, FormOutline, MoneyInput, NextBar, PromptDialog, RecordStrip, Segmented, StickyActions, Tabs, TabPanel, FormSection, IdentityCell, InlineMeta, InlineMetaItem, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, Position, PositionFigure, SubPanel, TableScroll, Tooltip } from "@/components/ui";
 
 type Kind = "engagement" | "discipline" | "stage" | "deliverable";
 type RecordRow = ConsultantEngagement | ConsultantDiscipline | ConsultantStage | ConsultantDeliverable;
@@ -113,13 +113,19 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
         <InlineMeta>
           <InlineMetaItem label="Appointment">{selected.engagement_type === "subconsultant" ? "Sub-consultant · separate company agreement" : "Main consultant"}</InlineMetaItem>
           <InlineMetaItem label="Agreement"><span className="mono">{selected.agreement_reference}</span></InlineMetaItem>
-          <InlineMetaItem label="Status"><Badge>{labels(selected.status)}</Badge></InlineMetaItem>
+          <InlineMetaItem label="Status"><Badge tone={designTone(selected.status)}>{labels(selected.status)}</Badge></InlineMetaItem>
         </InlineMeta>
-        {section === "agreement" ? <><KeyValueGrid columns={3}>
-          <KeyValue label="Agreement date" value={businessDate(selected.agreement_date)} />
-          <KeyValue label="Planned start" value={businessDate(selected.planned_start_date)} />
-          <KeyValue label="Planned completion" value={businessDate(selected.planned_completion_date)} />
-        </KeyValueGrid>
+        {section === "agreement" ? <><RecordStrip
+          lead={{ label: "Planned completion", value: businessDate(selected.planned_completion_date), tone: selected.planned_completion_date ? undefined : "muted" }}
+          items={[
+            { label: "Agreement date", value: businessDate(selected.agreement_date) },
+            { label: "Planned start", value: businessDate(selected.planned_start_date) },
+            { label: "Appointment", value: selected.engagement_type === "subconsultant" ? "Sub-consultant" : "Main consultant" },
+          ]}
+        />
+        {selected.status === "draft" ? <NextBar>This agreement is a draft: activate it to start its design programme.</NextBar>
+          : selected.status === "active" ? <NextBar action={<Button small onClick={() => setSection("programme")}>Open programme</Button>}>The design programme is under way on this agreement.</NextBar>
+          : selected.status === "completed" ? <NextBar>Completed. Reopen the agreement to resume programme editing.</NextBar> : null}
         {selected.scope_summary ? <div className="scope-summary"><p className="eyebrow">Scope of services</p><p className="specification-description">{selected.scope_summary}</p></div> : null}
         {selected.notes ? <p className="footnote">{selected.notes}</p> : null}
         {!agreementEditable ? <p className="footnote">Read-only agreement. Its programme and delivery records remain available in their tabs.</p> : selected.status === "completed" ? <p className="footnote">Correct completed agreement details here. Reopen the agreement to resume programme editing; existing stages, payments and PDFs remain unchanged.</p> : null}
@@ -135,9 +141,9 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
         <p className="footnote">Stages follow their recorded sequence. An undated stage is not a forecast milestone.</p>
         {stages.length ? <ol className="consultant-programme">{stages.map((stage,index) => <li key={stage.id} data-status={stage.status}>
           <span className="consultant-stage-number">{stage.sequence}</span>
-          <div className="consultant-stage-body"><div className="consultant-stage-heading"><h3>{stage.name}</h3><Badge>{labels(stage.status)}</Badge></div>
+          <div className="consultant-stage-body"><div className="consultant-stage-heading"><h3>{stage.name}</h3><Badge tone={designTone(stage.status)}>{labels(stage.status)}</Badge></div>
             <KeyValueGrid columns={3}><KeyValue label="Planned" value={stage.planned_date ? businessDate(stage.planned_date) : "Not scheduled"}/><KeyValue label="Forecast" value={stage.forecast_date ? businessDate(stage.forecast_date) : "Not recorded"}/><KeyValue label="Completed" value={stage.actual_completion_date ? businessDate(stage.actual_completion_date) : "Not recorded"}/></KeyValueGrid>
-            <div className="stage-deliverables"><h4>Stage deliverables</h4>{deliverables.some(item => item.stage_id === stage.id) ? <ul>{deliverables.filter(item => item.stage_id === stage.id).map(item => <li key={item.id}><div><strong>{item.name}</strong><span>{disciplines.find(discipline => discipline.id === item.discipline_id)?.name ?? "Cross-disciplinary"}{item.revision_reference ? " · " + item.revision_reference : ""}</span></div><div><Badge>{labels(item.status)}</Badge><span>{item.due_date ? "Due " + businessDate(item.due_date) : "No due date"}</span></div>{editable && !["accepted","superseded","cancelled"].includes(item.status) ? <Button small variant="quiet" disabled={busy} onClick={() => setEditor({kind:"deliverable",row:item})}>Update deliverable</Button> : null}</li>)}</ul> : <p className="footnote">No deliverables assigned to this stage.</p>}</div>
+            <div className="stage-deliverables"><h4>Stage deliverables</h4>{deliverables.some(item => item.stage_id === stage.id) ? <ul>{deliverables.filter(item => item.stage_id === stage.id).map(item => <li key={item.id}><div><strong>{item.name}</strong><span>{disciplines.find(discipline => discipline.id === item.discipline_id)?.name ?? "Cross-disciplinary"}{item.revision_reference ? " · " + item.revision_reference : ""}</span></div><div><Badge tone={designTone(item.status)}>{labels(item.status)}</Badge><span>{item.due_date ? "Due " + businessDate(item.due_date) : "No due date"}</span></div>{editable && !["accepted","superseded","cancelled"].includes(item.status) ? <Button small variant="quiet" disabled={busy} onClick={() => setEditor({kind:"deliverable",row:item})}>Update deliverable</Button> : null}</li>)}</ul> : <p className="footnote">No deliverables assigned to this stage.</p>}</div>
             {editable ? <ButtonRow><Button small disabled={busy} onClick={() => setEditor({kind:"stage",row:stage})}>Edit stage</Button>{reordering ? <><Button small aria-label={`Move ${stage.name} up`} disabled={busy || index===0} onClick={() => void move(stage,-1)}>Move up</Button><Button small aria-label={`Move ${stage.name} down`} disabled={busy || index===stages.length-1} onClick={() => void move(stage,1)}>Move down</Button></> : null}</ButtonRow> : null}
           </div>
         </li>)}</ol> : <EmptyState compact title="No design stages" hint="Record the agreed stages before assigning deliverables."/>}
@@ -157,7 +163,7 @@ export function ConsultantEngineerTab({ projectId, roles }: { projectId: string;
 
 function Register({ title, action, headers, rows, nested }: { title: string; action?: ReactNode; headers: string[]; rows: ReactNode[][]; nested?: boolean }) {
   const [schedule, setSchedule] = useState(false);
-  const controls = <ButtonRow>{action}<Button small aria-pressed={schedule} onClick={() => setSchedule(!schedule)}>{schedule ? "Show cards" : "Show schedule"}</Button></ButtonRow>;
+  const controls = <ButtonRow>{action}<Segmented label={`${title} presentation`} value={schedule ? "schedule" : "cards"} onChange={value => setSchedule(value === "schedule")} options={[{ value: "cards", label: "Cards" }, { value: "schedule", label: "Schedule" }]} /></ButtonRow>;
   const content = rows.length ? schedule ? <TableScroll label={title} fixedFirst compact>
     <thead><tr>{headers.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
     <tbody>{rows.map((row, i) => <tr key={i}>{row.map((v, j) => j === 0 ? <th key={j} scope="row">{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody>
@@ -171,22 +177,29 @@ function ConsultantDialog({ editor, stages, disciplines, busy, error, onCancel, 
   const set = (key: string, value: string) => setBody((old) => ({ ...old, [key]: value || null }));
   const title = `${row ? "Edit" : "Add"} ${kind === "engagement" ? "consultant agreement" : kind === "stage" ? "design stage" : kind}`;
   const baseline = { ...values(kind, row), ...(kind === "engagement" && !row ? { engagement_type: editor.engagementType ?? "main" } : {}), ...(kind === "deliverable" && !row ? { stage_id: stages[0]?.id ?? "" } : {}) };
-  return <RecordPage title={title} eyebrow="Design" onClose={onCancel}><DraftBoundary dirty={JSON.stringify(body) !== JSON.stringify(baseline)} busy={busy}><form onSubmit={event => { event.preventDefault(); onSubmit(body); }}>
+  const dirty = JSON.stringify(body) !== JSON.stringify(baseline);
+  const groups = [
+    { title: "Identity and assignment", keys: ["engagement_type", "consultant_name", "agreement_reference", "name", "lead_name", "stage_id", "discipline_id", "category", "revision_reference", "document_reference"] },
+    { title: "Programme and status", keys: ["agreed_payment_amount", "agreement_date", "planned_start_date", "planned_completion_date", "planned_date", "forecast_date", "actual_completion_date", "due_date", "submitted_date", "accepted_date", "status"] },
+    { title: "Scope and notes", keys: ["scope_summary", "notes"] },
+  ].filter(group => fieldNames[kind].some(key => group.keys.includes(key)));
+  // Every record kind here fills three sections, which makes it a long form (J3).
+  const long = groups.length >= 3;
+  return <RecordPage title={title} eyebrow="Design" onClose={onCancel}><DraftBoundary dirty={dirty} busy={busy}><form className={long ? "form-layout" : undefined} onSubmit={event => { event.preventDefault(); onSubmit(body); }}>
+    {long ? <FormOutline sections={groups.map(group => group.title)} /> : null}
+    <div className={long ? "form-layout-body" : undefined}>
     {error ? <Notice tone="error">{error}</Notice> : null}
-    {[
-      { title: "Identity and assignment", keys: ["engagement_type", "consultant_name", "agreement_reference", "name", "lead_name", "stage_id", "discipline_id", "category", "revision_reference", "document_reference"] },
-      { title: "Programme and status", keys: ["agreed_payment_amount", "agreement_date", "planned_start_date", "planned_completion_date", "planned_date", "forecast_date", "actual_completion_date", "due_date", "submitted_date", "accepted_date", "status"] },
-      { title: "Scope and notes", keys: ["scope_summary", "notes"] },
-    ].map((group) => {
+    {groups.map((group) => {
       const keys = fieldNames[kind].filter((key) => group.keys.includes(key));
       return keys.length ? <FormSection key={group.title} title={group.title}><FieldRow columns={group.title === "Scope and notes" ? 1 : 2}>{keys.map((key) => {
       const value = String(body[key] ?? "");
       const options = key === "engagement_type" ? [{id:"main", name:"Main consultant"},{id:"subconsultant", name:"Sub-consultant (separate company)"}] : key === "status" ? statuses[kind].map((x) => ({ id: x, name: labels(x) })) : key === "stage_id" ? stages : key === "discipline_id" ? [{ id: "", name: "Cross-disciplinary" }, ...disciplines] : null;
-      return <Field key={key} optional={!["name", "consultant_name", "agreement_reference", "stage_id", "status"].includes(key)} label={key === "agreed_payment_amount" ? "Agreed stage payment (including VAT, project currency)" : key === "consultant_name" ? "Consultant company" : key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)}>{key === "agreed_payment_amount" ? <MoneyInput code={null} value={value} onChange={v => set(key, v)} /> : options ? <select disabled={key === "engagement_type" && !!row} className="input" aria-label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)} value={value} onChange={(e) => set(key, e.target.value)}>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : key === "notes" || key === "scope_summary" ? <textarea className="input" value={value} onChange={(e) => set(key, e.target.value)} /> : <input className="input" type={key.endsWith("_date") ? "date" : "text"} required={["name", "consultant_name", "agreement_reference"].includes(key)} value={value} onChange={(e) => set(key, e.target.value)} />}</Field>;
+      return <Field key={key} optional={!["name", "consultant_name", "agreement_reference", "stage_id", "status"].includes(key)} label={key === "agreed_payment_amount" ? "Agreed stage payment (including VAT, project currency)" : key === "consultant_name" ? "Consultant company" : key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)}>{key === "agreed_payment_amount" ? <MoneyInput code={null} value={value} onChange={v => set(key, v)} /> : options && (key === "engagement_type" || key === "status") && options.length > 0 && options.length <= 4 && !(key === "engagement_type" && row) ? <Segmented label={labels(key)} value={value} options={options.map((x) => ({ value: x.id, label: x.name }))} onChange={(next) => set(key, next)} /> : options ? <select disabled={key === "engagement_type" && !!row} className="input" aria-label={key === "stage_id" ? "Design stage" : key === "discipline_id" ? "Discipline" : labels(key)} value={value} onChange={(e) => set(key, e.target.value)}>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : key === "notes" || key === "scope_summary" ? <textarea className="input" value={value} onChange={(e) => set(key, e.target.value)} /> : <input className="input" type={key.endsWith("_date") ? "date" : "text"} required={["name", "consultant_name", "agreement_reference"].includes(key)} value={value} onChange={(e) => set(key, e.target.value)} />}</Field>;
     })}</FieldRow></FormSection> : null;
     })}
-    {kind === "discipline" ? <p>Examples: Architecture, MEP, Structural, QS, Supervision. Other discipline names are welcome.</p> : null}
+    {kind === "discipline" ? <p>Examples: Architecture, <Tooltip term="MEP">Mechanical, electrical and plumbing engineering</Tooltip>, Structural, <Tooltip term="QS">Quantity surveying: measuring and costing the works</Tooltip>, Supervision. Other discipline names are welcome.</p> : null}
     {kind === "deliverable" ? <p>Submitted work requires a submitted date; accepted work also requires an accepted date. References identify documents held elsewhere.</p> : null}
-    <FormActions><Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button><Button data-leaves-editor disabled={busy} onClick={onCancel}>Cancel</Button></FormActions>
+    <StickyActions dirty={dirty} submitLabel="Save" busy={busy} onCancel={onCancel} />
+    </div>
   </form></DraftBoundary></RecordPage>;
 }

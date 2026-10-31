@@ -1,6 +1,6 @@
 "use client";
 
-import { Disclosure,
+import {
   Badge,
   Card,
   EmptyState,
@@ -10,6 +10,7 @@ import { Disclosure,
   Notice,
   SubPanel,
   TableScroll,
+  Views,
 } from "@/components/ui";
 import type { Answer } from "@/lib/answer";
 import type { CashflowAccuracy, CashflowManagement, CashflowReconciliation } from "@/lib/api";
@@ -68,6 +69,32 @@ function Reconciliation({ answer }: { answer: Answer<CashflowReconciliation> }) 
 
   const { checks, failed_count: failed, basis } = answer.data;
   const failing = checks.filter((check) => !check.passed);
+  const allChecks = (
+    <TableScroll label="Every reconciliation check" compact>
+      <thead>
+        <tr>
+          <th scope="col">Check</th>
+          <th scope="col">Result</th>
+          <th scope="col" className="num">Expected</th>
+          <th scope="col" className="num">Found</th>
+        </tr>
+      </thead>
+      <tbody>
+        {checks.map((check) => (
+          <tr key={check.name}>
+            <th scope="row">{checkLabel(check.name)}</th>
+            <td>
+              <Badge tone={check.passed ? "success" : "danger"}>
+                {check.passed ? "Reconciles" : "Does not reconcile"}
+              </Badge>
+            </td>
+            <td className="num">{check.expected ?? "—"}</td>
+            <td className="num">{check.actual ?? "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </TableScroll>
+  );
 
   return (
     <Card
@@ -86,55 +113,38 @@ function Reconciliation({ answer }: { answer: Answer<CashflowReconciliation> }) 
         </Notice>
       )}
 
+      {/* Both tables are the reconciliation itself, so neither hides behind an
+          accordion: the failing checks lead when there are any (design system D1). */}
       {failing.length > 0 ? (
-        <TableScroll label="Checks that do not reconcile" compact>
-          <thead>
-            <tr>
-              <th scope="col">Check</th>
-              <th scope="col" className="num">Expected</th>
-              <th scope="col" className="num">Found</th>
-              <th scope="col">What it means</th>
-            </tr>
-          </thead>
-          <tbody>
-            {failing.map((check) => (
-              <tr key={check.name}>
-                <th scope="row">{checkLabel(check.name)}</th>
-                <td className="num">{check.expected ?? "—"}</td>
-                <td className="num">{check.actual ?? "—"}</td>
-                <td className="cell-prose">{check.detail}</td>
-              </tr>
-            ))}
-          </tbody>
-        </TableScroll>
-      ) : null}
-
-      <Disclosure title={<> All {checks.length} checks </>}>
-        <TableScroll label="Every reconciliation check" compact>
-          <thead>
-            <tr>
-              <th scope="col">Check</th>
-              <th scope="col">Result</th>
-              <th scope="col" className="num">Expected</th>
-              <th scope="col" className="num">Found</th>
-            </tr>
-          </thead>
-          <tbody>
-            {checks.map((check) => (
-              <tr key={check.name}>
-                <th scope="row">{checkLabel(check.name)}</th>
-                <td>
-                  <Badge tone={check.passed ? "success" : "danger"}>
-                    {check.passed ? "Reconciles" : "Does not reconcile"}
-                  </Badge>
-                </td>
-                <td className="num">{check.expected ?? "—"}</td>
-                <td className="num">{check.actual ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </TableScroll>
-      </Disclosure>
+        <Views
+          label="Reconciliation checks"
+          views={[
+            { key: "failing", label: "Does not reconcile", content: (
+              <TableScroll label="Checks that do not reconcile" compact>
+                <thead>
+                  <tr>
+                    <th scope="col">Check</th>
+                    <th scope="col" className="num">Expected</th>
+                    <th scope="col" className="num">Found</th>
+                    <th scope="col">What it means</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {failing.map((check) => (
+                    <tr key={check.name}>
+                      <th scope="row">{checkLabel(check.name)}</th>
+                      <td className="num">{check.expected ?? "—"}</td>
+                      <td className="num">{check.actual ?? "—"}</td>
+                      <td className="cell-prose">{check.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableScroll>
+            ) },
+            { key: "all", label: `All ${checks.length} checks`, content: allChecks },
+          ]}
+        />
+      ) : allChecks}
     </Card>
   );
 }

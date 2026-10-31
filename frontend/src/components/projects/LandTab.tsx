@@ -11,15 +11,17 @@ import { businessDate, fractionFromPercent, money, percent, percentInput } from 
 import { projectHref, sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
+  Banner,
   Button,
   Card,
   DataToolbar,
+  DensitySwitch,
   RecordPage,
   EmptyState,
   ExternalLink,
   Field,
   FieldRow,
-  FormActions,
+  FormOutline,
   FormSection,
   Icon,
   IdentityCell,
@@ -33,16 +35,36 @@ import {
   PositionFigure,
   SectionHeader,
   Segmented,
+  SortHeader,
+  SourceNote,
   StatusDot,
+  StickyActions,
   TableScroll,
+  useSort,
+  Tooltip,
 } from "@/components/ui";
 import type { RecordPageFact } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
-import { AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
+import { ACQUISITION_METHOD, AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
 import { LandAnalytics } from "@/components/projects/land/LandAnalytics";
 import { ParcelCollection } from "@/components/projects/land/ParcelCollection";
 import { measurement } from "@/components/projects/land/presentation";
+
+/** What each schedule column sorts by: the recorded value itself, only compared. */
+function readParcelColumn(parcel: LandParcel, column: string): string | null {
+  switch (column) {
+    case "parcel": return parcel.plot_number;
+    case "ownership": return parcel.ownership_type;
+    case "title": return parcel.title_status;
+    case "zoning": return parcel.zoning;
+    case "area": return parcel.land_area;
+    case "acquired": return parcel.acquisition_date;
+    case "price": return parcel.purchase_price;
+    case "state": return parcel.is_active ? "Active" : "Inactive";
+    default: return null;
+  }
+}
 
 /** Tri-state: null means nobody has established it yet, which is not "no". */
 function utility(value: boolean | null): string {
@@ -246,6 +268,9 @@ export function LandTab({
   const [selected, setSelected] = useState<LandParcel | null>(null);
   const [section, setSection] = useState("overview");
   const [planning, setPlanning] = useState<PlanningControl | null>(null);
+  // Whether the planning read has answered for the open parcel, so "none
+  // recorded" is never said while the request is still in flight.
+  const [planningRead, setPlanningRead] = useState(false);
   const [planningForm, setPlanningForm] = useState(planningFrom(null));
   const [editingPlanning, setEditingPlanning] = useState(false);
   const [editingParcel, setEditingParcel] = useState(false);
@@ -299,17 +324,20 @@ export function LandTab({
     setEditingPlanning(false);
     setNotice(null);
     setPlanning(null);
+    setPlanningRead(false);
     setDocuments(null);
     setDocumentsError(false);
     try {
       const control = await projects.planning(projectId, parcel.id);
       setPlanning(control);
       setPlanningForm(planningFrom(control));
+      setPlanningRead(true);
     } catch (caught) {
       // No planning recorded yet is an ordinary state, not an error.
       if (caught instanceof ApiError && caught.status === 404) {
         setPlanning(null);
         setPlanningForm(planningFrom(null));
+        setPlanningRead(true);
       } else {
         setError("Could not load planning controls.");
       }
@@ -426,8 +454,13 @@ export function LandTab({
         .includes(needle),
   );
 
+  // The register holds every parcel, so ordering the schedule is a comparison of what is on screen.
+  const { sort, toggle, sorted } = useSort(rows, readParcelColumn);
+
   const facts: RecordPageFact[] = selected
     ? [
+        { label: "Title status", value: selected.title_status ?? "Not established", tone: selected.title_status ? undefined : "muted" },
+        { label: "Zoning", value: selected.zoning ?? "Not established", tone: selected.zoning ? undefined : "muted" },
         {
           label: "Ownership share",
           value: selected.ownership_share_fraction
@@ -435,8 +468,40 @@ export function LandTab({
             : "Not recorded",
         },
         { label: "Acquired", value: businessDate(selected.acquisition_date) ?? "Not recorded" },
+        ...(selected.financials_visible
+          ? [{
+              label: "Total acquisition cost",
+              value: selected.total_acquisition_cost
+                ? money(selected.total_acquisition_cost, selected.base_currency_code)
+                : "Incomplete",
+              tone: selected.total_acquisition_cost ? undefined : ("muted" as const),
+            }]
+          : []),
       ]
     : [];
+
+  // What the parcel needs next, read from what the server has recorded on it:
+  // a planning envelope still missing, a variance the scheme depends on, or an
+  // acquisition cost the server could not total.
+  const openPlanning = () => { setSection("planning"); if (canWritePlanning) setEditingPlanning(true); };
+  const next: { text: string; action?: React.ReactNode } | undefined = !selected || !planningRead
+    ? undefined
+    : planning === null
+      ? {
+          text: "No planning envelope is recorded for this parcel; nothing downstream can rely on its coverage, floor area or height.",
+          action: canWritePlanning ? <Button small data-leaves-editor onClick={openPlanning}>Record planning</Button> : undefined,
+        }
+      : planning.variance_required
+        ? {
+            text: "A variance is required for the intended scheme.",
+            action: <Button small onClick={() => setSection("planning")}>Open planning</Button>,
+          }
+        : selected.financials_visible && !selected.total_acquisition_cost
+          ? {
+              text: "The acquisition cost is incomplete: record every cost input, using zero where no fee applies.",
+              action: canWriteLand ? <Button small data-leaves-editor onClick={() => setEditingParcel(true)}>Edit parcel</Button> : undefined,
+            }
+          : undefined;
 
   return (
     <>
@@ -467,6 +532,7 @@ export function LandTab({
           }}
           count={parcels ? { shown: rows.length, total: parcels.length, noun: "parcel" } : undefined}
           onReset={search ? () => setSearch("") : undefined}
+          actions={layout === "schedule" ? <DensitySwitch /> : undefined}
         />
 
         <div className="land-layout-controls"><Segmented label="Land presentation" value={layout} onChange={setLayout} options={[{ value: "parcels", label: "Parcels" }, { value: "schedule", label: "Schedule" }]} /></div></div>
@@ -495,30 +561,30 @@ export function LandTab({
           ) : (
             <>
             {layout === "parcels" ? <ParcelCollection parcels={rows} canSeeCost={canSeeCost} onOpen={parcel => void openParcel(parcel)} /> : <div className="land-schedule">
-            <TableScroll label="Land register" fixedFirst>
+            <TableScroll label="Land register" fixedFirst stickyHeader>
               <thead>
                 <tr>
-                  <th scope="col">Parcel</th>
-                  <th scope="col">Ownership</th>
-                  <th scope="col">Title status</th>
-                  <th scope="col">Zoning</th>
-                  <th scope="col" className="num">
+                  <SortHeader column="parcel" sort={sort} onToggle={toggle}>Parcel</SortHeader>
+                  <SortHeader column="ownership" sort={sort} onToggle={toggle}>Ownership</SortHeader>
+                  <SortHeader column="title" sort={sort} onToggle={toggle}>Title status</SortHeader>
+                  <SortHeader column="zoning" sort={sort} onToggle={toggle}>Zoning</SortHeader>
+                  <SortHeader column="area" sort={sort} onToggle={toggle} className="num">
                     Area
-                  </th>
-                  <th scope="col">Acquired</th>
+                  </SortHeader>
+                  <SortHeader column="acquired" sort={sort} onToggle={toggle}>Acquired</SortHeader>
                   {canSeeCost ? (
-                    <th scope="col" className="num">
+                    <SortHeader column="price" sort={sort} onToggle={toggle} className="num">
                       Purchase price
-                    </th>
+                    </SortHeader>
                   ) : null}
-                  <th scope="col">State</th>
+                  <SortHeader column="state" sort={sort} onToggle={toggle}>State</SortHeader>
                   <th scope="col">
                     <span className="visually-hidden">Open</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((parcel) => (
+                {sorted.map((parcel) => (
                   <tr key={parcel.id} aria-selected={selected?.id === parcel.id}>
                     <th scope="row">
                       <button
@@ -597,7 +663,9 @@ export function LandTab({
           onClose={() => setCreating(false)}
         >
           <DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(emptyParcel())} busy={busy} onDiscard={() => { setForm(emptyParcel()); }}>
-            <form onSubmit={createParcel}>
+            <form onSubmit={createParcel} className="form-layout">
+              <FormOutline sections={["Identity", "Tenure and planning identity", "Acquisition"]} />
+              <div className="form-layout-body">
               {formError ? <Notice tone="error">{formError}</Notice> : null}
               <FormSection title="Identity">
                 <FieldRow columns={2}>
@@ -630,15 +698,16 @@ export function LandTab({
                     />
                   </Field>
                   <Field label="Area unit" optional hint="Defaults to the jurisdiction's unit.">
-                    <select
-                      className="input input-short"
+                    <Segmented
+                      label="Area unit"
                       value={form.area_unit}
-                      onChange={(event) => setForm({ ...form, area_unit: event.target.value })}
-                    >
-                      <option value="">From the country pack</option>
-                      <option value="sqm">sqm</option>
-                      <option value="sqft">sqft</option>
-                    </select>
+                      onChange={(area_unit) => setForm({ ...form, area_unit })}
+                      options={[
+                        { value: "", label: "Country default" },
+                        { value: "sqm", label: "sqm" },
+                        { value: "sqft", label: "sqft" },
+                      ]}
+                    />
                   </Field>
                   <Field label="Cadastral reference" optional>
                     <input
@@ -755,14 +824,13 @@ export function LandTab({
                 </FieldRow>
               </FormSection>
 
-              <FormActions>
-                <Button variant="primary" type="submit" disabled={busy}>
-                  {busy ? "Registering…" : "Register parcel"}
-                </Button>
-                <Button data-leaves-editor onClick={() => setCreating(false)} disabled={busy}>
-                  Cancel
-                </Button>
-              </FormActions>
+              <StickyActions
+                dirty={JSON.stringify(form) !== JSON.stringify(emptyParcel())}
+                submitLabel="Register parcel"
+                busy={busy}
+                onCancel={() => setCreating(false)}
+              />
+              </div>
             </form>
           </DraftBoundary>
         </RecordPage>
@@ -797,11 +865,11 @@ export function LandTab({
               ) : null}
             </>
           }
-          headline={{
-            value: measurement(selected.land_area, selected.area_unit),
-            label: "Land area, as recorded",
+          strip={{
+            lead: { label: "Land area", value: measurement(selected.land_area, selected.area_unit), note: "As recorded on the title" },
+            items: facts,
           }}
-          facts={facts}
+          next={next}
           actions={
             canWriteLand ? (
               <Button onClick={() => setEditingParcel((open) => !open)}>
@@ -875,6 +943,14 @@ export function LandTab({
                       ? "What the land cost to acquire. Not a valuation."
                       : undefined
                   }
+                  actions={selected.financials_visible ? (
+                    <SourceNote
+                      coverage={selected.total_acquisition_cost ? "available" : "partial"}
+                      reason={selected.total_acquisition_cost ? null : "A cost input is missing, so the total is not stated."}
+                      method={ACQUISITION_METHOD}
+                      label="How the acquisition cost is totalled"
+                    />
+                  ) : undefined}
                 />
                 {selected.financials_visible ? (
                   <Position compact>
@@ -957,7 +1033,7 @@ export function LandTab({
                 <>
                   <div className="land-envelope">
                   <KeyValueGrid columns={3}>
-                    <KeyValue label="Maximum GFA" value={measurement(planning.maximum_gfa, selected.area_unit)} />
+                    <KeyValue label={<>Maximum <Tooltip term="GFA">Gross floor area: the total built floor area of the buildings.</Tooltip></>} value={measurement(planning.maximum_gfa, selected.area_unit)} />
                     <KeyValue label="Maximum floors" value={planning.maximum_floors?.toString() ?? "Not recorded"} />
                     <KeyValue label="Maximum height · recorded units" value={measurement(planning.maximum_height)} />
                     <KeyValue
@@ -995,10 +1071,13 @@ export function LandTab({
                   ) : null}
                   <SectionHeader title="Variance" />
                   {planning.variance_required ? (
-                    <Notice tone="warning">
+                    <Banner
+                      tone="warning"
+                      action={canWritePlanning ? <Button small data-leaves-editor onClick={() => setEditingPlanning(true)}>Edit planning</Button> : undefined}
+                    >
                       A variance is required for the intended scheme.
                       {planning.variance_notes ? ` ${planning.variance_notes}` : ""}
-                    </Notice>
+                    </Banner>
                   ) : (
                     <p className="subtle">
                       <StatusDot tone="success">Not required</StatusDot>
@@ -1014,7 +1093,9 @@ export function LandTab({
 
               {editingPlanning ? (
                 <DraftBoundary dirty={JSON.stringify(planningForm) !== JSON.stringify(planningFrom(planning))} busy={busy} onDiscard={() => { setPlanningForm(planningFrom(planning)); }}>
-                  <form onSubmit={savePlanning}>
+                  <form onSubmit={savePlanning} className="form-layout">
+                    <FormOutline sections={["Envelope", "Setbacks and minimums", "Variance and exclusions"]} />
+                    <div className="form-layout-body">
                     <FormSection
                       title="Envelope"
                       description="The whole envelope is written at once: a half-updated set would describe a planning position no authority granted."
@@ -1203,14 +1284,13 @@ export function LandTab({
                         />
                       </Field>
                     </FormSection>
-                    <FormActions>
-                      <Button variant="primary" type="submit" disabled={busy}>
-                        {busy ? "Saving…" : "Save planning envelope"}
-                      </Button>
-                      <Button data-leaves-editor onClick={() => setEditingPlanning(false)} disabled={busy}>
-                        Cancel
-                      </Button>
-                    </FormActions>
+                    <StickyActions
+                      dirty={JSON.stringify(planningForm) !== JSON.stringify(planningFrom(planning))}
+                      submitLabel="Save planning envelope"
+                      busy={busy}
+                      onCancel={() => setEditingPlanning(false)}
+                    />
+                    </div>
                   </form>
                 </DraftBoundary>
               ) : null}

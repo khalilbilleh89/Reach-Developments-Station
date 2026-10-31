@@ -4,6 +4,7 @@ import type { UnitPricing } from "@/lib/api";
 import type { Answer } from "@/lib/answer";
 import {
   Badge,
+  Banner,
   Button,
   ButtonRow,
   EmptyState,
@@ -100,11 +101,11 @@ export function UnitPricingSection({
   return (
     <>
       {unitPricing.repricing_required ? (
-        <Notice tone="error">
+        <Banner tone="danger">
           Repricing required. This unit has changed since its list price was set, so the price
           below is what it was offered at and no longer describes it. The unit cannot be released
           until a new price is approved and activated.
-        </Notice>
+        </Banner>
       ) : null}
 
       {pending ? (

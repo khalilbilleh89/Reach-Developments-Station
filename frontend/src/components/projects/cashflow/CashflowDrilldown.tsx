@@ -7,8 +7,12 @@ import {
   RecordPage,
   EmptyState,
   DataToolbar,
+  DensitySwitch,
+  FilterChips,
   Loading,
   Notice,
+  Segmented,
+  StatusDot,
   TableScroll,
   ToolbarFilter,
 } from "@/components/ui";
@@ -97,13 +101,15 @@ export function CashflowDrilldown({
           : "Transactions behind the figures"
       }
       subtitle="Every row is a record another module owns. Nothing here is a copy."
-      facts={
+      strip={
         answer.status === "ready"
-          ? [
-              { label: "Rows", value: String(answer.data.rows.length) },
-              { label: "Total", value: money(answer.data.total, currency) },
-              { label: "As at", value: businessDate(answer.data.basis.as_of_date) },
-            ]
+          ? {
+              lead: { label: "Total", value: money(answer.data.total, currency) },
+              items: [
+                { label: "Rows", value: String(answer.data.rows.length) },
+                { label: "As at", value: businessDate(answer.data.basis.as_of_date) },
+              ],
+            }
           : undefined
       }
       actions={
@@ -123,7 +129,7 @@ export function CashflowDrilldown({
       }
       onClose={onClose}
     >
-      <DataToolbar>
+      <DataToolbar actions={<DensitySwitch />}>
         <ToolbarFilter label="Source" active={Boolean(filters.sourceType)}>
           <select
             className="input"
@@ -160,22 +166,29 @@ export function CashflowDrilldown({
           </select>
         </ToolbarFilter>
         <ToolbarFilter label="Direction" active={Boolean(filters.flowDirection)}>
-          <select
-            className="input"
+          <Segmented
+            label="Direction"
             value={filters.flowDirection ?? ""}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                flowDirection: event.target.value || undefined,
-              }))
+            onChange={(value) =>
+              setFilters((current) => ({ ...current, flowDirection: value || undefined }))
             }
-          >
-            <option value="">In and out</option>
-            <option value="inflow">Cash in</option>
-            <option value="outflow">Cash out</option>
-          </select>
+            options={[
+              { value: "", label: "In and out" },
+              { value: "inflow", label: "Cash in" },
+              { value: "outflow", label: "Cash out" },
+            ]}
+          />
         </ToolbarFilter>
       </DataToolbar>
+      <FilterChips
+        chips={[
+          filters.category ? { key: "category", label: `Category: ${categoryLabel(filters.category)}`, onRemove: () => setFilters((current) => ({ ...current, category: undefined })) } : null,
+          filters.sourceType ? { key: "source", label: `Source: ${sourceTypeLabel(filters.sourceType)}`, onRemove: () => setFilters((current) => ({ ...current, sourceType: undefined })) } : null,
+          filters.basis ? { key: "basis", label: `Basis: ${rowBasisLabel(filters.basis)}`, onRemove: () => setFilters((current) => ({ ...current, basis: undefined })) } : null,
+          filters.flowDirection ? { key: "direction", label: filters.flowDirection === "inflow" ? "Cash in only" : "Cash out only", onRemove: () => setFilters((current) => ({ ...current, flowDirection: undefined })) } : null,
+        ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)}
+        onClearAll={() => setFilters((current) => ({ periodMonth: current.periodMonth }))}
+      />
 
       {answer.status === "loading" ? (
         <Loading label="Loading the transactions" shape="rows" />
@@ -218,7 +231,7 @@ export function CashflowDrilldown({
                     <Badge tone="neutral">{rowBasisLabel(row.basis)}</Badge>
                   </td>
                   <td>{row.flow_direction === "inflow" ? "Cash in" : "Cash out"}</td>
-                  <td>{row.status}</td>
+                  <td><StatusDot tone="neutral">{row.status}</StatusDot></td>
                   <td className="num">{money(row.amount, currency)}</td>
                 </tr>
               ))}

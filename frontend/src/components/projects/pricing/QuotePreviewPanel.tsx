@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ApiError, pricing } from "@/lib/api";
 import type { QuotePreview } from "@/lib/api";
 import {
+  Banner,
   Button,
   Card,
   Field,
@@ -15,6 +16,8 @@ import {
   InlineMetaItem,
   MoneyInput,
   Notice,
+  Position,
+  PositionFigure,
   RateInput,
   Waterfall,
   WaterfallRow,
@@ -148,11 +151,16 @@ export function QuotePreviewPanel({
       {quote ? (
         <>
           {quote.approval_required ? (
-            <Notice tone="error">
+            <Banner tone="warning">
               {quote.approval_reason}
               {quote.required_role ? ` Requires: ${quote.required_role}.` : ""}
-            </Notice>
+            </Banner>
           ) : null}
+          <Position compact>
+            <PositionFigure lead label="Net contract price" value={money(quote.net_contract_price_ex_tax, currencyCode)} note="Ex tax" />
+            <PositionFigure label="Effective net revenue" value={money(quote.effective_net_revenue_preview, currencyCode)} note="After seller costs" />
+            <PositionFigure label="Total buyer payable" value={money(quote.total_buyer_payable_preview, currencyCode)} />
+          </Position>
           <h4 className="section-heading">Contract</h4>
           <Waterfall>
             <WaterfallRow

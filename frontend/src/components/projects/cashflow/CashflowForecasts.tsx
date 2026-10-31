@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import {
   Badge,
+  Banner,
   Button,
   ButtonRow,
   Card,
@@ -19,6 +20,7 @@ import {
   PromptDialog,
   RateInput,
   SectionHeader,
+  Segmented,
   TableScroll,
 } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
@@ -125,11 +127,14 @@ export function CashflowForecasts({
         }
       >
       {canPrepare && openVersion ? (
-          <Notice tone="info">
+          <Banner
+            tone="info"
+            action={selected === openVersion.id ? undefined : <Button small onClick={() => onSelect(openVersion.id)}>Open version {openVersion.version_number}</Button>}
+          >
             Version {openVersion.version_number} ({forecastLabel(openVersion.status)}) is still open.
             Finish or close it before preparing another — two open forecasts are two answers to one
             question.
-          </Notice>
+          </Banner>
         ) : null}
         {versions.status === "loading" ? <Loading label="Loading forecasts" shape="rows" /> : null}
         {versions.status === "denied" ? (
@@ -541,7 +546,7 @@ function Staleness({
   const approved = status === "approved";
   const refreshable = FORECAST_REFRESHABLE_STATUSES.has(status);
   return (
-    <Notice tone="warning">
+    <Banner tone="warning">
       <strong>The sources this version was built on have changed.</strong> Its own
       figures are unchanged{approved ? " and are still reported exactly as approved" : ""}.
       {staleness.construction_is_stale ? (
@@ -570,7 +575,7 @@ function Staleness({
               : "This version keeps the schedule it was governed on."}
         </>
       ) : null}
-    </Notice>
+    </Banner>
   );
 }
 
@@ -794,27 +799,22 @@ function ForecastLineDialog({
     >
       <FieldRow>
         <Field label="What kind of cash">
-          <select
-            className="input"
+          <Segmented
+            label="What kind of cash"
             value={sourceKind}
-            onChange={(event) => {
-              setSourceKind(event.target.value);
+            onChange={(value) => {
+              setSourceKind(value);
               setCategory(
-                event.target.value === "construction"
+                value === "construction"
                   ? "construction"
-                  : event.target.value === "unsold_customer"
+                  : value === "unsold_customer"
                     ? "customer_collection"
                     : "",
               );
               setCostCode("");
             }}
-          >
-            {LINE_SOURCE_KINDS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={LINE_SOURCE_KINDS}
+          />
         </Field>
         <Field label="Month">
           <input

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { UnitSummary } from "@/lib/api";
 import { masterplans } from "@/lib/api/masterplans";
 import type { Footprint, Masterplan, Point, PlanInput } from "@/lib/api/masterplans";
-import { Button, Disclosure, DraftBoundary, Field, Notice, RecordPage } from "@/components/ui";
+import { Button, ChoiceCards, Disclosure, DraftBoundary, Field, Notice, RecordPage } from "@/components/ui";
 import { MasterplanCanvas } from "./MasterplanCanvas";
 
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not save. Your draft is retained.";
@@ -27,7 +27,7 @@ export function PlanEditor({ projectId, plan, onClose, onSaved }: { projectId: s
         {error ? <Notice tone="error">{error}</Notice> : null}
         <Field label="View title"><input required maxLength={200} value={values.title} onChange={e => setValues({ ...values, title: e.target.value })} /></Field>
         <Field label="Drawing reference / revision" hint="Record the drawing number, revision and date from your source."><input required maxLength={500} value={values.source_reference} onChange={e => setValues({ ...values, source_reference: e.target.value })} /></Field>
-        <Field label="View type"><select value={values.kind} onChange={e => setValues({ ...values, kind: e.target.value as Masterplan["kind"] })}><option value="plan">Plan: mapped footprints and 3D massing</option><option value="render">3D reference image: selectable hotspots</option><option value="elevation">Elevation / section: selectable hotspots</option></select></Field>
+        <ChoiceCards label="View type" name="masterplan-view-type" value={values.kind} onChange={kind => setValues({ ...values, kind: kind as Masterplan["kind"] })} options={[{ value: "plan", label: "Plan", description: "Mapped footprints and 3D massing" }, { value: "render", label: "3D reference image", description: "Selectable hotspots" }, { value: "elevation", label: "Elevation / section", description: "Selectable hotspots" }]} />
         <Field label="Full image width in metres" optional hint="For plan views only. Use the measured width of the entire uploaded page, including margins; do not enter a building width or scale denominator. Required for spatial 3D."><input type="number" min="0.0001" max="10000" step="0.0001" value={values.width_m ?? ""} onChange={e => setValues({ ...values, width_m: e.target.value || null })} /></Field>
         {!plan ? <><Field label="PDF or image" hint="PDF, PNG, JPEG or WebP; maximum 10 MiB. Originals stay unchanged."><input required type="file" accept="application/pdf,image/png,image/jpeg,image/webp" onChange={e => setFile(e.target.files?.[0] ?? null)} /></Field><Field label="PDF page" hint="Starts at 1. Upload additional pages as separate views."><input type="number" min="1" max="1000" required value={page} onChange={e => setPage(e.target.value)} /></Field></> : <p>Source file: {plan.filename}, page {plan.page_number + 1}. Upload a new view for a revised drawing so existing footprints keep their source.</p>}
         <div className="button-row"><Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : plan ? "Save drawing" : "Upload drawing"}</Button><Button data-leaves-editor onClick={onClose}>Cancel</Button></div>

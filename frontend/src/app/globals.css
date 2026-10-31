@@ -2668,8 +2668,10 @@ input[type="file"].input {
 
 .toolbar-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
+  min-width: 0;
   margin-left: auto;
   color: var(--text-muted);
   font-size: var(--text-sm);
@@ -2680,10 +2682,14 @@ input[type="file"].input {
   white-space: nowrap;
 }
 
+/* The density switch sits beside the register's actions; on a phone they wrap
+ * under each other rather than pushing the page sideways. */
 .toolbar-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+  min-width: 0;
 }
 
 /* One command row, not five separate controls: search, the two or three
@@ -6512,11 +6518,6 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .stock-property-card dd { margin: var(--space-1) 0 0; font-variant-numeric: tabular-nums; }
 .stock-property-price { border-top: 1px solid var(--line-soft); padding-top: var(--space-3); font-weight: 650; }
 .stock-property-price small { display: block; margin-top: var(--space-1); font-weight: 400; }
-.inventory-import-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0 0 var(--space-5); gap: var(--space-3); }
-.inventory-import-steps li { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border-bottom: 2px solid var(--line-default); color: var(--text-secondary); font-size: .85rem; }
-.inventory-import-steps li[aria-current="step"] { color: var(--accent); border-color: var(--accent); background: var(--surface); }
-.inventory-import-steps strong { display: grid; place-items: center; min-width: 1.6rem; height: 1.6rem; border: 1px solid currentColor; border-radius: 50%; }
-@media (max-width: 760px) { .inventory-import-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .unit-release-requirements li { padding: var(--space-2) 0; line-height: 1.5; overflow-wrap: anywhere; }
 .land-cost-breakdown > div { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line-soft); }
 .land-cost-breakdown dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
@@ -6592,8 +6593,6 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .marketing-place { padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); background-color: var(--surface-secondary); }
 .marketing-swatch { height: 5rem; border-radius: var(--radius-control); border: 1px solid var(--line-default); }
 .marketing-return { font-size: var(--metric); font-variant-numeric: tabular-nums; }
-.marketing-lead { background: var(--surface-stage); padding: var(--space-4); border-radius: var(--radius-card); display: flex; flex-direction: column; gap: var(--space-2); margin-block: var(--space-4); }
-.marketing-lead strong { font-size: var(--metric-hero); font-variant-numeric: tabular-nums; }
 .marketing-guide { display: grid; gap: var(--space-4); }
 .marketing-guide dt { font-weight: 600; }
 .marketing-guide dd { margin: 0; color: var(--text-secondary); }
@@ -6761,10 +6760,8 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .operations-stage-total strong { font-size: var(--title-page); font-variant-numeric: tabular-nums; }
 .operations-stage-total span { color: var(--text-secondary); font-size: var(--text-sm); }
 .operations-stage-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.operations-import-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); padding: var(--space-4); list-style-position: inside; background: var(--surface-secondary); }
-.operations-import-steps span { display: block; margin-top: var(--space-2); color: var(--text-secondary); }
 @media (max-width: 768px) {
-  .operations-position, .operations-import-steps { grid-template-columns: minmax(0, 1fr); }
+  .operations-position { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Module workspaces outside Development share the base primitives; this wrapper only lets wide registers shrink. */

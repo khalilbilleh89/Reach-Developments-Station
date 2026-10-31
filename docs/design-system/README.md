@@ -86,3 +86,29 @@ Every page and in-page tab (148 views, desktop and phone) was crawled and measur
 - **Type.** Titles and lead figures ran to 34–58px against a 14px body. The tokens now cap a page or record title at 26px, the project plate at 32px and the lead figure at 38px; eleven one-off sizes use the scale.
 - **Row menus (E2) everywhere.** `TableScroll` draws the three-dot menu beside any row without its own, listing the row's own links and buttons plus *Copy row*. A register that writes its own `RowMenu` keeps it. Row-level *Source basis* accordions became source notes (C1/C2).
 
+## Coverage pass (owner request, 31 Oct 2026)
+
+The first audit fixed colour, type and row menus; it did not check each catalogue entry against every screen. This pass did: every page, every in-page tab and the first record of each register (116 views) were crawled for each entry and for the legacy pattern it replaces, and every one of the 162 screen files was walked section by section.
+
+| Entry | Views using it before | After |
+| --- | --- | --- |
+| C data note | 14 | 21 |
+| E1 sortable registers | 14 | 23 |
+| E4 density switch | 3 | 55 |
+| F3 filter chips / saved views | 3 | 40 |
+| H3 steps, stage bars, rings | 6 | 9 |
+| I2 tooltips | 0 | 16 |
+| J2 segmented / choice cards | 17 | 56 |
+| K4 record strip and next line | 5 | 9 (every record page crawled) |
+| Legacy meters | 60 | 0 |
+| Record pages without a strip | 3 | 0 |
+
+G2 banners now carry the must-act conditions (setup incomplete, quote approval, signature pending, stale forecast, release and purge blockers, unapplied cash, repricing); they appear only when the condition holds. J3 section links and the sticky save bar reach every long form, including every `EditForm` with three or more groups. J4 stepped flows now drive the inventory and operations imports.
+
+Left as they are, on purpose:
+- **Short dropdowns that list data** (projects, phases, buildings, agreements, users) stay dropdowns: they grow with the data. Fixed lists of four or more long options in a toolbar stay dropdowns.
+- **Accordions holding secondary evidence** (source positions, report coverage, methods, definitions, optional extra fields, previews) stay accordions; every accordion that hid a primary table was opened.
+- **Server-paginated registers** (Sales, Inventory, Pricing, Users, Audit, Projects, Portfolio actions) are not sorted in the browser.
+- **Money distributions** (collections ageing) keep their server-share track: `CountComposition` is for counts.
+- **Undo (G1)** is offered only where a restore endpoint exists.
+

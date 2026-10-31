@@ -6,7 +6,7 @@ import { ApiError, projects } from "@/lib/api";
 import type { LandAnalytics as Analytics, LandParcel } from "@/lib/api";
 import { measurement } from "./presentation";
 import { fractionFromPercent, money, percent, percentInput } from "@/lib/format";
-import { Button, DraftBoundary, Field, FieldRow, FormActions, KeyValue, KeyValueGrid, Loading, Notice, SectionHeader, TableScroll } from "@/components/ui";
+import { Button, DraftBoundary, Field, FieldRow, FormActions, KeyValue, KeyValueGrid, Loading, Notice, Position, PositionFigure, SectionHeader, TableScroll, Tooltip } from "@/components/ui";
 
 export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
   projectId: string; parcel: LandParcel; canWrite: boolean; onChanged: () => Promise<void>;
@@ -39,11 +39,13 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
       {error ? <Notice tone="error">{error}<Button onClick={() => setAttempt(value => value + 1)}>Retry analytics</Button></Notice> : null}
       {!data && !error ? <Loading label="Calculating land analytics…" /> : null}
       {data ? <>
+        <Position compact>
+          <PositionFigure label="Purchase price" value={price(parcel.purchase_price)} />
+          <PositionFigure label="Total acquisition cost" value={price(parcel.total_acquisition_cost)} />
+          <PositionFigure label="Total land area" value={measurement(data.land_area_sqm, "sqm")} />
+          <PositionFigure label="Max buildable area" value={data.max_buildable_area_sqm === null ? "Not recorded" : measurement(data.max_buildable_area_sqm, "sqm")} note={data.max_buildable_area_sqm === null ? <>Record the maximum <Tooltip term="GFA">Gross floor area: the total floor area of the buildings on the plot.</Tooltip> in Planning</> : undefined} />
+        </Position>
         <KeyValueGrid columns={2}>
-          <KeyValue label="Purchase price" value={price(parcel.purchase_price)} />
-          <KeyValue label="Total acquisition cost" value={price(parcel.total_acquisition_cost)} />
-          <KeyValue label="Total land area" value={measurement(data.land_area_sqm, "sqm")} />
-          <KeyValue label="Max buildable area" value={data.max_buildable_area_sqm === null ? "Record Maximum GFA in Planning" : measurement(data.max_buildable_area_sqm, "sqm")} />
           <KeyValue label="Land cost per sqm · purchase price / land area" value={price(data.purchase_cost_per_sqm)} />
           <KeyValue label="Land cost per buildable sqm · purchase price / max buildable area" value={price(data.purchase_cost_per_buildable_sqm)} />
           <KeyValue label="All-in cost per sqm · total acquisition cost / land area" value={price(data.acquisition_cost_per_sqm)} />

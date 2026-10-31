@@ -6,8 +6,9 @@ import { useCallback, useEffect, useState } from "react";
 import { SalesImport } from "./SalesImport";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesAgent } from "@/lib/api";
-import { Button, DataToolbar, DraftBoundary, EmptyState, Field, FieldRow, FormActions,
-  Loading, Notice, RecordPage, RowMenu, SortHeader, TableScroll, useSort } from "@/components/ui";
+import { Button, DataToolbar, DensitySwitch, DraftBoundary, EmptyState, Field, FieldRow, FormActions,
+  Loading, Notice, RecordPage, RowMenu, SortHeader, StatusDot, TableScroll, useSort } from "@/components/ui";
+import { eventTime } from "@/lib/format";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 
 function AgentForm({projectId, agent, onSaved, onCancel}: {
@@ -80,7 +81,20 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
 
   if (importing) return <SalesImport projectId={projectId} kind="agents" onClose={() => setImporting(false)} onImported={() => { void load(); }} />;
 
-  if (editing) return <RecordPage title={editing === "new" ? "Add agent" : `Edit ${editing.display_name}`} onClose={() => setEditing(null)}>
+  const deleteAgent = (agent: SalesAgent) => <DeleteRecordButton label="agent" recordName={agent.display_name} description="This removes an Agent with no buyer, transaction, commission or attribution history. Otherwise deactivate the Agent instead. The audit trail is retained." onDelete={reason => sales.deleteAgent(projectId, agent.id, reason)} onDeleted={async () => { setEditing(null); setNotice("Unused Agent deleted."); await load(); }} />;
+
+  if (editing) return <RecordPage eyebrow="Agent" icon="user" title={editing === "new" ? "Add agent" : `Edit ${editing.display_name}`} onClose={() => setEditing(null)}
+    strip={editing === "new" ? undefined : {
+      lead: { label: "Standing", value: editing.is_active ? <StatusDot tone="success">Active</StatusDot> : <StatusDot tone="muted">Inactive</StatusDot> },
+      items: [
+        { label: "Branch", value: editing.branch ?? "Not recorded", tone: editing.branch ? undefined : "muted" },
+        { label: "Branch leader", value: editing.branch_leader ?? "Not recorded", tone: editing.branch_leader ? undefined : "muted" },
+        { label: "Country", value: editing.country ?? "Not recorded", tone: editing.country ? undefined : "muted" },
+        { label: "On the roster since", value: eventTime(editing.created_at) },
+      ],
+    }}
+    next={editing !== "new" && !editing.is_active ? { text: "This Agent is inactive and is not offered for new buyer assignments. Tick Active below to offer them again." } : undefined}
+    more={editing !== "new" && canWrite ? deleteAgent(editing) : undefined}>
     <p className="field-hint">An Agent can exist before any buyer or sale. Changes to this roster never rewrite existing transaction snapshots.</p>
     <AgentForm key={editing === "new" ? "new" : editing.id} projectId={projectId} agent={editing === "new" ? null : editing}
       onCancel={() => setEditing(null)} onSaved={async () => { setEditing(null); setNotice("Agent saved."); await load(); }} />
@@ -91,16 +105,16 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
     <DataToolbar search={{value: search, onChange: setSearch, label: "Search agents", placeholder: "Agent name"}}
       count={agents ? {shown: agents.length, noun: "agent"} : undefined}
       onReset={search ? () => setSearch("") : undefined}
-      actions={canWrite ? <><Button onClick={() => setImporting(true)}>Import from Excel</Button><Button variant="primary" onClick={() => setEditing("new")}>Add agent</Button></> : undefined} />
+      actions={<><DensitySwitch />{canWrite ? <><Button onClick={() => setImporting(true)}>Import from Excel</Button><Button variant="primary" onClick={() => setEditing("new")}>Add agent</Button></> : null}</>} />
     {agents === null ? (error ? null : <Loading label="Loading Agents…" />) : agents.length === 0 ?
       <EmptyState title="No agents registered" hint="Add an Agent before assigning one to a buyer. Buyers may also have no Agent." /> :
       <TableScroll label="Project Agents" fixedFirst>
         <thead><tr><SortHeader column="agent" sort={sort} onToggle={toggle}>Agent</SortHeader><SortHeader column="country" sort={sort} onToggle={toggle}>Country</SortHeader><SortHeader column="branch" sort={sort} onToggle={toggle}>Branch</SortHeader><SortHeader column="leader" sort={sort} onToggle={toggle}>Branch leader</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
         <tbody>{sorted.map(agent => <tr key={agent.id}>
           <th scope="row">{agent.display_name}</th><td>{agent.country ?? "—"}</td><td>{agent.branch ?? "—"}</td><td>{agent.branch_leader ?? "—"}</td>
-          <td>{agent.is_active ? "Active" : "Inactive"}</td>
+          <td>{agent.is_active ? <StatusDot tone="success">Active</StatusDot> : <StatusDot tone="muted">Inactive</StatusDot>}</td>
           {canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${agent.display_name}`}><Button onClick={() => setEditing(agent)}>Edit agent</Button>
-            <DeleteRecordButton label="agent" recordName={agent.display_name} description="This removes an Agent with no buyer, transaction, commission or attribution history. Otherwise deactivate the Agent instead. The audit trail is retained." onDelete={reason => sales.deleteAgent(projectId, agent.id, reason)} onDeleted={async () => { setNotice("Unused Agent deleted."); await load(); }} />
+            {deleteAgent(agent)}
           </RowMenu></td> : null}
         </tr>)}</tbody>
       </TableScroll>}

@@ -23,7 +23,8 @@ export function KeyValue({
   value,
   mono,
 }: {
-  label: string;
+  /** Text, or text with a `Tooltip` term in it (design system I2). */
+  label: ReactNode;
   value: ReactNode;
   mono?: boolean;
 }) {
@@ -168,7 +169,8 @@ export function PositionFigure({
   lead,
   tone = "neutral",
 }: {
-  label: string;
+  /** Text, or text with a `Tooltip` term in it (design system I2). */
+  label: ReactNode;
   value: ReactNode;
   note?: ReactNode;
   /** The single figure the composition is built around. */

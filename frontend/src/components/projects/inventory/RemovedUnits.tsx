@@ -9,9 +9,10 @@ import { UnitPermanentDeletionAction } from "./UnitRemovalAction";
 import { UnitPurgePage } from "./UnitPurgePage";
 import {
   Button, Card, DataToolbar, EmptyState, Loading, Notice, PromptDialog,
-  RecordPage, TableScroll,
+  RecordPage, StatusDot, TableScroll,
   RowMenu,
 } from "@/components/ui";
+import { statusLabel, statusTone } from "./statusLabels";
 
 const PAGE = 50;
 
@@ -90,7 +91,7 @@ export function RemovedUnits({ projectId, onClose, onRestored }: {
         </tr></thead><tbody>{rows.map(unit => <tr key={unit.id}>
           <th scope="row"><div>{unit.unit_reference}</div><div className="subtle">Number {unit.unit_number}</div></th>
           <td>{[unit.phase_code, unit.building_code, unit.floor_code].filter(Boolean).join(" / ")}</td>
-          <td>{unit.commercial_status.replaceAll("_", " ")}</td>
+          <td><StatusDot tone={statusTone(unit.commercial_status)}>{statusLabel(unit.commercial_status)}</StatusDot></td>
           <td>{new Date(unit.removed_at).toLocaleString()}</td>
           <td className="row-menu-cell"><RowMenu label="More actions"><Button disabled={busy} onClick={() => { setSelected(unit); setRestoreError(null); }}>Restore {unit.unit_reference}</Button>
             <UnitPermanentDeletionAction projectId={projectId} unitId={unit.id} reference={unit.unit_reference}

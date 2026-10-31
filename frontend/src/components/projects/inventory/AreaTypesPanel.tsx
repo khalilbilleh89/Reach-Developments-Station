@@ -14,14 +14,30 @@ import {
   FormActions,
   FormSection,
   Notice,
+  SortHeader,
   StatusDot,
   TableScroll,
   RowMenu,
+  useSort,
 } from "@/components/ui";
 
 import { PHYSICAL_COMPONENTS } from "@/components/projects/inventory/unit/PhysicalRecord";
 
 const ROLES = ["internal", "outdoor", "ancillary", "plot", "gross", "other"];
+
+/** Orders the area types already on screen; every value compared is the server's. */
+function readAreaType(areaType: AreaType, column: string): string | null {
+  switch (column) {
+    case "code": return areaType.code;
+    case "label": return areaType.label;
+    case "role": return areaType.area_role;
+    case "unit": return areaType.unit_of_measure;
+    case "factor": return areaType.weight_factor;
+    case "required": return areaType.required_for_release ? "Required" : "Optional";
+    case "state": return areaType.is_active ? "Active" : "Retired";
+    default: return null;
+  }
+}
 
 /**
  * How a project measures its units, and how much of each area it sells.
@@ -52,6 +68,7 @@ export function AreaTypesPanel({
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { sort, toggle: toggleSort, sorted } = useSort(areaTypes, readAreaType);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -98,23 +115,21 @@ export function AreaTypesPanel({
         <TableScroll label="Configured area types" compact>
           <thead>
             <tr>
-              <th scope="col">Code</th>
-              <th scope="col">Label</th>
-              <th scope="col">Role</th>
+              <SortHeader column="code" sort={sort} onToggle={toggleSort}>Code</SortHeader>
+              <SortHeader column="label" sort={sort} onToggle={toggleSort}>Label</SortHeader>
+              <SortHeader column="role" sort={sort} onToggle={toggleSort}>Role</SortHeader>
               <th scope="col">Gross component</th>
-              <th scope="col">Unit</th>
-              <th scope="col" className="num">
-                Factor
-              </th>
-              <th scope="col">Required for release</th>
-              <th scope="col">State</th>
+              <SortHeader column="unit" sort={sort} onToggle={toggleSort}>Unit</SortHeader>
+              <SortHeader column="factor" sort={sort} onToggle={toggleSort} className="num">Factor</SortHeader>
+              <SortHeader column="required" sort={sort} onToggle={toggleSort}>Required for release</SortHeader>
+              <SortHeader column="state" sort={sort} onToggle={toggleSort}>State</SortHeader>
               <th scope="col">
                 <span className="visually-hidden">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {areaTypes.map((areaType) => (
+            {sorted.map((areaType) => (
               <tr key={areaType.id}>
                 <th scope="row" className="mono">
                   {areaType.code}

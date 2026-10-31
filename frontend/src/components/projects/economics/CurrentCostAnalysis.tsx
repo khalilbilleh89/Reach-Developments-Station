@@ -6,7 +6,7 @@ import type { AreaType, CurrentCostAnalysis as Analysis, CurrentCostSettings, Cu
 import { useAnswer } from "@/lib/answer";
 import { ECONOMICS_READERS, hasAnyRole } from "@/lib/roles";
 import { businessDate, fractionFromPercent, money, percent, percentInput } from "@/lib/format";
-import { Button, ButtonRow, Card, DraftBoundary, EmptyState, Field, FieldRow, KeyValue, KeyValueGrid, Loading, MoneyInput, Notice, RateInput, RecordPage, TableScroll, Tabs } from "@/components/ui";
+import { Button, ButtonRow, Card, DataToolbar, DensitySwitch, DraftBoundary, EmptyState, Field, FieldRow, FilterChips, KeyValue, KeyValueGrid, Loading, MoneyInput, Notice, RateInput, RecordPage, SortHeader, SourceNote, TableScroll, Tabs, ToolbarFilter, useSort } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 const COST_LINES = [
@@ -18,6 +18,20 @@ const COST_LINES = [
   ["profit_before_tax", "Profit before tax"], ["tax_amount", "Estimated profit tax"],
   ["net_profit", "Estimated net profit"],
 ] as const;
+
+/** The breakdown table's columns: the key each sorts on, and its heading. */
+const BREAKDOWN_COLUMNS = [
+  ["label", "Unit / group"], ["basis", "Revenue basis"], ["gross_area_sqm", "Gross built sqm"], ["hard_cost_per_sqm", "Build cost / sqm"],
+  ["total_cost", "Total cost"], ["total_cost_per_sqm", "Total cost / sqm"], ["revenue", "Sale / forecast"], ["profit_before_tax", "Pre-tax profit"],
+  ["tax_amount", "Profit tax"], ["net_profit", "Net profit estimate"],
+] as const;
+type BreakdownRow = { key: string; label: string; figures: CurrentCostFigures; unit?: CurrentUnitCost; basis: string };
+/** Orders the rows already on screen; every value compared is the server's. */
+function readBreakdownColumn(row: BreakdownRow, column: string): string | null {
+  if (column === "label") return row.label;
+  if (column === "basis") return row.basis;
+  return row.figures[column as keyof CurrentCostFigures] ?? null;
+}
 
 /** A single server answer shared by Construction and Unit Economics. */
 
@@ -40,21 +54,31 @@ export function AnalysisView({ report, projectId, canWrite, onRefresh }: { repor
   const [editing, setEditing] = useState(false);
   const [building, setBuilding] = useState("");
   const code = report.currency_code || null;
+  const rows: BreakdownRow[] = level === "units"
+    ? report.units.filter(r => !building || r.building_id === building).map(r => ({ key: r.unit_id, label: r.unit_reference, figures: r, unit: r, basis: r.revenue_basis === "sold" ? "Signed sale" : r.revenue_basis === "asking_price" ? "Asking-price forecast" : "Revenue unavailable" }))
+    : (level === "floors" ? report.floors : report.buildings).filter(r => !building || r.building_id === building).map(r => ({ key: r.id, label: r.label, figures: r, basis: `${r.sold_count} sold / ${r.unit_count} units` }));
+  const { sort, toggle, sorted } = useSort(rows, readBreakdownColumn);
+  const buildingName = report.buildings.find(r => r.id === building)?.label;
   if (editing) return <SettingsEditor projectId={projectId} settings={report.settings} code={code} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onRefresh(); }} />;
-  if (selected) return <RecordPage title={`Cost of ${selected.unit_reference}`} onClose={() => setSelected(null)}>
+  if (selected) return <RecordPage title={`Cost of ${selected.unit_reference}`} subtitle={`${selected.building_name} / ${selected.floor_name} · ${selected.gross_area_sqm ?? "Area unavailable"} sqm · ${selected.revenue_basis === "sold" ? "Signed sale" : "Unsold forecast"}`} onClose={() => setSelected(null)}
+    strip={{
+      lead: { label: "Estimated net profit", value: money(selected.net_profit, code), tone: selected.net_profit === null ? "muted" : selected.net_profit.startsWith("-") ? "danger" : undefined },
+      items: [
+        { label: "Total unit cost", value: money(selected.total_cost, code) },
+        { label: "Sale / asking price", value: money(selected.revenue, code), note: "Excluding VAT" },
+        { label: "Construction cost / sqm", value: money(selected.hard_cost_per_sqm, code) },
+        { label: "Total cost / sqm", value: money(selected.total_cost_per_sqm, code) },
+      ],
+    }}
+    next={report.issues.length || selected.issues.length ? { text: "Inputs are missing for this unit. They are listed below; the figures they affect stay unavailable until they are recorded." } : undefined}>
     <div className="stack">
-      <p>{selected.building_name} / {selected.floor_name} · {selected.gross_area_sqm ?? "Area unavailable"} sqm · {selected.revenue_basis === "sold" ? "Signed sale" : "Unsold forecast"}</p>
-      <KeyValueGrid><KeyValue label="Construction cost / sqm" value={money(selected.hard_cost_per_sqm, code)} /><KeyValue label="Total cost / sqm" value={money(selected.total_cost_per_sqm, code)} /></KeyValueGrid>
       <Card title="Unit cost and profit breakdown"><KeyValueGrid>{COST_LINES.map(([key, label]) => <KeyValue key={key} label={label} value={money(selected[key], code)} />)}</KeyValueGrid></Card>
       <p>Commission basis: {selected.commission_basis}. Shared costs follow gross built area. Profit tax applies to positive profit only, with no assumed credit for losses.</p>
       <IssueList issues={[...report.issues, ...selected.issues]} />
     </div>
   </RecordPage>;
-  const rows: { key: string; label: string; figures: CurrentCostFigures; unit?: CurrentUnitCost; basis: string }[] = level === "units"
-    ? report.units.filter(r => !building || r.building_id === building).map(r => ({ key: r.unit_id, label: r.unit_reference, figures: r, unit: r, basis: r.revenue_basis === "sold" ? "Signed sale" : r.revenue_basis === "asking_price" ? "Asking-price forecast" : "Revenue unavailable" }))
-    : (level === "floors" ? report.floors : report.buildings).filter(r => !building || r.building_id === building).map(r => ({ key: r.id, label: r.label, figures: r, basis: `${r.sold_count} sold / ${r.unit_count} units` }));
   return <div className="stack">
-    <Card title="Current unit costs and profit" description={`As at ${businessDate(report.as_of_date)} · ${code ?? "Currency unavailable"} · costs and revenue excluding VAT.`} actions={<ButtonRow><Button onClick={onRefresh}>Refresh analysis</Button>{canWrite ? <Button onClick={() => setEditing(true)}>{report.settings ? "Edit cost inputs & tax" : "Set cost inputs & tax"}</Button> : null}</ButtonRow>}>
+    <Card title="Current unit costs and profit" description={`As at ${businessDate(report.as_of_date)} · ${code ?? "Currency unavailable"} · costs and revenue excluding VAT.`} actions={<ButtonRow><SourceNote chip coverage={report.project.cost_complete_count === 0 ? "unavailable" : report.project.cost_complete_count === report.project.unit_count && report.project.net_profit_complete_count === report.project.unit_count ? "available" : "partial"} sampleSize={report.project.unit_count} sampleNoun="units" reason={`Cost is complete for ${report.project.cost_complete_count} of ${report.project.unit_count} units and net profit for ${report.project.net_profit_complete_count}.`} method={<>Cost coverage: {report.project.cost_complete_count} of {report.project.unit_count} units. Net profit coverage: {report.project.net_profit_complete_count} of {report.project.unit_count}. Missing inputs remain unavailable. These are current management estimates; approved historical sale allocations remain in the Approved basis view.</>} /><Button onClick={onRefresh}>Refresh analysis</Button>{canWrite ? <Button onClick={() => setEditing(true)}>{report.settings ? "Edit cost inputs & tax" : "Set cost inputs & tax"}</Button> : null}</ButtonRow>}>
       <KeyValueGrid>
         <KeyValue label="Construction cost / sqm" value={money(report.project.hard_cost_per_sqm, code)} />
         <KeyValue label="Total project cost" value={money(report.project.total_cost, code)} />
@@ -64,12 +88,14 @@ export function AnalysisView({ report, projectId, canWrite, onRefresh }: { repor
         <KeyValue label="Estimated net profit · sold + forecast" value={money(report.project.net_profit, code)} />
       </KeyValueGrid>
       <p>Area basis: {report.gross_area_label ?? "Not selected"}. Profit tax: {percent(report.settings?.profit_tax_rate_fraction)}. Commission provision: {percent(report.settings?.commission_rate_fraction)}.</p>
-      <p className="footnote">Cost coverage: {report.project.cost_complete_count} of {report.project.unit_count} units. Net profit coverage: {report.project.net_profit_complete_count} of {report.project.unit_count}. Missing inputs remain unavailable. These are current management estimates; approved historical sale allocations remain in the Approved basis view.</p>
     </Card>
     <IssueList issues={report.issues} />
     <Tabs label="Cost breakdown level" tabs={[{ key: "units", label: "Units" }, { key: "floors", label: "Floors" }, { key: "buildings", label: "Buildings" }]} active={level} onSelect={setLevel} />
-    <Field label="Building"><select className="input" value={building} onChange={e => setBuilding(e.target.value)}><option value="">All buildings</option>{report.buildings.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></Field>
-    <TableScroll label="Current cost and profit breakdown"><thead><tr>{["Unit / group", "Revenue basis", "Gross built sqm", "Build cost / sqm", "Total cost", "Total cost / sqm", "Sale / forecast", "Pre-tax profit", "Profit tax", "Net profit estimate"].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(({ key, label, figures: r, unit, basis }) => <tr key={key}>
+    <DataToolbar count={{ shown: rows.length, noun: level === "units" ? "unit" : level === "floors" ? "floor" : "building" }} onReset={building ? () => setBuilding("") : undefined} actions={<DensitySwitch />}>
+      <ToolbarFilter label="Building" active={building !== ""}><select className="input" value={building} onChange={e => setBuilding(e.target.value)}><option value="">All buildings</option>{report.buildings.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></ToolbarFilter>
+    </DataToolbar>
+    <FilterChips chips={buildingName ? [{ key: "building", label: `Building: ${buildingName}`, onRemove: () => setBuilding("") }] : []} />
+    <TableScroll label="Current cost and profit breakdown"><thead><tr>{BREAKDOWN_COLUMNS.map(([column, label]) => <SortHeader key={column} column={column} sort={sort} onToggle={toggle}>{label}</SortHeader>)}</tr></thead><tbody>{sorted.map(({ key, label, figures: r, unit, basis }) => <tr key={key}>
       <th scope="row">{unit ? <Button variant="quiet" onClick={() => setSelected(unit)}>{label}</Button> : label}</th><td>{basis}</td><td>{r.gross_area_sqm ?? "Unavailable"}</td>
       {(["hard_cost_per_sqm", "total_cost", "total_cost_per_sqm", "revenue", "profit_before_tax", "tax_amount", "net_profit"] as const).map(field => <td key={field}>{money(r[field], code)}</td>)}
     </tr>)}</tbody></TableScroll>

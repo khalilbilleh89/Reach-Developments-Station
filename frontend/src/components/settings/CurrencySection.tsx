@@ -8,10 +8,13 @@ import {
   Button,
   Card,
   DataToolbar,
+  DensitySwitch,
   EmptyState,
   Field,
   FieldRow,
+  FilterChips,
   FormDialog,
+  InlineEdit,
   Loading,
   Notice,
   PromptDialog,
@@ -137,8 +140,9 @@ export function CurrencySection() {
         framed
         search={{ value: search, onChange: setSearch, placeholder: "Code or name", label: "Search currencies" }}
         count={answer.status === "ready" ? { shown: shown.length, total: rows.length, noun: "currency", plural: "currencies" } : undefined}
-        actions={<Button variant="primary" onClick={() => { setError(null); setAdding(true); }}>Add currency</Button>}
+        actions={<><DensitySwitch /><Button variant="primary" onClick={() => { setError(null); setAdding(true); }}>Add currency</Button></>}
       />
+      <FilterChips chips={search ? [{ key: "search", label: `“${search}”`, onRemove: () => setSearch("") }] : []} />
 
       <Card flush>
         {answer.status === "loading" ? <Loading label="Loading currencies…" shape="rows" /> : null}
@@ -154,7 +158,19 @@ export function CurrencySection() {
             <tbody>{sorted.map(currency => (
               <tr key={currency.id}>
                 <th scope="row"><strong>{currency.code}</strong><span className="cell-secondary">{currency.name}</span></th>
-                <td>{currency.symbol ?? "—"}</td>
+                <td>
+                  {/* The registry's own symbol update (E3): one field, the server's answer shown. */}
+                  <InlineEdit
+                    label={`${currency.code} symbol`}
+                    value={currency.symbol ?? ""}
+                    display={currency.symbol ?? "—"}
+                    onSave={async (value) => {
+                      await settings.updateCurrency(currency.id, { symbol: value.trim() || null });
+                      setNotice("Currency symbol updated across the shared registry.");
+                      answer.retry();
+                    }}
+                  />
+                </td>
                 <td className="figure">{currency.minor_units}</td>
                 <td><Badge tone={currency.is_active ? "success" : "neutral"}>{currency.is_active ? "Active" : "Inactive"}</Badge></td>
                 <td className="row-menu-cell"><RowMenu label={`Actions for ${currency.code}`}><Button onClick={() => { setError(null); setSymbol(currency.symbol ?? ""); setEditing(currency); }}>Edit symbol</Button><Button variant="danger" onClick={() => { setError(null); setRemoving(currency); }}>Delete</Button></RowMenu></td>
