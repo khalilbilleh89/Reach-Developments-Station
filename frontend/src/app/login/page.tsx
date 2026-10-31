@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, auth } from "@/lib/api";
 import { Button, Field, Notice } from "@/components/ui";
+import { SignInFrame } from "@/components/shell/SignInFrame";
 
 /**
  * Sign-in.
@@ -45,58 +46,44 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="shell">
-      <main className="signin">
-        <div className="signin-brand">
-          <span className="brand-mark" aria-hidden="true">
-            R
-          </span>
-          <span>
-            <span className="signin-brand-name">Reach</span>
-            <br />
-            <span className="signin-brand-sub">Developments Station</span>
-          </span>
-        </div>
-        <div className="panel">
-          <h1 className="panel-title">Sign in</h1>
-          <p className="panel-lead">Real estate development tracking and financial control.</p>
+    <SignInFrame foot="No account is created automatically. An administrator issues access.">
+      <div className="panel">
+        <h1 className="panel-title">Sign in</h1>
+        <p className="panel-lead">Real estate development tracking and financial control.</p>
 
-          <form onSubmit={submit} noValidate>
-            <Field label="Email">
-              <input
-                className="input"
-                type="email"
-                name="email"
-                autoComplete="username"
-                autoFocus
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </Field>
-            <Field label="Password">
-              <input
-                className="input"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </Field>
+        <form onSubmit={submit} noValidate>
+          <Field label="Email">
+            <input
+              className="input"
+              type="email"
+              name="email"
+              autoComplete="username"
+              autoFocus
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              className="input"
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </Field>
 
-            {error ? <Notice tone="error">{error}</Notice> : null}
+          {error ? <Notice tone="error">{error}</Notice> : null}
 
-            <Button variant="primary" block type="submit" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in"}
-            </Button>
-          </form>
-        </div>
-        <p className="signin-foot">
-          No account is created automatically. An administrator issues access.
-        </p>
-      </main>
-    </div>
+          <Button variant="primary" block type="submit" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
+          </Button>
+          <p className="signin-hint">Forgot your password? Ask an administrator to reset it.</p>
+        </form>
+      </div>
+    </SignInFrame>
   );
 }
