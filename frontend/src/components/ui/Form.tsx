@@ -337,6 +337,7 @@ export function StickyActions({
   dirty,
   submitLabel,
   busy,
+  disabled,
   onCancel,
 }: {
   note?: string;
@@ -344,6 +345,8 @@ export function StickyActions({
   dirty?: boolean;
   submitLabel: string;
   busy?: boolean;
+  /** The save cannot run yet (say why in `note`); Cancel stays available. */
+  disabled?: boolean;
   onCancel?: () => void;
 }) {
   return (
@@ -360,7 +363,7 @@ export function StickyActions({
           Cancel
         </Button>
       ) : null}
-      <Button variant="primary" type="submit" disabled={busy}>
+      <Button variant="primary" type="submit" disabled={busy || disabled}>
         {busy ? "Saving…" : submitLabel}
       </Button>
     </div>

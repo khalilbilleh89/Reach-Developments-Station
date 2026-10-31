@@ -321,8 +321,8 @@ function Returns({
       </div>
       <SectionHeader title="Basis" />
       <KeyValueGrid columns={2}>
-        <KeyValue label="NPV basis" value={returns.npv_basis.replace(/_/g, " ")} />
-        <KeyValue label="Equity IRR basis" value={returns.equity_irr_basis.replace(/_/g, " ")} />
+        <KeyValue label={<><Tooltip term="NPV">Net present value: future cash flows discounted back to today.</Tooltip> basis</>} value={returns.npv_basis.replace(/_/g, " ")} />
+        <KeyValue label={<>Equity <Tooltip term="IRR">Internal rate of return: the yearly return at which the cash flows break even.</Tooltip> basis</>} value={returns.equity_irr_basis.replace(/_/g, " ")} />
       </KeyValueGrid>
     </Card>
   );

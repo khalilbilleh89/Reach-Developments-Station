@@ -597,6 +597,7 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
                 note={configurationMissing ? "Add the missing configuration to create the project." : undefined}
                 submitLabel="Create project"
                 busy={busy}
+                disabled={configurationMissing}
                 onCancel={() => setCreating(false)}
               />
               </div>

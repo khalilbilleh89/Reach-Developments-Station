@@ -41,6 +41,7 @@ import {
   StickyActions,
   TableScroll,
   useSort,
+  Tooltip,
 } from "@/components/ui";
 import type { RecordPageFact } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
@@ -1032,7 +1033,7 @@ export function LandTab({
                 <>
                   <div className="land-envelope">
                   <KeyValueGrid columns={3}>
-                    <KeyValue label="Maximum GFA" value={measurement(planning.maximum_gfa, selected.area_unit)} />
+                    <KeyValue label={<>Maximum <Tooltip term="GFA">Gross floor area: the total built floor area of the buildings.</Tooltip></>} value={measurement(planning.maximum_gfa, selected.area_unit)} />
                     <KeyValue label="Maximum floors" value={planning.maximum_floors?.toString() ?? "Not recorded"} />
                     <KeyValue label="Maximum height · recorded units" value={measurement(planning.maximum_height)} />
                     <KeyValue

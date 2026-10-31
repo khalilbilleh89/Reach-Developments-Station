@@ -51,6 +51,7 @@ import { Disclosure,
   TimelineItem,
   Waterfall,
   WaterfallRow,
+  Tooltip,
 } from "@/components/ui";
 import type { WorkspaceFact } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
@@ -788,7 +789,7 @@ export function SaleWorkspace({
 
       {activeSection === "agent" && (sale?.sale ?? terms) ? <SaleAgent key={sale?.sale.id ?? terms!.id} projectId={projectId} record={(sale?.sale ?? terms)!} isSale={!!sale} canWrite={roles.has("master_admin") || roles.has("sales_operations") || roles.has("sales_advisor")} onChanged={load} /> : null}
       {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} onChanged={load} priceReadError={error} /> : null}
-      {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader level={2} title="SPA payment schedule" /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /></section> : null}
+      {(activeSection === "overview" || activeSection === "plan") && sale ? <section className="workspace-schedule-summary"><SectionHeader level={2} title={<><Tooltip term="SPA">Sale and Purchase Agreement: the signed contract between the buyer and the developer.</Tooltip> payment schedule</>} /><PlanSummary compact={activeSection === "overview"} projectId={projectId} saleId={sale.sale.id} roles={roles} saleStatus={sale.sale.status} onOpenPlan={(id) => router.push(recordHref("payment-plan", id))} /></section> : null}
 
       {activeSection === "commercial" && terms ? (
         <>
