@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sectionIcon } from "@/components/shell/navigation";
 import { ApiError } from "@/lib/api";
 import { emails } from "@/lib/api/emails";
 import type { Email, EmailCategory } from "@/lib/api/emails";
@@ -31,7 +32,7 @@ export function EmailsTab({projectId, roles}: {projectId: string; roles: Set<str
   const needle = search.trim().toLocaleLowerCase();
   const rows = answer.data.items.filter(row => row.category === category && `${row.title}\n${row.subject}\n${row.body}`.toLocaleLowerCase().includes(needle));
   return <div className="stack">
-    <PageHeader title="Emails" subtitle="Save templates, customize a response, then copy it into your email app." compact actions={answer.data.can_edit ? <Button variant="primary" onClick={() => setEditor("new")}>Add template</Button> : undefined} />
+    <PageHeader icon={sectionIcon("emails")} title="Emails" subtitle="Save templates, customize a response, then copy it into your email app." compact actions={answer.data.can_edit ? <Button variant="primary" onClick={() => setEditor("new")}>Add template</Button> : undefined} />
     <Tabs label="Email categories" tabs={categories} active={category} onSelect={value => setCategory(value as EmailCategory)} />
     <TabPanel group="Email categories" tab={category}>
       <DataToolbar search={{value: search, onChange: setSearch, label: "Search email templates", placeholder: "Search title, subject or body…"}} onReset={search ? () => setSearch("") : undefined} />

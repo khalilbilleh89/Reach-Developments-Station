@@ -6,13 +6,14 @@ import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
 import { ApiError, projects } from "@/lib/api";
 import type { DocumentReference, LandParcel, Permit } from "@/lib/api";
 import { sectionDescription } from "@/components/shell/navigation";
-import { Button, Card, EmptyState, ExternalLink, Field, FieldRow, FormActions, IdentityCell, Loading, Notice, PageHeader, RecordPage, RowMenu, StatusDot, TableScroll } from "@/components/ui";
+import { Button, Card, EmptyState, ExternalLink, Field, FieldRow, FormActions, IdentityCell, Loading, Notice, PageHeader, RecordPage, RowMenu, SortHeader, StatusDot, TableScroll, useSort } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 
 type DocumentType = { id: string; code: string; label: string; is_active: boolean; removable: boolean };
 const blank = { title: "", document_type_code: "", external_url: "", reference_number: "", attach_to: "" };
+const NO_DOCUMENTS: DocumentReference[] = [];
 const message = (caught: unknown) => caught instanceof ApiError || caught instanceof Error ? caught.message : "Could not save the document.";
 
 export function DocumentsTab({ projectId, canWrite }: { projectId: string; canWrite: boolean }) {
@@ -73,8 +74,20 @@ export function DocumentsTab({ projectId, canWrite }: { projectId: string; canWr
       await loadChoices(); setForm(v => ({ ...v, document_type_code: saved.code })); setTypeName(""); setNotice("Document type added.");
     } catch (caught) { setError(message(caught)); } finally { setBusy(false); }
   };
-  const typeLabel = (code: string) => types.find(v => v.code === code)?.label ?? code;
-  const attachment = (row: DocumentReference) => row.parcel_id ? `Plot ${parcels.find(v => v.id === row.parcel_id)?.plot_number ?? "—"}` : row.permit_id ? permits.find(v => v.id === row.permit_id)?.permit_code ?? "Permit" : "Project";
+  const typeLabel = useCallback((code: string) => types.find(v => v.code === code)?.label ?? code, [types]);
+  const attachment = useCallback((row: DocumentReference) => row.parcel_id ? `Plot ${parcels.find(v => v.id === row.parcel_id)?.plot_number ?? "—"}` : row.permit_id ? permits.find(v => v.id === row.permit_id)?.permit_code ?? "Permit" : "Project", [parcels, permits]);
+  // Ordering the register already on screen by the text each column shows.
+  const readDocumentColumn = useCallback((row: DocumentReference, column: string): string | null => {
+    switch (column) {
+      case "document": return row.title;
+      case "type": return typeLabel(row.document_type_code);
+      case "reference": return row.reference_number;
+      case "supports": return attachment(row);
+      case "state": return row.is_active ? "Current" : "Superseded";
+      default: return null;
+    }
+  }, [typeLabel, attachment]);
+  const { sort, toggle, sorted } = useSort(rows ?? NO_DOCUMENTS, readDocumentColumn);
   const fields: EditField[] = [
     { name: "title", label: "Title" },
     { name: "document_type_code", label: "Document type", kind: "select", options: types.filter(v => v.is_active || v.code === editing?.document_type_code).map(v => ({ value: v.code, label: v.label })) },
@@ -91,7 +104,7 @@ export function DocumentsTab({ projectId, canWrite }: { projectId: string; canWr
   return <>
     <PageHeader icon="documents" title="Documents" subtitle={sectionDescription("documents")} compact actions={canWrite ? <div className="row-actions"><Button onClick={() => { setError(null); setManagingTypes(true); }}>Document types</Button><Button variant="primary" onClick={() => { reset(); setCreating(true); }}>New document</Button></div> : undefined} />
     <div className="stack">{!creating && !editing && !managingTypes ? alerts : null}
-      {readError ? <><Notice tone="error">{readError}</Notice><Button onClick={() => { void load(); void loadChoices(); }}>Retry documents</Button></> : rows === null ? <Loading label="Loading documents…" shape="rows" rows={4} /> : <Card flush>{rows.length === 0 ? <EmptyState title="No documents" hint="Add a link or upload a PDF supporting this project's records." /> : <TableScroll fixedFirst label="Document references"><thead><tr><th scope="col">Document</th><th scope="col">Type</th><th scope="col">Reference</th><th scope="col">Supports</th><th scope="col">State</th><th scope="col">Open</th>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead><tbody>{rows.map(row => <tr key={row.id}><th scope="row"><IdentityCell name={row.title} meta={row.filename ?? row.notes ?? undefined} /></th><td>{typeLabel(row.document_type_code)}</td><td>{row.reference_number ?? "—"}</td><td>{attachment(row)}</td><td><StatusDot tone={row.is_active ? "success" : "muted"}>{row.is_active ? "Current" : "Superseded"}</StatusDot></td><td>{row.filename ? <Button small onClick={() => { void projects.downloadDocument(projectId, row).catch(caught => setError(message(caught))); }}>Download PDF</Button> : row.external_url ? <ExternalLink href={row.external_url}>Open</ExternalLink> : "—"}</td>{canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${row.title}`}><Button onClick={() => { setError(null); setEditing(row); }}>Edit</Button><Button onClick={() => { void projects.updateDocument(projectId, row.id, { is_active: !row.is_active }).then(load).catch(caught => setError(message(caught))); }}>{row.is_active ? "Supersede" : "Restore"}</Button><DeleteRecordButton label="document" recordName={row.title} confirmLabel="Delete document" description="Remove this document from the register. Its evidence and audit history are retained." onDelete={reason => projects.deleteDocument(projectId, row.id, reason)} onDeleted={load} /></RowMenu></td> : null}</tr>)}</tbody></TableScroll>}</Card>}
+      {readError ? <><Notice tone="error">{readError}</Notice><Button onClick={() => { void load(); void loadChoices(); }}>Retry documents</Button></> : rows === null ? <Loading label="Loading documents…" shape="rows" rows={4} /> : <Card flush>{rows.length === 0 ? <EmptyState title="No documents" hint="Add a link or upload a PDF supporting this project's records." /> : <TableScroll fixedFirst label="Document references"><thead><tr><SortHeader column="document" sort={sort} onToggle={toggle}>Document</SortHeader><SortHeader column="type" sort={sort} onToggle={toggle}>Type</SortHeader><SortHeader column="reference" sort={sort} onToggle={toggle}>Reference</SortHeader><SortHeader column="supports" sort={sort} onToggle={toggle}>Supports</SortHeader><SortHeader column="state" sort={sort} onToggle={toggle}>State</SortHeader><th scope="col">Open</th>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead><tbody>{sorted.map(row => <tr key={row.id}><th scope="row"><IdentityCell name={row.title} meta={row.filename ?? row.notes ?? undefined} /></th><td>{typeLabel(row.document_type_code)}</td><td>{row.reference_number ?? "—"}</td><td>{attachment(row)}</td><td><StatusDot tone={row.is_active ? "success" : "muted"}>{row.is_active ? "Current" : "Superseded"}</StatusDot></td><td>{row.filename ? <Button small onClick={() => { void projects.downloadDocument(projectId, row).catch(caught => setError(message(caught))); }}>Download PDF</Button> : row.external_url ? <ExternalLink href={row.external_url}>Open</ExternalLink> : "—"}</td>{canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${row.title}`}><Button onClick={() => { setError(null); setEditing(row); }}>Edit</Button><Button onClick={() => { void projects.updateDocument(projectId, row.id, { is_active: !row.is_active }).then(load).catch(caught => setError(message(caught))); }}>{row.is_active ? "Supersede" : "Restore"}</Button><DeleteRecordButton label="document" recordName={row.title} confirmLabel="Delete document" description="Remove this document from the register. Its evidence and audit history are retained." onDelete={reason => projects.deleteDocument(projectId, row.id, reason)} onDeleted={load} /></RowMenu></td> : null}</tr>)}</tbody></TableScroll>}</Card>}
     </div>
     {creating ? <RecordPage icon="documents" title="New document" onClose={() => { setCreating(false); reset(); }}><div className="stack">{alerts}
       <Card title="Document details" description="Add an external link or upload a PDF up to 10 MB."><DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(blank) || !!file} busy={busy} onDiscard={reset}><form onSubmit={submit}><FieldRow columns={3}>

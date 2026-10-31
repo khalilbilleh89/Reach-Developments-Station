@@ -38,7 +38,7 @@ function harness() {
         slots[index].value = typeof value === "function" ? value(slots[index].value) : value;
       }];
     }};
-    if (name === "@/components/ui") return new Proxy({}, { get: (_, key) => key });
+    if (name === "@/components/ui") return new Proxy({ useSort: rows => ({ sort: null, toggle: () => {}, sorted: rows }) }, { get: (target, key) => target[key] ?? key });
     if (name === "@/lib/answer") return { useAnswer: () => ({ status: "ready", data: [currency], retry: () => { retries += 1; } }) };
     if (name === "@/lib/api") return { ApiError, settings };
     return require(name);

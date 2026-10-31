@@ -5,6 +5,8 @@ import test from "node:test";
 import ts from "typescript";
 
 function mount(path, name, dependencies, props, globals = {}) {
+  // The rail's section icon is presentation only; the page head asks for it.
+  dependencies = {"@/components/shell/navigation": {sectionIcon: () => undefined}, ...dependencies};
   const slots = []; let cursor = 0;
   const react = {useState(initial) {const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], next => {slots[index] = typeof next === "function" ? next(slots[index]) : next;}];}};
   const jsx = {jsx: (type, props) => ({type, props}), jsxs: (type, props) => ({type, props})};

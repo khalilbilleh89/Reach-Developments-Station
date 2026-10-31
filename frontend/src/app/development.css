@@ -42,9 +42,9 @@
   border: 1px solid var(--line-default);
   border-radius: var(--dev-radius) var(--dev-radius) 0 0;
 }
-.development-workspace .workspace-identity h1 { font-size: clamp(2rem, 3vw, 2.8rem); letter-spacing: -.045em; }
+.development-workspace .workspace-identity h1 { font-size: var(--title-page); letter-spacing: -.045em; }
 .development-workspace .workspace-context { max-width: 70ch; line-height: 1.6; color: var(--text-secondary); }
-.development-workspace .workspace-value strong { font-size: clamp(1.6rem, 2.5vw, 2.4rem); letter-spacing: -.035em; }
+.development-workspace .workspace-value strong { font-size: var(--metric-lg); letter-spacing: -.035em; }
 .development-workspace .workspace-actions { align-self: flex-start; }
 .development-workspace .workspace-facts {
   display: grid;
@@ -78,7 +78,7 @@
 .development-workspace .field-label { line-height: 1.5; }
 .app:not(.app-narrow):not([data-rail="collapsed"]) .development-nav { display: none; }
 .development-workspace .plate { padding: 0 0 26px; border-bottom: 1px solid var(--line-default); margin-bottom: 28px; }
-.development-workspace .plate-title { font-family: var(--font-display); font-size: clamp(2.75rem, 4vw, 4rem); font-weight: 600; }
+.development-workspace .plate-title { font-family: var(--font-display); font-size: var(--title-plate); font-weight: 600; }
 .land-layout-controls { display: flex; gap: var(--space-2); }
 .land-register-surface { min-width: 0; }
 .land-schedule { border: 1px solid var(--line-default); border-radius: var(--dev-radius); overflow: hidden; background: var(--surface); }
@@ -88,9 +88,9 @@
 .parcel-estate-identity { padding: 24px 28px; background: var(--surface-secondary); border-bottom: 1px solid var(--line-default); }
 .parcel-estate-kicker { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: var(--text-xs); }
 .parcel-estate-title { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin: 22px 0 12px; }
-.parcel-estate-title h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--title-page); line-height: 1.1; letter-spacing: -.03em; white-space: nowrap; }
+.parcel-estate-title h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--text-xl); line-height: 1.1; letter-spacing: -.03em; white-space: nowrap; }
 .parcel-estate-area { text-align: right; min-width: 0; }
-.parcel-estate-area strong { display: block; font-size: clamp(1.5rem, 2.4vw, 2.25rem); font-weight: 500; letter-spacing: -.04em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.parcel-estate-area strong { display: block; font-size: var(--metric-lg); font-weight: 500; letter-spacing: -.04em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .parcel-estate-area span,.parcel-estate-deed { font-size: var(--text-xs); color: var(--text-secondary); }
 .parcel-estate-facts { padding: 24px 28px; }
 .parcel-estate-facts .kv { margin: 0; }
@@ -140,7 +140,7 @@
   .development-workspace .record-workspace-header { padding: 20px; }
   .development-workspace .workspace-facts { padding: 16px 20px; gap: 16px; }
   .development-workspace .record-section { padding: 18px; }
-  .development-workspace .record-section .position-value { font-size: 1.8rem; overflow-wrap: anywhere; }
+  .development-workspace .record-section .position-value { font-size: var(--metric-lg); overflow-wrap: anywhere; }
   .development-workspace .card-header { padding: 18px; }
   .development-workspace .workspace-actions { width: 100%; }
   .development-workspace .workspace-actions > .button { width: 100%; }
@@ -148,7 +148,7 @@
 /* White development workspaces: approvals, design records and expense entries. */
 .permit-approval-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr)); gap: 24px; }
 .permit-approval-grid .permit-register-card { padding: 28px; border: 1px solid var(--line-default); border-radius: var(--dev-radius); background: var(--surface); min-width: 0; }
-.permit-approval-grid .permit-register-card h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: 1.9rem; font-weight: 600; overflow-wrap: anywhere; }
+.permit-approval-grid .permit-register-card h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; overflow-wrap: anywhere; }
 .permit-approval-grid .permit-register-card h2 button { font: inherit; text-align: left; }
 .permit-approval-grid .permit-next-action { margin: 24px 0; padding: 20px; border-left: 3px solid var(--accent); background: var(--surface-secondary); }
 .permit-approval-grid .permit-next-action p { margin-bottom: 0; }
@@ -212,7 +212,7 @@
 .atlas-buildings { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,28rem),1fr)); align-items: start; gap: 24px; }
 .atlas-building { min-width: 0; margin: 0; border: 1px solid var(--line-default); border-radius: 10px; overflow: hidden; }
 .atlas-building > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--line-default); }
-.atlas-building h3 { font-family: var(--font-display); font-size: 1.8rem; font-weight: 600; margin: 6px 0 0; }
+.atlas-building h3 { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; margin: 6px 0 0; }
 .atlas-building > header > span,.atlas-building > footer { font-size: var(--text-xs); color: var(--text-secondary); }
 .atlas-floors { background: var(--surface-secondary); padding: 8px 24px; }
 .atlas-floor { display: grid; grid-template-columns: 60px minmax(0,1fr); gap: 20px; padding: 12px 0; align-items: center; }
@@ -237,8 +237,8 @@
 .parcel-architectural { grid-template-columns: minmax(0,2fr) minmax(240px,1fr); border-radius: 6px; }
 .parcel-architectural .parcel-estate-identity { background: var(--surface); padding: 26px 28px 22px; }
 .parcel-architectural .parcel-estate-title { margin: 18px 0; }
-.parcel-architectural .parcel-estate-title h2 { font-size: var(--title-page); }
-.parcel-architectural .parcel-estate-area strong { font-size: clamp(2rem,3vw,3rem); }
+.parcel-architectural .parcel-estate-title h2 { font-size: var(--text-xl); }
+.parcel-architectural .parcel-estate-area strong { font-size: var(--metric-hero); }
 
 .parcel-architectural .parcel-estate-facts .kv { gap: 20px 32px; }
 .parcel-architectural .parcel-estate-context h3 { font-family: var(--font-display); font-size: 1.5rem; }
@@ -267,7 +267,7 @@
   .parcel-architectural .parcel-estate-title { flex-direction: row; align-items: center; gap: 16px; }
   .parcel-architectural .parcel-estate-title h2 { font-size: 1.6rem; }
   .parcel-architectural .parcel-estate-area { text-align: right; }
-  .parcel-architectural .parcel-estate-area strong { font-size: 1.7rem; }
+  .parcel-architectural .parcel-estate-area strong { font-size: var(--metric-lg); }
   .parcel-architectural .parcel-estate-area span { display: block; max-width: 8rem; }
 }
 @media (max-width: 760px) {
@@ -277,7 +277,7 @@
 /* Development briefing and source-linked programme composition. */
 .briefing-dates { margin: 0; padding: 24px; background: var(--surface); border: 1px solid var(--line-default); border-radius: 6px; min-width: 0; }
 .briefing-dates > header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
-.briefing-dates h2 { margin: 7px 0 14px; font-family: var(--font-display); font-size: 1.8rem; font-weight: 600; }
+.briefing-dates h2 { margin: 7px 0 14px; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 600; }
 .briefing-dates > header > span { font-size: var(--text-xs); color: var(--text-muted); }
 .briefing-dates ol { list-style: none; margin: 20px 0 0; padding: 0; }
 .briefing-dates li { display: grid; grid-template-columns: 105px minmax(0,1fr) auto; gap: 16px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line-soft); }
@@ -336,7 +336,7 @@
 .development-workspace .stock-property-card .stock-property-emblem { margin: 0 0 18px; padding: 16px 22px; background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
 .development-workspace .stock-property-identity { gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 
-.development-workspace .stock-property-identity a { letter-spacing: -.025em; font-family: var(--font-display); font-size: 1.8rem; font-weight: 600; color: var(--accent); }
+.development-workspace .stock-property-identity a { letter-spacing: -.025em; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; color: var(--accent); }
 .property-feature-row { display: flex; flex-wrap: wrap; gap: 10px 16px; padding-block: 18px 12px; }
 .property-feature-row > span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
 .property-feature-row .icon { color: var(--accent); width: 18px; height: 18px; }
@@ -355,7 +355,7 @@
 .parcel-architectural .parcel-estate-context > section { border: 1px solid var(--dev-blue-line); border-radius: 10px; padding: 20px; background: var(--dev-blue-wash); }
 .parcel-architectural .parcel-estate-context > section + section { margin-top: 16px; padding-top: 20px; }
 
-.parcel-estate-price { font-size: clamp(1.4rem, 2.1vw, 2rem); margin: 14px 0 8px; letter-spacing: -.035em; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; color: var(--accent); }
+.parcel-estate-price { font-size: var(--metric-lg); margin: 14px 0 8px; letter-spacing: -.035em; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; color: var(--accent); }
 @media (max-width: 760px) {
  .property-building-nav { flex-direction: column; align-items: stretch; gap: 14px; padding: 18px; }
  .property-building-options { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }

@@ -458,6 +458,11 @@ export function sectionDescription(key: ProjectSection): string {
   return findNavItem(PROJECT_NAVIGATION, key)?.description ?? "";
 }
 
+/** The section's rail icon, repeated in its page head so the two always match. */
+export function sectionIcon(key: ProjectSection): IconName | undefined {
+  return findNavItem(PROJECT_NAVIGATION, key)?.icon;
+}
+
 /** The address of a project section. The frontend is a static export, so the
  * open project and its section travel in the query string. */
 export function projectHref(

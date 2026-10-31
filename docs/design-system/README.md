@@ -76,4 +76,13 @@ What the catalogue asked for and the delivery did not build, with the reason. Ea
 - **K4 facts beside activity** — the strip and next line are built on all six records; the activity panel needs a per-record event feed and was left out rather than drawn from partial data.
 - **J4 SPA preparation flow** — the SPA details form holds two fields, which do not make a stepped flow; reservations and receipts are stepped.
 - **M1 panel figures** — the sign-in panel carries no counts: a visitor who has not signed in has no session for any endpoint to answer.
-- **Register sorting** — client-side sorting is offered only where the screen holds every row (Collections); server-paginated registers (Inventory, Sales) keep the server's order so a sorted page never implies a sorted set.
+- **Register sorting** — client-side sorting is offered only where the screen holds every row (Collections, payment plans, commissions, construction, agreements, agents, buyers, documents, access, currencies); server-paginated registers (Inventory, Sales, Users, Audit) keep the server's order so a sorted page never implies a sorted set.
+
+## Final audit (owner request, 31 Oct 2026)
+
+Every page and in-page tab (148 views, desktop and phone) was crawled and measured for type size, colour and component use. Three findings applied across the product:
+
+- **Colour.** Primary buttons, links and the page head were black and grey, so most screens read pale. Gold now carries structure: the primary action is gold with ink text (9.6:1), links are deep bronze `--link` (6:1), every page head has a gold icon tile and a short gold rule, and section and card titles carry a gold tick. The canvas and lines are warmed toward the logo. **Petrol** (`--petrol`, 7.8:1 on white) is the cool partner to the gold and replaces the generic blue for information and the project stage. Gold is never body text on white (1.8:1).
+- **Type.** Titles and lead figures ran to 34–58px against a 14px body. The tokens now cap a page or record title at 26px, the project plate at 32px and the lead figure at 38px; eleven one-off sizes use the scale.
+- **Row menus (E2) everywhere.** `TableScroll` draws the three-dot menu beside any row without its own, listing the row's own links and buttons plus *Copy row*. A register that writes its own `RowMenu` keeps it. Row-level *Source basis* accordions became source notes (C1/C2).
+

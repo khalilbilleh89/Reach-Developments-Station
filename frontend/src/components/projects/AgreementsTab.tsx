@@ -5,7 +5,8 @@ import { agreements, type Agreement, type AgreementFields } from "@/lib/api/agre
 import { useAnswer } from "@/lib/answer";
 import { businessDate } from "@/lib/format";
 import { AGREEMENT_READERS, AGREEMENT_WRITERS, hasAnyRole, type Roles } from "@/lib/roles";
-import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, PageHeader, RecordPage, RowMenu, TableScroll } from "@/components/ui";
+import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, PageHeader, RecordPage, RowMenu, SortHeader, TableScroll, useSort } from "@/components/ui";
+import { sectionIcon } from "@/components/shell/navigation";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 export function AgreementForm({ row, onSave, onSaved, onClose }: {
@@ -44,22 +45,36 @@ export function AgreementForm({ row, onSave, onSaved, onClose }: {
   </RecordPage>;
 }
 
+const NO_AGREEMENTS: Agreement[] = [];
+
+/** The value a column sorts by: the server's own name, company or ISO date. */
+function readAgreementColumn(row: Agreement, column: string): string | null {
+  switch (column) {
+    case "name": return row.name;
+    case "company": return row.signing_company;
+    case "drafted": return row.draft_created_on;
+    default: return null;
+  }
+}
+
 export function AgreementsTab({ projectId, roles }: { projectId: string; roles: Roles }) {
   const answer = useAnswer(hasAnyRole(roles, AGREEMENT_READERS), () => agreements.list(projectId), [projectId]);
   const canWrite = answer.status === "ready" && hasAnyRole(roles, AGREEMENT_WRITERS);
   const [editor, setEditor] = useState<{ row?: Agreement } | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
+  // Ordering the rows already on screen; the register is read in full.
+  const { sort, toggle, sorted } = useSort(answer.status === "ready" ? answer.data : NO_AGREEMENTS, readAgreementColumn);
   return <div className="stack">
-    <PageHeader title="Agreements" subtitle="Final agreement drafts clients need to sign to complete their purchase." actions={canWrite ? <Button onClick={() => setEditor({})}>Add agreement</Button> : undefined} />
+    <PageHeader icon={sectionIcon("agreements")} title="Agreements" subtitle="Final agreement drafts clients need to sign to complete their purchase." actions={canWrite ? <Button onClick={() => setEditor({})}>Add agreement</Button> : undefined} />
     {answer.status === "loading" ? <Loading label="Loading agreements…" /> : null}
     {answer.status === "off" || answer.status === "denied" ? <Notice tone="info">Agreements are not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}
     {downloadError ? <Notice tone="error">{downloadError}</Notice> : null}
     {answer.status === "ready" ? <Card>
       {answer.data.length === 0 ? <EmptyState title="No agreements added" hint="Upload each final draft, name the signing company, and enter the date the draft was created." /> :
-        <TableScroll label="Purchase agreement drafts"><thead><tr><th scope="col">Agreement name</th><th scope="col">Signing company</th><th scope="col">Draft creation date</th><th scope="col">Document</th>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
-          <tbody>{answer.data.map(row => <tr key={row.id}>
+        <TableScroll label="Purchase agreement drafts"><thead><tr><SortHeader column="name" sort={sort} onToggle={toggle}>Agreement name</SortHeader><SortHeader column="company" sort={sort} onToggle={toggle}>Signing company</SortHeader><SortHeader column="drafted" sort={sort} onToggle={toggle}>Draft creation date</SortHeader><th scope="col">Document</th>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
+          <tbody>{sorted.map(row => <tr key={row.id}>
             <th scope="row">{row.name}</th><td>{row.signing_company}</td><td><time dateTime={row.draft_created_on}>{businessDate(row.draft_created_on)}</time></td>
             <td><Button variant="default" disabled={downloading !== null} onClick={async () => {
               setDownloading(row.id); setDownloadError(null);

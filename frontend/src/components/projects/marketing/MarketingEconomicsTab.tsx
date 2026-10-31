@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sectionIcon } from "@/components/shell/navigation";
 import { marketing, type Scenario, type ScenarioFields, type UnitScenario } from "@/lib/api/marketing";
 import { useAnswer } from "@/lib/answer";
 import { hasAnyRole, MARKETING_READERS, MARKETING_WRITERS } from "@/lib/roles";
@@ -36,7 +37,7 @@ export function MarketingEconomicsTab({ projectId, roles, currencyId }: { projec
   };
   if (editor) return <RentalEditor initial={editor.initial} scopeLabel={editor.label} onClose={() => setEditor(null)} onSave={async values => { await marketing.saveScenario(projectId, values, editor.row); setEditor(null); refresh(); }} />;
   return <div className="stack">
-    <PageHeader title="Economics" subtitle="Compare buyer rental returns, capital appreciation and the market behind them." />
+    <PageHeader icon={sectionIcon("marketing-economics")} title="Economics" subtitle="Compare buyer rental returns, capital appreciation and the market behind them." />
     <Notice tone="info">Indicative five-year estimates, not guaranteed returns. Assumptions do not change recorded unit prices, sales, developer costs or cashflow.</Notice>
     <Card><SectionHeader level={2} title="Project Rental Assumptions" description="Set one default for each rental mode. Individual units can override it." />
       {scenarios.status === "loading" ? <Loading label="Loading rental assumptions…" /> : null}

@@ -5,10 +5,10 @@ import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
 
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, paymentPlans, sales } from "@/lib/api";
-import type { PlanRegister, SaleContract } from "@/lib/api";
+import type { PlanRegister, PlanRegisterRow, SaleContract } from "@/lib/api";
 import { useCurrencyCode } from "@/lib/currency";
 import { businessDate, money, todayISO } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
@@ -29,9 +29,11 @@ import {
   Notice,
   PageHeader,
   SectionHeader,
+  SortHeader,
   StatusDot,
   TableScroll,
   ToolbarFilter,
+  useSort,
 } from "@/components/ui";
 import { RecordLink } from "@/components/ui";
 import Link from "next/link";
@@ -40,6 +42,30 @@ import { useRecordHref } from "@/components/ui";
 import { projectHref } from "@/components/shell/navigation";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
 import { versionLabel, versionTone } from "@/components/projects/payments/labels";
+
+/** The value a register column sorts by: always a field the server returned. */
+function readPlanColumn(row: PlanRegisterRow, column: string): string | number | null {
+  switch (column) {
+    case "plan": return row.plan_number;
+    case "buyer": return row.client_display_name;
+    case "contract": return row.spa_number ?? row.sale_number;
+    case "value": return row.contract_value_covered;
+    case "instalments": return row.installment_count;
+    case "schedule": return row.is_reconciled ? "Reconciled" : "Does not reconcile";
+    case "next": return row.next_scheduled_date ?? row.next_forecast_date;
+    case "awaiting": return row.awaiting_trigger_count;
+    default: return null;
+  }
+}
+
+function readContractColumn(sale: SaleContract, column: string): string | number | null {
+  switch (column) {
+    case "sale": return sale.spa_number ?? sale.sale_number;
+    case "status": return sale.status;
+    case "value": return sale.total_contract_price;
+    default: return null;
+  }
+}
 
 /**
  * The project's payment plans: one line per scheduled sale.
@@ -119,6 +145,29 @@ export function PaymentPlansTab({
     })();
   }, [load, projectStatus]);
 
+  const rows = useMemo(() => register?.rows ?? [], [register]);
+  const unscheduled = useMemo(
+    () => schedulable.filter((sale) => !rows.some((row) => row.sale_id === sale.id)),
+    [schedulable, rows],
+  );
+  const shown = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (status && row.version_status !== status) return false;
+      if (
+        needle &&
+        !`${row.plan_number} ${row.unit_reference} ${row.client_display_name} ${row.sale_number} ${row.spa_number ?? ""}`
+          .toLowerCase()
+          .includes(needle)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [rows, search, status]);
+  const { sort, toggle, sorted } = useSort(shown, readPlanColumn);
+  const { sort: contractSort, toggle: toggleContract, sorted: sortedUnscheduled } = useSort(unscheduled, readContractColumn);
+
   const header = (actions?: React.ReactNode) => (
     <PageHeader icon="payments" title="Payment Plans" subtitle={sectionDescription("payments")} compact actions={actions} />
   );
@@ -147,7 +196,6 @@ export function PaymentPlansTab({
     );
   }
 
-  const rows = register?.rows ?? [];
   // Every count below is over the governing schedules the server named, so a
   // revision in preparation moves none of them. Counting rows is not
   // arithmetic over money; every amount on the page is still the server's.
@@ -155,25 +203,10 @@ export function PaymentPlansTab({
   const reconciled = rows.filter((row) => row.is_reconciled).length;
   const revising = rows.filter((row) => row.revision_version_id !== null).length;
   const awaiting = rows.reduce((total, row) => total + row.awaiting_trigger_count, 0);
-  const unscheduled = schedulable.filter((sale) => !rows.some((row) => row.sale_id === sale.id));
   // Only schedules somebody has already agreed to are worth copying. The
   // settled version is named on the row by the server rather than inferred
   // from the row's own status.
   const copyable = rows.filter((row) => row.copy_source_version_id !== null);
-
-  const needle = search.trim().toLowerCase();
-  const shown = rows.filter((row) => {
-    if (status && row.version_status !== status) return false;
-    if (
-      needle &&
-      !`${row.plan_number} ${row.unit_reference} ${row.client_display_name} ${row.sale_number} ${row.spa_number ?? ""}`
-        .toLowerCase()
-        .includes(needle)
-    ) {
-      return false;
-    }
-    return true;
-  });
   const filtered = search !== "" || status !== "";
 
   return (
@@ -229,7 +262,7 @@ export function PaymentPlansTab({
         </Card></div>
 
         </>}
-        {register && canPrepare && unscheduled.length ? <section className="stack"><SectionHeader title="Contracts needing a payment schedule" description="Eligible contracts returned to your role, without a plan in the authorized register." /><TableScroll label="Contracts needing schedules" stickyHeader><thead><tr><th scope="col">Sale / SPA</th><th scope="col">Status</th><th scope="col">Contract value</th><th scope="col">Action</th></tr></thead><tbody>{unscheduled.map(sale => <tr key={sale.id}><th scope="row"><RecordLink projectId={projectId} kind="sale" id={sale.id}>{sale.spa_number ?? sale.sale_number}</RecordLink></th><td>{sale.status.replaceAll("_", " ")}</td><td>{money(sale.total_contract_price, currencyCodeOf(sale.currency_id))}</td><td><RecordLink projectId={projectId} kind="sale" id={sale.id} tab="plan">Prepare SPA schedule</RecordLink></td></tr>)}</tbody></TableScroll></section> : null}
+        {register && canPrepare && unscheduled.length ? <section className="stack"><SectionHeader title="Contracts needing a payment schedule" description="Eligible contracts returned to your role, without a plan in the authorized register." /><TableScroll label="Contracts needing schedules" stickyHeader><thead><tr><SortHeader column="sale" sort={contractSort} onToggle={toggleContract}>Sale / SPA</SortHeader><SortHeader column="status" sort={contractSort} onToggle={toggleContract}>Status</SortHeader><SortHeader column="value" sort={contractSort} onToggle={toggleContract}>Contract value</SortHeader><th scope="col">Action</th></tr></thead><tbody>{sortedUnscheduled.map(sale => <tr key={sale.id}><th scope="row"><RecordLink projectId={projectId} kind="sale" id={sale.id}>{sale.spa_number ?? sale.sale_number}</RecordLink></th><td>{sale.status.replaceAll("_", " ")}</td><td>{money(sale.total_contract_price, currencyCodeOf(sale.currency_id))}</td><td><RecordLink projectId={projectId} kind="sale" id={sale.id} tab="plan">Prepare SPA schedule</RecordLink></td></tr>)}</tbody></TableScroll></section> : null}
 
         {opening && canPrepare ? (
           <Card
@@ -380,25 +413,25 @@ export function PaymentPlansTab({
             <TableScroll label="Payment plan register" fixedFirst stickyHeader>
               <thead>
                 <tr>
-                  <th scope="col">Plan</th>
-                  <th scope="col">Buyer</th>
-                  <th scope="col">Contract</th>
+                  <SortHeader column="plan" sort={sort} onToggle={toggle}>Plan</SortHeader>
+                  <SortHeader column="buyer" sort={sort} onToggle={toggle}>Buyer</SortHeader>
+                  <SortHeader column="contract" sort={sort} onToggle={toggle}>Contract</SortHeader>
                   <th scope="col">Version</th>
-                  <th scope="col" className="num">
+                  <SortHeader column="value" sort={sort} onToggle={toggle} className="num">
                     Contract value
-                  </th>
-                  <th scope="col" className="num">
+                  </SortHeader>
+                  <SortHeader column="instalments" sort={sort} onToggle={toggle} className="num">
                     Instalments
-                  </th>
-                  <th scope="col">Schedule</th>
-                  <th scope="col">Next scheduled</th>
-                  <th scope="col" className="num">
+                  </SortHeader>
+                  <SortHeader column="schedule" sort={sort} onToggle={toggle}>Schedule</SortHeader>
+                  <SortHeader column="next" sort={sort} onToggle={toggle}>Next scheduled</SortHeader>
+                  <SortHeader column="awaiting" sort={sort} onToggle={toggle} className="num">
                     Awaiting trigger
-                  </th>
+                  </SortHeader>
                 </tr>
               </thead>
               <tbody>
-                {shown.map((row) => (
+                {sorted.map((row) => (
                   <tr key={row.plan_id}>
                     <th scope="row">
                       <RecordLink projectId={projectId} kind="payment-plan" id={row.plan_id}>

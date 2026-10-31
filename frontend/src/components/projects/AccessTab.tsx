@@ -15,12 +15,27 @@ import {
   Loading,
   Notice,
   PageHeader,
+  SortHeader,
   StatusDot,
   TableScroll,
   RowMenu,
+  useSort,
 } from "@/components/ui";
 import { PhaseAccessEditor } from "@/components/projects/inventory/PhaseAccessEditor";
 import { eventTime } from "@/lib/format";
+
+const NO_ACCESS: ProjectAccess[] = [];
+
+/** The value a column sorts by: the person, their standing, scope or ISO grant time. */
+function readAccessColumn(row: ProjectAccess, column: string): string | null {
+  switch (column) {
+    case "person": return row.display_name;
+    case "access": return row.is_active ? "Active" : "Revoked";
+    case "scope": return row.phase_scope;
+    case "granted": return row.granted_at;
+    default: return null;
+  }
+}
 
 /**
  * Project membership. System Administrator only.
@@ -98,6 +113,8 @@ export function AccessTab({ projectId }: { projectId: string }) {
   };
 
   const members = new Set((rows ?? []).map((row) => row.user_id));
+  // Ordering the membership already on screen; the server returns it in full.
+  const { sort, toggle, sorted } = useSort(rows ?? NO_ACCESS, readAccessColumn);
 
   return (
     <>
@@ -146,18 +163,18 @@ export function AccessTab({ projectId }: { projectId: string }) {
             <TableScroll fixedFirst label="Project membership">
               <thead>
                 <tr>
-                  <th scope="col">Person</th>
+                  <SortHeader column="person" sort={sort} onToggle={toggle}>Person</SortHeader>
                   <th scope="col">Roles</th>
-                  <th scope="col">Access</th>
-                  <th scope="col">Phase scope</th>
-                  <th scope="col">Granted</th>
+                  <SortHeader column="access" sort={sort} onToggle={toggle}>Access</SortHeader>
+                  <SortHeader column="scope" sort={sort} onToggle={toggle}>Phase scope</SortHeader>
+                  <SortHeader column="granted" sort={sort} onToggle={toggle}>Granted</SortHeader>
                   <th scope="col">
                     <span className="visually-hidden">Actions</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {sorted.map((row) => (
                   <tr key={row.id}>
                     <th scope="row">
                       {row.display_name}

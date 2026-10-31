@@ -16,10 +16,12 @@ import {
   Loading,
   Notice,
   PageHeader,
+  SortHeader,
   Tabs,
   TabPanel,
   TableScroll,
   ToolbarFilter,
+  useSort,
 } from "@/components/ui";
 import { ApiError, construction } from "@/lib/api";
 import type {
@@ -61,6 +63,94 @@ function contractCurrency(contracts: ConstructionContract[], contractId: string 
 }
 
 import { CurrentCostAnalysis } from "./economics/CurrentCostAnalysis";
+
+/*
+ * What each register column sorts by. Every value is one the server returned —
+ * a reference, a name, an ISO date, a decimal amount or a status label — and
+ * is only compared for ordering, never combined.
+ */
+type SortValue = string | number | null;
+
+function readContractColumn(row: ConstructionContract, column: string): SortValue {
+  switch (column) {
+    case "contract": return row.contract_number;
+    case "vendor": return row.vendor_name;
+    case "original": return row.original_contract_value_ex_tax;
+    case "variations": return row.approved_variation_delta;
+    // An uncommitted contract shows no commitment, so it sorts with the absent values.
+    case "revised": return ["draft", "submitted", "cancelled"].includes(row.status) ? null : row.revised_commitment;
+    case "certified": return row.certified_to_date;
+    case "status": return contractLabel(row.status);
+    default: return null;
+  }
+}
+
+function readVariationColumn(row: Variation, column: string): SortValue {
+  switch (column) {
+    case "variation": return row.variation_number;
+    case "contract": return row.contract_number;
+    case "requested": return row.requested_date;
+    case "value": return row.total_value_ex_tax;
+    case "status": return variationLabel(row.status);
+    default: return null;
+  }
+}
+
+function readCertificateColumn(row: Certificate, column: string): SortValue {
+  switch (column) {
+    case "certificate": return row.certificate_number;
+    case "contract": return row.contract_number;
+    case "work": return row.current_work_value_ex_tax;
+    case "retention": return row.retention_held_amount;
+    case "net": return row.net_due;
+    case "status": return certificateLabel(row.status);
+    default: return null;
+  }
+}
+
+function readInvoiceColumn(row: ConstructionInvoice, column: string): SortValue {
+  switch (column) {
+    case "invoice": return row.invoice_number;
+    case "contract": return row.contract_number;
+    case "type": return row.invoice_type;
+    case "dated": return row.invoice_date;
+    case "payable": return row.net_payable;
+    case "outstanding": return row.outstanding;
+    case "status": return invoiceLabel(row.status);
+    default: return null;
+  }
+}
+
+function readPaymentColumn(row: ConstructionPayment, column: string): SortValue {
+  switch (column) {
+    case "reference": return row.payment_reference;
+    case "contract": return row.contract_number;
+    case "dated": return row.payment_date;
+    case "amount": return row.amount;
+    case "unallocated": return row.unallocated;
+    case "status": return paymentLabel(row.status);
+    default: return null;
+  }
+}
+
+function readMilestoneColumn(row: ConstructionMilestone, column: string): SortValue {
+  switch (column) {
+    case "milestone": return row.code;
+    case "scope": return row.scope_label ?? "Whole project";
+    case "planned": return row.planned_date;
+    case "forecast": return row.forecast_date;
+    case "reported": return row.actual_achieved_date;
+    case "certified": return row.certified_date;
+    case "delay": return row.delay_days;
+    case "status": return milestoneLabel(row.status);
+    default: return null;
+  }
+}
+
+// Stable stand-ins while a register is still loading, so the sort hooks run unconditionally.
+const NO_INVOICES: ConstructionInvoice[] = [];
+const NO_PAYMENTS: ConstructionPayment[] = [];
+const NO_MILESTONES: ConstructionMilestone[] = [];
 
 const SECTIONS = [
   { key: "overview", label: "Overview" },
@@ -234,6 +324,7 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
       );
     });
   }, [rows, search, status]);
+  const { sort, toggle, sorted } = useSort(shown, readContractColumn);
 
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the contracts" shape="rows" />;
@@ -290,25 +381,25 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
         <TableScroll label="Contracts" fixedFirst>
           <thead>
             <tr>
-              <th scope="col">Contract</th>
-              <th scope="col">Vendor</th>
-              <th scope="col" className="num">
+              <SortHeader column="contract" sort={sort} onToggle={toggle}>Contract</SortHeader>
+              <SortHeader column="vendor" sort={sort} onToggle={toggle}>Vendor</SortHeader>
+              <SortHeader column="original" sort={sort} onToggle={toggle} className="num">
                 Original
-              </th>
-              <th scope="col" className="num">
+              </SortHeader>
+              <SortHeader column="variations" sort={sort} onToggle={toggle} className="num">
                 Variations
-              </th>
-              <th scope="col" className="num">
+              </SortHeader>
+              <SortHeader column="revised" sort={sort} onToggle={toggle} className="num">
                 Revised commitment
-              </th>
-              <th scope="col" className="num">
+              </SortHeader>
+              <SortHeader column="certified" sort={sort} onToggle={toggle} className="num">
                 Certified
-              </th>
-              <th scope="col">Status</th>
+              </SortHeader>
+              <SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>
             </tr>
           </thead>
           <tbody>
-            {shown.map((row) => (
+            {sorted.map((row) => (
               <tr
                 key={row.id}
                 onClick={() => setOpen(row.id)}
@@ -409,6 +500,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
     () => (rows ?? []).filter((row) => !status || row.status === status),
     [rows, status],
   );
+  const { sort, toggle, sorted } = useSort(shown, readVariationColumn);
 
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the variations" shape="rows" />;
@@ -450,19 +542,19 @@ function VariationsSection({ projectId }: { projectId: string }) {
         <TableScroll label="Variations" fixedFirst>
           <thead>
             <tr>
-              <th scope="col">Variation</th>
-              <th scope="col">Contract</th>
+              <SortHeader column="variation" sort={sort} onToggle={toggle}>Variation</SortHeader>
+              <SortHeader column="contract" sort={sort} onToggle={toggle}>Contract</SortHeader>
               <th scope="col">Description</th>
-              <th scope="col">Requested</th>
-              <th scope="col" className="num">
+              <SortHeader column="requested" sort={sort} onToggle={toggle}>Requested</SortHeader>
+              <SortHeader column="value" sort={sort} onToggle={toggle} className="num">
                 Value
-              </th>
+              </SortHeader>
               <th scope="col">Approval</th>
-              <th scope="col">Status</th>
+              <SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>
             </tr>
           </thead>
           <tbody>
-            {shown.map((row) => (
+            {sorted.map((row) => (
               <tr key={row.id}>
                 <td>{row.variation_number}</td>
                 <td>{row.contract_number}</td>
@@ -539,6 +631,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
     () => (rows ?? []).filter((row) => !status || row.status === status),
     [rows, status],
   );
+  const { sort, toggle, sorted } = useSort(shown, readCertificateColumn);
 
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the certificates" shape="rows" />;
@@ -580,23 +673,23 @@ function CertificatesSection({ projectId }: { projectId: string }) {
         <TableScroll label="Certificates" fixedFirst>
           <thead>
             <tr>
-              <th scope="col">Certificate</th>
-              <th scope="col">Contract</th>
+              <SortHeader column="certificate" sort={sort} onToggle={toggle}>Certificate</SortHeader>
+              <SortHeader column="contract" sort={sort} onToggle={toggle}>Contract</SortHeader>
               <th scope="col">Period</th>
-              <th scope="col" className="num">
+              <SortHeader column="work" sort={sort} onToggle={toggle} className="num">
                 Work
-              </th>
-              <th scope="col" className="num">
+              </SortHeader>
+              <SortHeader column="retention" sort={sort} onToggle={toggle} className="num">
                 Retention held
-              </th>
-              <th scope="col" className="num">
+              </SortHeader>
+              <SortHeader column="net" sort={sort} onToggle={toggle} className="num">
                 Net due
-              </th>
-              <th scope="col">Status</th>
+              </SortHeader>
+              <SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>
             </tr>
           </thead>
           <tbody>
-            {shown.map((row) => (
+            {sorted.map((row) => (
               <tr
                 key={row.id}
                 onClick={() => setOpen(row.id)}
@@ -696,6 +789,9 @@ function CashSection({ projectId }: { projectId: string }) {
     })();
   }, [load]);
 
+  const { sort: invoiceSort, toggle: toggleInvoice, sorted: sortedInvoices } = useSort(invoices ?? NO_INVOICES, readInvoiceColumn);
+  const { sort: paymentSort, toggle: togglePayment, sorted: sortedPayments } = useSort(payments ?? NO_PAYMENTS, readPaymentColumn);
+
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!invoices || !payments)
     return <Loading label="Loading invoices and payments" shape="rows" />;
@@ -712,21 +808,21 @@ function CashSection({ projectId }: { projectId: string }) {
           <TableScroll label="Invoices" fixedFirst>
             <thead>
               <tr>
-                <th scope="col">Invoice</th>
-                <th scope="col">Contract</th>
-                <th scope="col">Type</th>
-                <th scope="col">Dated</th>
-                <th scope="col" className="num">
+                <SortHeader column="invoice" sort={invoiceSort} onToggle={toggleInvoice}>Invoice</SortHeader>
+                <SortHeader column="contract" sort={invoiceSort} onToggle={toggleInvoice}>Contract</SortHeader>
+                <SortHeader column="type" sort={invoiceSort} onToggle={toggleInvoice}>Type</SortHeader>
+                <SortHeader column="dated" sort={invoiceSort} onToggle={toggleInvoice}>Dated</SortHeader>
+                <SortHeader column="payable" sort={invoiceSort} onToggle={toggleInvoice} className="num">
                   Payable
-                </th>
-                <th scope="col" className="num">
+                </SortHeader>
+                <SortHeader column="outstanding" sort={invoiceSort} onToggle={toggleInvoice} className="num">
                   Outstanding
-                </th>
-                <th scope="col">Status</th>
+                </SortHeader>
+                <SortHeader column="status" sort={invoiceSort} onToggle={toggleInvoice}>Status</SortHeader>
               </tr>
             </thead>
             <tbody>
-              {invoices.map((row) => (
+              {sortedInvoices.map((row) => (
                 <tr key={row.id}>
                   <td>{row.invoice_number}</td>
                   <td>{row.contract_number}</td>
@@ -756,20 +852,20 @@ function CashSection({ projectId }: { projectId: string }) {
           <TableScroll label="Payments" fixedFirst>
             <thead>
               <tr>
-                <th scope="col">Reference</th>
-                <th scope="col">Contract</th>
-                <th scope="col">Dated</th>
-                <th scope="col" className="num">
+                <SortHeader column="reference" sort={paymentSort} onToggle={togglePayment}>Reference</SortHeader>
+                <SortHeader column="contract" sort={paymentSort} onToggle={togglePayment}>Contract</SortHeader>
+                <SortHeader column="dated" sort={paymentSort} onToggle={togglePayment}>Dated</SortHeader>
+                <SortHeader column="amount" sort={paymentSort} onToggle={togglePayment} className="num">
                   Amount
-                </th>
-                <th scope="col" className="num">
+                </SortHeader>
+                <SortHeader column="unallocated" sort={paymentSort} onToggle={togglePayment} className="num">
                   Unallocated
-                </th>
-                <th scope="col">Status</th>
+                </SortHeader>
+                <SortHeader column="status" sort={paymentSort} onToggle={togglePayment}>Status</SortHeader>
               </tr>
             </thead>
             <tbody>
-              {payments.map((row) => (
+              {sortedPayments.map((row) => (
                 <tr key={row.id}>
                   <td>{row.payment_reference}</td>
                   <td>{row.contract_number}</td>
@@ -836,6 +932,8 @@ function MilestonesSection({ projectId, roles }: { projectId: string; roles: Set
     })();
   }, [load]);
 
+  const { sort, toggle, sorted } = useSort(rows ?? NO_MILESTONES, readMilestoneColumn);
+
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the milestones" shape="rows" />;
   if (rows.length === 0) {
@@ -852,20 +950,20 @@ function MilestonesSection({ projectId, roles }: { projectId: string; roles: Set
     <TableScroll label="Milestones" fixedFirst>
       <thead>
         <tr>
-          <th scope="col">Milestone</th>
-          <th scope="col">Scope</th>
-          <th scope="col">Planned</th>
-          <th scope="col">Forecast</th>
-          <th scope="col">Reported</th>
-          <th scope="col">Certified</th>
-          <th scope="col" className="num">
+          <SortHeader column="milestone" sort={sort} onToggle={toggle}>Milestone</SortHeader>
+          <SortHeader column="scope" sort={sort} onToggle={toggle}>Scope</SortHeader>
+          <SortHeader column="planned" sort={sort} onToggle={toggle}>Planned</SortHeader>
+          <SortHeader column="forecast" sort={sort} onToggle={toggle}>Forecast</SortHeader>
+          <SortHeader column="reported" sort={sort} onToggle={toggle}>Reported</SortHeader>
+          <SortHeader column="certified" sort={sort} onToggle={toggle}>Certified</SortHeader>
+          <SortHeader column="delay" sort={sort} onToggle={toggle} className="num">
             Delay
-          </th>
-          <th scope="col">Status</th>
+          </SortHeader>
+          <SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
+        {sorted.map((row) => (
           <tr key={row.id}>
             <td>
               <IdentityCell name={row.code} meta={row.name} />

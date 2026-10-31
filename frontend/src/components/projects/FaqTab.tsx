@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sectionIcon } from "@/components/shell/navigation";
 import { ApiError } from "@/lib/api";
 import { faqs } from "@/lib/api/faqs";
 import type { Faq } from "@/lib/api/faqs";
@@ -25,7 +26,7 @@ export function FaqTab({projectId, roles}: {projectId: string; roles: Set<string
   const needle = search.trim().toLocaleLowerCase();
   const rows = answer.data.items.filter(row => `${row.question}\n${row.answer}`.toLocaleLowerCase().includes(needle));
   return <div className="stack">
-    <PageHeader title="FAQs" subtitle="Save clear answers to common questions, ready to copy and share." compact actions={answer.data.can_edit ? <><Button onClick={() => setImporting(true)}>Import from Excel</Button><Button variant="primary" onClick={() => setEditor("new")}>Add FAQ</Button></> : undefined} />
+    <PageHeader icon={sectionIcon("faqs")} title="FAQs" subtitle="Save clear answers to common questions, ready to copy and share." compact actions={answer.data.can_edit ? <><Button onClick={() => setImporting(true)}>Import from Excel</Button><Button variant="primary" onClick={() => setEditor("new")}>Add FAQ</Button></> : undefined} />
     <DataToolbar search={{value: search, onChange: setSearch, label: "Search questions and answers", placeholder: "Search questions and answers…"}} onReset={search ? () => setSearch("") : undefined} />
     <p className="subtle" role="status">{rows.length} of {answer.data.items.length} FAQs{needle ? " match your search" : " · ordered by question"}</p>
     {rows.length ? <div className="faq-grid">{rows.map(row => <FaqCard key={`${row.id}:${row.version}`} row={row} projectId={projectId} canEdit={answer.data.can_edit} onEdit={() => setEditor(row)} onChanged={changed} />)}</div> : <EmptyState title={needle ? "No matching FAQs" : "No FAQs yet"} hint={needle ? "Try another word or clear your search." : "Add your first question and answer, or import a completed Excel template."} />}

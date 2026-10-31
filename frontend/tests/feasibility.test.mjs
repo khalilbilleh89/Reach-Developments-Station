@@ -14,7 +14,7 @@ const code=ts.transpileModule(readFileSync(new URL("../src/components/dashboard/
 const exports={};
 runInNewContext(`(function(require,exports){${code}\n})`)(name=>{
   if(name==="@/lib/format") return {businessDate:value=>value};
-  if(name==="@/components/ui") return new Proxy({}, {get:()=>props=>React.createElement("div",null,props.title,props.label,props.value,props.description,props.note,props.children)});
+  if(name==="@/components/ui") return new Proxy({}, {get:()=>props=>React.createElement("div",null,props.title,props.label,props.value,props.description,props.note,props.children,(props.views??[]).map(view=>React.createElement("section",{key:view.key},view.content)))});
   return require(name);
 },exports);
 const measurement=value=>({value,measured_count:value===null?0:1,expected_count:1,reason:value===null?"Record measurement":null,formula:"Server source formula"});

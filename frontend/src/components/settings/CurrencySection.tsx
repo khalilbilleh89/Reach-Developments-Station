@@ -15,14 +15,27 @@ import {
   Loading,
   Notice,
   PromptDialog,
+  SortHeader,
   TableScroll,
   RowMenu,
+  useSort,
 } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
 import { ApiError, settings } from "@/lib/api";
 import type { Currency } from "@/lib/api";
 
 const EMPTY_DRAFT = { code: "", name: "", symbol: "", minor_units: "2" };
+
+/** The value a column sorts by: the registry's code, symbol, minor units or status. */
+function readCurrencyColumn(currency: Currency, column: string): string | number | null {
+  switch (column) {
+    case "currency": return currency.code;
+    case "symbol": return currency.symbol;
+    case "minor_units": return currency.minor_units;
+    case "status": return currency.is_active ? "Active" : "Inactive";
+    default: return null;
+  }
+}
 
 function message(caught: unknown): string {
   return caught instanceof ApiError ? caught.message : "The currency change could not be saved.";
@@ -49,6 +62,8 @@ export function CurrencySection() {
     !needle || currency.code.toLowerCase().includes(needle) ||
     currency.name.toLowerCase().includes(needle),
   );
+  // Ordering the registry already on screen; the server returns it in full.
+  const { sort, toggle, sorted } = useSort(shown, readCurrencyColumn);
 
   async function create(): Promise<void> {
     setBusy(true);
@@ -135,8 +150,8 @@ export function CurrencySection() {
         ) : null}
         {answer.status === "ready" && shown.length ? (
           <TableScroll fixedFirst label="Currency registry">
-            <thead><tr><th scope="col">Currency</th><th scope="col">Symbol</th><th scope="col">Minor units</th><th scope="col">Status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
-            <tbody>{shown.map(currency => (
+            <thead><tr><SortHeader column="currency" sort={sort} onToggle={toggle}>Currency</SortHeader><SortHeader column="symbol" sort={sort} onToggle={toggle}>Symbol</SortHeader><SortHeader column="minor_units" sort={sort} onToggle={toggle}>Minor units</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>{sorted.map(currency => (
               <tr key={currency.id}>
                 <th scope="row"><strong>{currency.code}</strong><span className="cell-secondary">{currency.name}</span></th>
                 <td>{currency.symbol ?? "—"}</td>

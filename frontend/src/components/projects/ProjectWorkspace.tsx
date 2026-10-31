@@ -23,6 +23,7 @@ import {
   PROJECT_NAVIGATION,
   findNavItem,
   projectHref,
+  sectionIcon,
   visibleNavigation,
 } from "@/components/shell/navigation";
 import type { ProjectSection } from "@/components/shell/navigation";
@@ -249,7 +250,7 @@ export function ProjectWorkspace({
       <>
         {section === "marketing-bio" || section === "marketing-branding" ? <MarketingContentTab key={`${projectId}-${section}`} projectId={projectId} roles={roles} kind={section === "marketing-bio" ? "bio" : "branding"} /> : null}
         {section === "marketing-shots" ? <>
-          <PageHeader title="3D Shots" subtitle="Manage the project images displayed in Overview." />
+          <PageHeader icon={sectionIcon("marketing-shots")} title="3D Shots" subtitle="Manage the project images displayed in Overview." />
           <ProjectImages key={`shots-${projectId}`} projectId={projectId} canEdit={canWriteProject} />
         </> : null}
         {section === "marketing-economics" ? <MarketingEconomicsTab key={projectId} projectId={projectId} roles={roles} currencyId={project.base_currency_id} /> : null}

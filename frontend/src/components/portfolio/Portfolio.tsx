@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AttentionList, Badge, Button, ButtonRow, Card, Disclosure, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Loading, Meter, Metric, MetricGroup, Notice, Position, PositionFigure, PositionSupport, PositionSupportItem, SectionHeader, TableScroll } from "@/components/ui";
+import { AttentionList, Badge, Button, ButtonRow, Card, Disclosure, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Loading, Meter, Metric, MetricGroup, Notice, Position, PositionFigure, PositionSupport, PositionSupportItem, SectionHeader, TableScroll, SourceNote } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { portfolio } from "@/lib/api/portfolio";
@@ -36,7 +36,7 @@ export function RiskRegister({ rows }: { rows: Risk[] }) {
     category: risk.category.replaceAll("_", " "),
     context: <Link href={`/portfolio/?project=${risk.project_id}`}>{risk.project_code} · {risk.project_name}</Link>,
     evidence: <><span className={risk.currency ? "figure" : undefined}>{risk.currency ? money(risk.source_value, risk.currency) : risk.source_value}</span><span>Observed {businessDate(risk.observation_date)}</span></>,
-    source: <Disclosure title="Source basis"><p>{risk.basis}</p></Disclosure>,
+    source: <SourceNote coverage="available" method={risk.basis} label="Source basis" />,
     action: <ButtonRow><Link className="button button-small" href={risk.drilldown}>Open source</Link><SourceAction project={risk.project_id} source={{ source_type: "portfolio_risk", source_code: risk.risk_code, source_key: risk.risk_id, source_observation_date: risk.observation_date }} /></ButtonRow>,
   }))} />;
 }
