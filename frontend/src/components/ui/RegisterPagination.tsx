@@ -5,6 +5,8 @@ import { Button } from "./Button";
 export function RegisterPagination({ offset, total, pageSize = 200, busy = false, onChange }: {
   offset: number; total: number; pageSize?: number; busy?: boolean; onChange: (offset: number) => void;
 }) {
+  // One page has nowhere to go; disabled controls would only add noise.
+  if (!busy && offset === 0 && total <= pageSize) return null;
   return <nav aria-label="Register pages" className="form-actions">
     <Button disabled={busy || offset === 0} onClick={() => onChange(0)}>First page</Button>
     <Button disabled={busy || offset === 0} onClick={() => onChange(Math.max(0, offset - pageSize))}>Previous page</Button>

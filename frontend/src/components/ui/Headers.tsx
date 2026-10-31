@@ -73,15 +73,19 @@ export function SectionHeader({
   level?: 2 | 3;
 }) {
   const Heading = level === 2 ? "h2" : "h3";
+  const header = (
+    <div className="section-header">
+      <Heading className="section-heading" id={id}>
+        {title}
+      </Heading>
+      {actions ? <div className="card-actions">{actions}</div> : null}
+    </div>
+  );
+  if (!description) return header;
   return (
-    <>
-      <div className="section-header">
-        <Heading className="section-heading" id={id}>
-          {title}
-        </Heading>
-        {actions ? <div className="card-actions">{actions}</div> : null}
-      </div>
-      {description ? <p className="section-description">{description}</p> : null}
-    </>
+    <div className="section-header-group">
+      {header}
+      <p className="section-description">{description}</p>
+    </div>
   );
 }

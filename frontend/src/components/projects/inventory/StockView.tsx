@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { LaunchRegister, UnitRegister, UnitSummary } from "@/lib/api";
-import { Badge, Button, EmptyState, Icon, RecordLink, TableScroll } from "@/components/ui";
+import { Badge, Button, EmptyState, Icon, RecordLink, Segmented, TableScroll } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { money } from "@/lib/format";
 import { statusLabel, statusTone } from "./statusLabels";
@@ -57,7 +57,7 @@ export function StockTable({projectId,register,prices,seesPrice,priceError,expan
   }
   const activeFloor = chosenFloor && floors.has(chosenFloor) ? chosenFloor : null;
   return <section className="stock-register" aria-label="Stock schedule">
-    <div className="stock-register-heading"><div><h2>Explore properties</h2><p>Compare your units, their features and launch prices.</p></div><div className="stock-view-controls"><Button small onClick={() => setLayout("stack")} aria-pressed={layout === "stack"}>Building stack</Button><Button small onClick={() => setLayout("browse")} aria-pressed={layout === "browse"}>Property cards</Button><Button small onClick={() => setLayout("table")} aria-pressed={layout === "table"}>Schedule</Button>{layout === "table" ? <Button small onClick={onExpanded} aria-pressed={expanded}>{expanded ? "Compact areas" : "Show all areas"}</Button> : null}</div></div>
+    <div className="stock-register-heading"><div><h2>Explore properties</h2><p>Compare your units, their features and launch prices.</p></div><div className="stock-view-controls"><Segmented label="Stock presentation" value={layout} onChange={setLayout} options={[{ value: "stack", label: "Building stack" }, { value: "browse", label: "Property cards" }, { value: "table", label: "Schedule" }]} />{layout === "table" ? <Button small onClick={onExpanded} aria-pressed={expanded}>{expanded ? "Compact areas" : "Show all areas"}</Button> : null}</div></div>
     {register.units.length < register.total ? <p className="stock-note">Showing {register.units.length} of {register.total} matching units on this page. Floor groups cover this page only.</p> : null}
     {layout !== "table" && buildings.size > 1 ? <nav className="property-building-nav" aria-label="Buildings on this inventory page"><div><Icon name="building" /><span>Buildings<span className="footnote">Current inventory page</span></span></div><div className="property-building-options"><button type="button" aria-pressed={!activeBuilding} onClick={() => { setChosenBuilding(null); setChosenFloor(null); }}>All buildings <span>{register.units.length}</span></button>{[...buildings].map(([key, building]) => <button type="button" key={key} aria-pressed={activeBuilding === key} onClick={() => { setChosenBuilding(key); setChosenFloor(null); }}>{building.label}<span>{building.count}</span></button>)}</div></nav> : null}
     {register.units.length===0 ? <EmptyState title="No stock matches these filters" hint="Clear or adjust your filters to see more units." /> : layout === "stack" ? <div className="building-atlas">

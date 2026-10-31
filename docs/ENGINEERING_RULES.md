@@ -479,8 +479,11 @@ delete PR branch
 - Squash merge normal feature PRs. Delete merged branches.
 - Branch naming: `mvp/pr-NN-short-slug` for roadmap PRs, `eng/pr-NN-short-slug`
   for horizontal engineering work that adds no functional scope.
-- **Open the pull request as a draft.** Draft is the iteration state. Draft and
-  Ready run the same risk plan for the same diff; readiness never widens CI.
+- **Open the pull request ready for review once local checks pass** (owner
+  direction, 31 Oct 2026). Converting a Draft to Ready re-runs CI on the same
+  head, so Draft is reserved for knowingly incomplete work and is not a routine
+  first step. Draft and Ready run the same risk plan for the same diff;
+  readiness never widens CI.
 
 ### Review contract and truthful evidence
 
