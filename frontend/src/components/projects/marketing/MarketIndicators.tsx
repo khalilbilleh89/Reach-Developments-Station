@@ -6,7 +6,7 @@ import { marketing, type Indicator, type IndicatorFields } from "@/lib/api/marke
 import { useAnswer } from "@/lib/answer";
 import { hasAnyRole, MARKETING_READERS, MARKETING_WRITERS } from "@/lib/roles";
 import { businessDate, money } from "@/lib/format";
-import { Button, Card, Disclosure, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, RecordPage, SectionHeader, TableScroll } from "@/components/ui";
+import { Button, Card, Disclosure, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, RecordPage, RowMenu, SectionHeader, TableScroll } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 export const INDICATOR_GUIDE = [
@@ -34,7 +34,7 @@ export function MarketIndicators({ projectId, roles }: { projectId: string; role
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button onClick={answer.retry}>Retry</Button></Notice> : null}
     {answer.status === "ready" ? answer.data.length ? <TableScroll label="Market observations and their sources"><thead><tr><th scope="col">Indicator / geography</th><th scope="col">Value</th><th scope="col">Period / as at</th><th scope="col">Source and implications</th>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead><tbody>{answer.data.map(row => <tr key={row.id}>
       <th scope="row">{row.name}<p className="muted">{row.geography}</p></th><td>{money(row.value)} {row.unit}</td><td>{row.period}<p className="muted">{businessDate(row.as_of)}</p></td><td><p>{row.source}</p><p className="muted">{row.commentary}</p></td>
-      {canWrite ? <td><Button variant="default" onClick={() => setEditor({ row })}>Edit</Button><DeleteRecordButton label="indicator" recordName={`${row.name} · ${row.period}`} description="Remove this observation and retain its audit history." confirmLabel="Delete indicator" onDelete={reason => marketing.remove(projectId, `indicators/${row.id}`, row.version, reason)} onDeleted={async () => { answer.retry(); }} /></td> : null}
+      {canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${row.name}`}><Button onClick={() => setEditor({ row })}>Edit</Button><DeleteRecordButton label="indicator" recordName={`${row.name} · ${row.period}`} description="Remove this observation and retain its audit history." confirmLabel="Delete indicator" onDelete={reason => marketing.remove(projectId, `indicators/${row.id}`, row.version, reason)} onDeleted={async () => { answer.retry(); }} /></RowMenu></td> : null}
     </tr>)}</tbody></TableScroll> : <EmptyState title="No market observations yet" hint="Add sourced country and area observations. Missing rates are never prefilled as current facts." /> : null}
     <Disclosure title="Which indicators to track"><dl className="marketing-guide">{INDICATOR_GUIDE.map(([name, detail]) => <div key={name}><dt>{name}</dt><dd>{detail}</dd></div>)}</dl></Disclosure>
     {editor ? <IndicatorEditor initial={editor.row ?? blank} onClose={() => setEditor(null)} onSave={async values => { await marketing.saveIndicator(projectId, values, editor.row); setEditor(null); answer.retry(); }} /> : null}

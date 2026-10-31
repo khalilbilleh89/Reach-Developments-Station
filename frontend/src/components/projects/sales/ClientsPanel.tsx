@@ -24,6 +24,7 @@ import {
   StatusDot,
   SubPanel,
   TableScroll,
+  RowMenu,
 } from "@/components/ui";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
@@ -288,8 +289,10 @@ export function ClientsPanel({
                     {selected === client.id ? "Hide parties" : "Parties"}
                   </Button>
                   {canWrite && client.is_active && onConnect ? <Button small data-leaves-editor onClick={() => onConnect(client)}>Connect unit</Button> : null}
-                  {canWrite ? <Button small data-leaves-editor onClick={() => setEditing(client)}>Edit buyer</Button> : null}
+                  {canWrite || canAdmin ? <RowMenu label={`Actions for ${client.display_name}`}>
+                    {canWrite ? <Button data-leaves-editor onClick={() => setEditing(client)}>Edit buyer</Button> : null}
                   {canAdmin ? <DeleteRecordButton label="buyer" recordName={client.display_name} description="This removes a buyer with no transaction history. A buyer with contracts or payments cannot be deleted; deactivate them instead. The audit trail is retained." onDelete={reason => sales.deleteClient(projectId, client.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : null}
+                  </RowMenu> : null}
                 </div></td>
               </tr>
             ))}

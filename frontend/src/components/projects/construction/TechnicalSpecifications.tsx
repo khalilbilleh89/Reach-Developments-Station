@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, Disclosure, DataToolbar, Field, EmptyState, Loading, Notice, RecordPage, SectionHeader, ToolbarFilter } from "@/components/ui";
+import { Badge, Button, Card, Disclosure, DataToolbar, Field, EmptyState, Loading, Notice, RecordPage, RowMenu, SectionHeader, ToolbarFilter } from "@/components/ui";
 import { technicalSpecifications, type TechnicalSpecification } from "@/lib/api/technicalSpecifications";
 import { hasAnyRole } from "@/lib/roles";
 import { businessDate } from "@/lib/format";
@@ -128,7 +128,7 @@ export function TechnicalSpecifications({ projectId, roles }: { projectId: strin
               <p className="footnote">Source: {item.source_reference || "Not recorded"} · Updated {businessDate(item.updated_at.slice(0, 10))}</p>
               <p className="footnote">Category: {categories.find(category => category.value === item.category)?.label}</p>
             </Disclosure>
-            {canWrite ? <DeleteRecordButton label={item.title} confirmLabel="Delete specification" description="Removes this item from the guide. Confirmed specifications, specifications with image history and the audit trail are retained." onDelete={reason => technicalSpecifications.remove(projectId, item.id, reason)} onDeleted={load} /> : null}
+            {canWrite ? <div className="form-actions"><RowMenu label={`Actions for ${item.title}`}><DeleteRecordButton label={item.title} confirmLabel="Delete specification" description="Removes this item from the guide. Confirmed specifications, specifications with image history and the audit trail are retained." onDelete={reason => technicalSpecifications.remove(projectId, item.id, reason)} onDeleted={load} /></RowMenu></div> : null}
           </article>)}</div>
         </Card>;
       })}

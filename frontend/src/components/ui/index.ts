@@ -73,6 +73,7 @@ export type { TimelineState } from "./Timeline";
 
 export { Disclosure } from "./Disclosure";
 export { Segmented } from "./Segmented";
+export { RowMenu } from "./RowMenu";
 export { AttentionList } from "./Attention";
 export type { AttentionEntry } from "./Attention";
 export { CountComposition, CountSeries } from "./CountVisuals";
