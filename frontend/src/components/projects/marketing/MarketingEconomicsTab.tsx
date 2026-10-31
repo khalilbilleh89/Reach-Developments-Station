@@ -7,11 +7,13 @@ import { useAnswer } from "@/lib/answer";
 import { hasAnyRole, MARKETING_READERS, MARKETING_WRITERS } from "@/lib/roles";
 import { businessDate, money } from "@/lib/format";
 import { useCurrencyCode } from "@/lib/currency";
-import { Badge, Button, Card, Disclosure, EmptyState, Field, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, RecordPage, RegisterPagination, SectionHeader, TableScroll } from "@/components/ui";
+import { Badge, Button, Card, DataToolbar, DensitySwitch, Disclosure, EmptyState, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, Position, PositionFigure, RecordPage, RegisterPagination, SectionHeader, TableScroll, Tooltip } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 import { MarketIndicators } from "./MarketIndicators";
 import { blankScenario, RentalEditor } from "./RentalEditor";
 
+const ROI = "Return on investment: five years of net operating income plus the net sale proceeds, less the initial investment, as a share of that investment.";
+const NOI = "Net operating income: rent after vacancy, less operating expenses.";
 const modeName = (mode: string) => mode === "long_term" ? "Long-term" : "Short-term";
 function fields(row: ScenarioFields): ScenarioFields {
   return Object.fromEntries(Object.keys(blankScenario(row.currency_id, row.mode)).map(key => [key, row[key as keyof ScenarioFields]])) as ScenarioFields;
@@ -52,20 +54,20 @@ export function MarketingEconomicsTab({ projectId, roles, currencyId }: { projec
       })}</div> : null}
     </Card>
     <Card><SectionHeader level={2} title="Unit Rental Returns" description="Open a unit to compare both rental modes and its year-by-year projection." />
-      <Field label="Search units"><input className="input" type="search" value={search} onChange={e => { setSearch(e.target.value); setOffset(0); setSelectedId(null); }} /></Field>
+      <DataToolbar search={{ value: search, onChange: value => { setSearch(value); setOffset(0); setSelectedId(null); }, label: "Search units", placeholder: "Unit reference" }} onReset={search ? () => { setSearch(""); setOffset(0); setSelectedId(null); } : undefined} actions={<DensitySwitch />} />
       {units.status === "loading" ? <Loading label="Calculating unit projections…" /> : null}
       {units.status === "denied" ? <Notice tone="info">Unit returns are not available to your access level.</Notice> : null}
       {units.status === "failed" ? <Notice tone="error">{units.message} <Button onClick={units.retry}>Retry</Button></Notice> : null}
-      {units.status === "ready" ? <>{units.data.units.length ? <TableScroll label="Indicative year-one net rental yield and five-year return"><thead><tr><th scope="col">Unit</th><th scope="col">Long-term net yield</th><th scope="col">Short-term net yield</th><th scope="col">Long-term 5-year ROI</th><th scope="col">Short-term 5-year ROI</th></tr></thead><tbody>{units.data.units.map(unit => <tr key={unit.unit_id}><th scope="row"><Button variant="default" onClick={() => setSelectedId(unit.unit_id)}>{unit.reference}</Button></th>
+      {units.status === "ready" ? <>{units.data.units.length ? <TableScroll label="Indicative year-one net rental yield and five-year return"><thead><tr><th scope="col">Unit</th><th scope="col">Long-term net yield</th><th scope="col">Short-term net yield</th><th scope="col">Long-term 5-year <Tooltip term="ROI">{ROI}</Tooltip></th><th scope="col">Short-term 5-year <Tooltip term="ROI">{ROI}</Tooltip></th></tr></thead><tbody>{units.data.units.map(unit => <tr key={unit.unit_id}><th scope="row"><Button variant="default" onClick={() => setSelectedId(unit.unit_id)}>{unit.reference}</Button></th>
         {unit.scenarios.map(s => <td key={`${s.mode}-yield`}>{s.projection ? `${s.projection.net_yield_percent}%` : <span className="muted">{s.unavailable}</span>}</td>)}
         {unit.scenarios.map(s => <td key={`${s.mode}-roi`}>{s.projection ? `${s.projection.roi_percent}%` : "Unavailable"}</td>)}
       </tr>)}</tbody></TableScroll> : <EmptyState title="No matching units" hint="Units come from the project's Inventory. Adjust your search or record units there." />}
         <RegisterPagination offset={offset} total={units.data.total} pageSize={25} onChange={value => { setOffset(value); setSelectedId(null); }} />
       </> : null}
     </Card>
-    {scenarios.status === "ready" && settings.some(row => row.unit_id) ? <Card><Disclosure title="All saved unit overrides" context="Includes overrides for units outside the current page or removed from Inventory.">
+    {scenarios.status === "ready" && settings.some(row => row.unit_id) ? <Card><SectionHeader level={2} title="Saved Unit Overrides" description="Every unit override, including units outside the current page or removed from Inventory." />
       <div className="stack">{settings.filter(row => row.unit_id).map(row => <section className="marketing-entry" key={row.id}><SectionHeader title={`${row.unit_reference || "Unit"} · ${modeName(row.mode)}`} actions={canWrite ? <DeleteRecordButton label="unit override" recordName={`${row.unit_reference || "Unit"} · ${modeName(row.mode)}`} description="Delete this override and retain its history. Project defaults will apply where available." confirmLabel="Delete unit override" onDelete={reason => marketing.remove(projectId, `scenarios/${row.id}`, row.version, reason)} onDeleted={async () => refresh()} /> : undefined} /><Assumptions row={row} /></section>)}</div>
-    </Disclosure></Card> : null}
+    </Card> : null}
     <MarketIndicators projectId={projectId} roles={roles} />
     {selected ? <RecordPage title={`${selected.reference} · Rental Returns`} onClose={() => setSelectedId(null)}>
       <div className="stack"><Notice tone="info">Year-one net yield is NOI / initial investment. Five-year ROI includes one resale, using the selected exit method.</Notice>
@@ -91,7 +93,13 @@ export function RentalProjection({ result }: { result: UnitScenario }) {
   if (!p) return <Notice tone="info">{result.unavailable || "Projection unavailable."}</Notice>;
   const first = p.years[0];
   return <div className="stack">
-    <div className="marketing-lead"><span>Estimated resale / end of year five</span><strong>{money(p.resale_value, code)}</strong><span>Before selling costs; selected valuation method</span></div>
+    <Position compact>
+      <PositionFigure lead label="Estimated resale / end of year five" value={money(p.resale_value, code)} note="Before selling costs; selected valuation method" />
+      <PositionFigure label="Year-one net yield" value={`${p.net_yield_percent}%`} note="On initial investment" />
+      <PositionFigure label="Five-year ROI" value={`${p.roi_percent}%`} note="Including one resale" />
+      <PositionFigure label="IRR / annual" value={p.irr_percent === null ? "Unavailable" : `${p.irr_percent}%`} note={p.irr_percent === null ? p.irr_reason : "Internal rate of return"} />
+      <PositionFigure label="Net present value" value={money(p.npv, code)} />
+    </Position>
     {p.warnings.map(warning => <Notice key={warning} tone="info">{warning}</Notice>)}
     <KeyValueGrid>
       <KeyValue label="Recorded current valuation" value={result.assumptions?.current_value ? money(result.assumptions.current_value, code) : "Not supplied; purchase-price proxy used"} /><KeyValue label="Appreciation valuation basis" value={p.valuation_basis} /><KeyValue label="Purchase price basis" value={result.price_basis} /><KeyValue label="Purchase price" value={money(result.price, code)} />
@@ -99,8 +107,7 @@ export function RentalProjection({ result }: { result: UnitScenario }) {
       <KeyValue label="Gross potential revenue / year 1" value={money(first.gross_revenue, code)} /><KeyValue label="Average monthly potential / year one" value={money(p.monthly_potential_revenue, code)} />
       <KeyValue label="Vacancy deduction / year 1" value={money(first.vacancy_amount, code)} /><KeyValue label="Effective gross revenue / year 1" value={money(first.effective_revenue, code)} />
       <KeyValue label="Operating expenses / year 1" value={money(first.expenses, code)} /><KeyValue label="NOI / year 1" value={money(first.noi, code)} />
-      <KeyValue label="Year-one net yield / initial investment" value={`${p.net_yield_percent}%`} /><KeyValue label="Gross rental yield / price" value={`${p.gross_yield_percent}%`} /><KeyValue label="ROI / five years including sale" value={`${p.roi_percent}%`} />
-      <KeyValue label="IRR / annual" value={p.irr_percent === null ? p.irr_reason : `${p.irr_percent}%`} /><KeyValue label="Net present value" value={money(p.npv, code)} />
+      <KeyValue label="Gross rental yield / price" value={`${p.gross_yield_percent}%`} />
       <KeyValue label="Appreciation-based value / year 5" value={money(p.appreciation_value, code)} /><KeyValue label="Cap-rate value / year 5 (year-six NOI)" value={p.cap_value === null ? "Unavailable: non-positive year-six NOI" : money(p.cap_value, code)} />
       <KeyValue label="Capital gain / selected exit method" value={money(p.capital_gain, code)} /><KeyValue label="Net sale proceeds / selected exit method" value={money(p.sale_proceeds, code)} />
       <KeyValue label="Simple payback / constant year-one NOI" value={p.simple_payback_years === null ? "Unavailable: non-positive NOI" : `${p.simple_payback_years} years`} />
@@ -118,7 +125,7 @@ export function RentalProjection({ result }: { result: UnitScenario }) {
       <KeyValue label="Present value of future cash flows / investment value" value={money(p.present_value_of_future_cashflows, code)} />
       <KeyValue label="Discounted payback including sale" value={p.discounted_payback_year === null ? "Not reached within five years" : `End of year ${p.discounted_payback_year}`} />
     </KeyValueGrid>
-    <TableScroll label={`Five-year annual projection (${code || "currency unavailable"})`}><thead><tr><th scope="col">Year</th><th scope="col">Rental months</th><th scope="col">Rent after vacancy</th><th scope="col">Expenses</th><th scope="col">NOI</th><th scope="col">Gross yield / purchase price</th><th scope="col">Net yield / initial investment</th><th scope="col">Cumulative rental NOI</th><th scope="col">Appreciation value</th><th scope="col">Cash flow*</th><th scope="col">Cumulative cash / after investment</th><th scope="col">Discounted cash flow</th></tr></thead><tbody>{p.years.map(row => <tr key={row.year}><th scope="row">{row.year}</th><td>{row.rental_months}</td><td>{money(row.effective_revenue, code)}</td><td>{money(row.expenses, code)}</td><td>{money(row.noi, code)}</td><td>{row.gross_yield_percent}%</td><td>{row.net_yield_percent}%</td><td>{money(row.cumulative_noi, code)}</td><td>{money(row.property_value, code)}</td><td>{money(row.cashflow, code)}</td><td>{money(row.cumulative_cashflow, code)}</td><td>{money(row.discounted_cashflow, code)}</td></tr>)}</tbody></TableScroll>
+    <TableScroll label={`Five-year annual projection (${code || "currency unavailable"})`}><thead><tr><th scope="col">Year</th><th scope="col">Rental months</th><th scope="col">Rent after vacancy</th><th scope="col">Expenses</th><th scope="col"><Tooltip term="NOI">{NOI}</Tooltip></th><th scope="col">Gross yield / purchase price</th><th scope="col">Net yield / initial investment</th><th scope="col">Cumulative rental <Tooltip term="NOI">{NOI}</Tooltip></th><th scope="col">Appreciation value</th><th scope="col">Cash flow*</th><th scope="col">Cumulative cash / after investment</th><th scope="col">Discounted cash flow</th></tr></thead><tbody>{p.years.map(row => <tr key={row.year}><th scope="row">{row.year}</th><td>{row.rental_months}</td><td>{money(row.effective_revenue, code)}</td><td>{money(row.expenses, code)}</td><td>{money(row.noi, code)}</td><td>{row.gross_yield_percent}%</td><td>{row.net_yield_percent}%</td><td>{money(row.cumulative_noi, code)}</td><td>{money(row.property_value, code)}</td><td>{money(row.cashflow, code)}</td><td>{money(row.cumulative_cashflow, code)}</td><td>{money(row.discounted_cashflow, code)}</td></tr>)}</tbody></TableScroll>
     <p className="muted">*Year five includes one net sale. Year zero is the initial investment outflow. Annual yields exclude resale. Appreciation values are a separate price-growth illustration when the selected exit method is capitalisation.</p>
     <Disclosure title="Calculation evidence and reproducibility">
       <p>Assumption version {result.scenario_version}; {result.source_scope}. Source references are supplied by the author and require independent verification. Project defaults are shared assumptions, not unit-specific market evidence.</p>

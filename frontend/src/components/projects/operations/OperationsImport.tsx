@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { operations } from "@/lib/api/operations";
 import type { OperationsImportReport } from "@/lib/api/operations";
-import { Button, DraftBoundary, Field, FormActions, Notice, RecordPage, TableScroll } from "@/components/ui";
+import { Button, DraftBoundary, Field, FlowSteps, FormActions, Notice, RecordPage, TableScroll } from "@/components/ui";
+
+const IMPORT_STEPS = [
+  {key: "download", label: "Download", hint: "All accessible clients, current values and this project’s stages."},
+  {key: "fill", label: "Fill in Excel", hint: "One client per row. Blue inputs are editable; Sales signatures remain linked."},
+  {key: "review", label: "Review and import", hint: "Validate first, inspect the changes, then save the whole batch."},
+];
 
 export function OperationsImport({projectId, onClose, onImported}: {
   projectId: string; onClose: () => void; onImported: () => void;
@@ -29,7 +35,7 @@ export function OperationsImport({projectId, onClose, onImported}: {
   return <RecordPage title="Update Operations from Excel" onClose={completed ? onImported : onClose}>
     <DraftBoundary dirty={Boolean(file) && !completed} busy={busy}>
       <div className="stack">
-        <ol className="operations-import-steps"><li><strong>Download</strong><span>All accessible clients, current values and this project’s stages.</span></li><li><strong>Fill in Excel</strong><span>One client per row. Blue inputs are editable; Sales signatures remain linked.</span></li><li><strong>Review and import</strong><span>Validate first, inspect the changes, then save the whole batch.</span></li></ol>
+        <FlowSteps label="Import steps" steps={IMPORT_STEPS} current={completed ? IMPORT_STEPS.length : file ? 2 : 0} />
         <Button disabled={busy} onClick={async () => {
           setBusy(true); setError(null);
           try { await operations.template(projectId); }
