@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState, useRef } from "react";
 
 import { ApiError, inventory, pricing } from "@/lib/api";
@@ -77,7 +78,9 @@ export function UnitWorkspace({
   const [pricingBusy, setPricingBusy] = useState(false);
   const [approvingPrice, setApprovingPrice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const currencyCodeOf = useCurrencyCode();
 
@@ -302,7 +305,6 @@ export function UnitWorkspace({
      
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {activeSection === "detail" && !supportBusy && detailRevision === supportRevision && areaTypes.length === 0 ? (
         <Notice tone="info">

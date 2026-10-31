@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
 
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
@@ -80,7 +81,9 @@ export function PaymentPlansTab({
   const recordHref = useRecordHref(projectId);
   const [error, setError] = useState<string | null>(null);
   const [contractsError, setContractsError] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const currencyCodeOf = useCurrencyCode();
 
@@ -186,7 +189,6 @@ export function PaymentPlansTab({
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
         {contractsError ? <><Notice tone="error">Eligible contracts could not be loaded. The absence of schedule actions does not mean every contract is scheduled.</Notice><Button onClick={() => void load()}>Retry contracts</Button></> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {/* Scheduling, governed. Every figure counts plans and instalments, not
             money received: what a buyer has actually paid is Collections' to

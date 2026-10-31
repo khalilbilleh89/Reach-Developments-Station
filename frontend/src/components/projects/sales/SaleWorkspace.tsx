@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { LegalSummary } from "@/components/projects/sales/LegalSummary";
 import { SpaDetailsForm } from "@/components/projects/sales/SpaDetailsForm";
 import { RequoteForm } from "@/components/projects/sales/RequoteForm";
@@ -497,7 +498,9 @@ export function SaleWorkspace({
   const [section, setSection] = useRecordTab();
   const [ask, setAsk] = useState<Ask | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [adjustment, setAdjustment] = useState({
@@ -761,7 +764,6 @@ export function SaleWorkspace({
       <Steps label="Where the deal has got to" steps={lifecycle(terms, sale)} />
 
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {activeSection === "agent" && (sale?.sale ?? terms) ? <SaleAgent key={sale?.sale.id ?? terms!.id} projectId={projectId} record={(sale?.sale ?? terms)!} isSale={!!sale} canWrite={roles.has("master_admin") || roles.has("sales_operations") || roles.has("sales_advisor")} onChanged={load} /> : null}
       {activeSection === "overview" ? <SaleOverview projectId={projectId} sale={sale} reservation={reservation} client={client} roles={roles} onOpenTab={setSection} onChanged={load} priceReadError={error} /> : null}

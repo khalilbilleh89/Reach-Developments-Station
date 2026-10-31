@@ -1,4 +1,5 @@
 "use client";
+import * as ui from "@/components/ui";
 import { ValidationSummary } from "@/components/ui/ValidationSummary";
 
 import { useCallback, useEffect, useState } from "react";
@@ -158,7 +159,9 @@ export function PaymentPlanWorkspace({
   );
   const [validationError, setValidationError] = useState<ApiError | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const currencyCodeOf = useCurrencyCode();
@@ -531,7 +534,6 @@ export function PaymentPlanWorkspace({
      
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {section === "overview" ? <section className="stack">
         <SectionHeader level={2} title={active ? "Governing schedule" : "Schedule in preparation"} actions={<Button onClick={() => setSection("schedule")}>{canPrepare && current?.version.status === "draft" ? "Build schedule" : "Inspect installments"}</Button>} />

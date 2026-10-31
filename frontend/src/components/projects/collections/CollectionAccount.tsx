@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -117,7 +118,9 @@ export function CollectionAccount({
   const [tab, setTab] = useState(asOf && asOf !== todayISO() ? "position" : "receipts");
   const [summary, setSummary] = useState<CollectionSaleSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
 
   // A past date is a report, not a desk. Every action in this record-page records
@@ -229,7 +232,6 @@ export function CollectionAccount({
       onClose={onClose}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
       {historical ? (
         <Notice tone="info">
           Position as at {businessDate(asOf)}, matching the register row this was opened

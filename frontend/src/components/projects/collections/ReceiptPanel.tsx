@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -71,7 +72,9 @@ export function ReceiptPanel({
 }) {
   const [receipts, setReceipts] = useState<Receipt[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [form, setForm] = useState({
@@ -154,7 +157,6 @@ export function ReceiptPanel({
   return (
     <DraftBoundary dirty={recording && Boolean(form.amount || form.bank_reference || form.notes || form.receipt_date !== todayISO())} busy={busy} onDiscard={() => { setRecording(false); setForm({ amount: "", receipt_date: todayISO(), bank_reference: "", notes: "" }); }}><div className="stack">
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {canRecord ? (
         <SubPanel

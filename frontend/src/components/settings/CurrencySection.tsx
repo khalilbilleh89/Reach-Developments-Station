@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useState } from "react";
 
 import {
@@ -38,7 +39,9 @@ export function CurrencySection() {
   const [removing, setRemoving] = useState<Currency | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
 
   const rows = answer.status === "ready" ? answer.data : [];
   const needle = search.trim().toLowerCase();
@@ -114,7 +117,6 @@ export function CurrencySection() {
         recalculate any amount; financial screens continue to identify amounts by currency code.
       </Notice>
       {error && !adding && !editing && !removing ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       <DataToolbar
         framed

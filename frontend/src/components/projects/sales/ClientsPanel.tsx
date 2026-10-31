@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 import { SalesImport } from "./SalesImport";
 
@@ -89,7 +90,9 @@ export function ClientsPanel({
   const [parties, setParties] = useState<ClientParty[]>([]);
   const [shares, setShares] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [editing, setEditing] = useState<SalesClient | null>(null);
@@ -205,7 +208,6 @@ export function ClientsPanel({
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
       {editing ? <RecordPage title={`Edit ${editing.display_name}`} onClose={() => setEditing(null)}><EditForm
         key={editing.id} fields={clientFields}
         initial={Object.fromEntries(clientFields.map(field => [field.name, asValue(editing[field.name as keyof SalesClient] as never)]))}

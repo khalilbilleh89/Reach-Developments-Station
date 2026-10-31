@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, pricing } from "@/lib/api";
@@ -132,7 +133,9 @@ export function ConfigurationPanel({
   const [escalations, setEscalations] = useState<PricingEscalationRule[]>([]);
   const [creating, setCreating] = useState(configurations.length === 0);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const [approval, setApproval] = useState<string | null>(null);
 
@@ -221,7 +224,6 @@ export function ConfigurationPanel({
     >
       {approval ? <PromptDialog title="Approve pricing configuration" label="Approval rationale" description={`Configuration ${configurations.find(c => c.id === approval)?.name ?? approval}. State what you checked and why it is approved.`} confirmLabel="Approve configuration" busy={busy} error={error} onCancel={() => { if (!busy) setApproval(null); }} onSubmit={reason => void act(() => pricing.approveConfiguration(projectId, approval, reason), "Configuration approved.")} /> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
 
       {creating && canWrite ? (
         <NewConfigurationForm

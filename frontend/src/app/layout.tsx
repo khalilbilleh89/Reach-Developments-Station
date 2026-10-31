@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
 import "./development.css";
 
@@ -25,7 +26,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body><ToastProvider>{children}</ToastProvider></body>
     </html>
   );
 }
