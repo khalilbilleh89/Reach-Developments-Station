@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { AreaMeasure, Feasibility } from "@/lib/api/analysis";
 import { businessDate } from "@/lib/format";
-import { Disclosure, Notice, Position, PositionFigure, SectionHeader, SourceNote, TableScroll, Views } from "@/components/ui";
+import { Banner, Disclosure, Notice, Position, PositionFigure, SectionHeader, SourceNote, TableScroll, Views } from "@/components/ui";
 
 const totalLabels:Record<string,string>={buildable:"Total Buildable Area",covered:"Total Covered Area (Apartment Space + Balcony)",
   internal:"Total Apartment Covered Area (without Balcony)",balcony:"Total Balcony Covered Area",terrace:"Total Terrace Area",
@@ -29,7 +29,7 @@ export function FeasibilityView({data,projectId}:{data:Feasibility;projectId?:st
     </Position>
     {!data.apartments ? <Notice tone="info">No active apartments in this inventory scope.</Notice> : null}
     {data.other_units ? <Notice tone="info">{data.other_units} other property units are excluded from apartment figures and included in building/grand totals where their measurements are complete.</Notice> : null}
-    {missing.length ? <section className="analysis-inputs"><SectionHeader title="Complete the area inputs" description="Review approved unit schedules and shared measurements to establish the missing totals." />{projectId ? <Link href={`/projects/?project=${encodeURIComponent(projectId)}&section=inventory`}>Review unit schedules and Common Areas →</Link> : null}<Disclosure title={`${missing.length} incomplete area totals`}><ul>{missing.map(([key,label]) => <li key={key}>{label}</li>)}</ul></Disclosure></section> : null}
+    {missing.length ? <section className="analysis-inputs"><Banner tone="warning" action={projectId ? <Link className="button button-small" href={`/projects/?project=${encodeURIComponent(projectId)}&section=inventory`}>Review unit schedules and Common Areas</Link> : undefined}><strong>Complete the area inputs.</strong> Review approved unit schedules and shared measurements to establish the missing totals.</Banner><Disclosure title={`${missing.length} incomplete area totals`}><ul>{missing.map(([key,label]) => <li key={key}>{label}</li>)}</ul></Disclosure></section> : null}
     <section><SectionHeader title="Sellable & buildable area efficiency" /><TableScroll label="Area efficiency ratios"><thead><tr><th scope="col">Indicator</th><th scope="col" className="num">Ratio</th><th scope="col">Area basis</th></tr></thead><tbody>{data.efficiencies.map(row=><tr key={row.label}><th scope="row">{row.label}</th><td className="num">{row.percentage===null ? "Unavailable" : `${row.percentage}%`}</td><td><p>{row.formula}</p><p>{area(row.numerator)} / {area(row.denominator)}</p>{row.reason ? <p>{row.reason}</p> : null}</td></tr>)}</tbody></TableScroll></section>
     <section><SectionHeader title="Area measurements" description="The project's totals, or the average apartment, measured from the same approved schedules." />
       <Views label="Area measurements" views={[

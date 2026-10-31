@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api";
 import { escalations, type EscalationEntry } from "@/lib/api/escalations";
 import { useAnswer } from "@/lib/answer";
 import { businessDate, decimalText } from "@/lib/format";
-import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, FormSection, Loading, Notice, PageHeader, RecordPage, RowMenu, ValidationSummary } from "@/components/ui";
+import { Button, Card, CardRow, CardRows, DraftBoundary, EmptyState, Field, FieldRow, FormActions, FormSection, Loading, Notice, PageHeader, RecordPage, RowMenu, ValidationSummary } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 export function PriceEscalationTab({ projectId }: { projectId: string }) {
@@ -28,19 +28,19 @@ export function PriceEscalationTab({ projectId }: { projectId: string }) {
     {answer.status === "ready" ? <>
       <div className="form-actions"><span>{rows.length} price escalation entries · latest effective date first</span><Button variant="quiet" onClick={answer.retry}>Refresh</Button></div>
       {rows.length === 0 ? <Card><EmptyState title="No price escalations yet" hint="Add an effective date, percentage and project status to start your strategy history." /></Card> : null}
-      {rows.map(row => <Card key={row.id}><div className="stack">
-        <dl className="workspace-facts">
-          <div><dt>Effective date</dt><dd>{businessDate(row.effective_date)}</dd></div>
-          <div><dt>Price escalation %</dt><dd>{decimalText(row.escalation_percent)}%</dd></div>
-          <div><dt>Project status</dt><dd>{row.project_status}</dd></div>
-        </dl>
-        {canManage ? <div className="form-actions"><RowMenu label={`Actions for ${businessDate(row.effective_date)}`}><Button onClick={() => setEditor({ entry: row })}>Edit price escalation</Button>
+      {rows.length ? <CardRows label="Price escalation entries">{rows.map(row => <CardRow key={row.id}
+        title={businessDate(row.effective_date)}
+        meta="Effective date"
+        facts={[
+          { label: "Price escalation %", value: `${decimalText(row.escalation_percent)}%` },
+          { label: "Project status", value: row.project_status },
+        ]}
+        actions={canManage ? <RowMenu label={`Actions for ${businessDate(row.effective_date)}`}><Button onClick={() => setEditor({ entry: row })}>Edit price escalation</Button>
           <DeleteRecordButton label="price escalation" recordName={businessDate(row.effective_date) + " / " + row.project_status}
             description="Remove this entry from the register. Its values and audit history are retained. Unit prices are unchanged."
             confirmLabel="Delete entry" onDelete={reason => escalations.remove(projectId, row, reason)}
-            onDeleted={async () => { setNotice("Price escalation deleted."); answer.retry(); }} /></RowMenu>
-        </div> : null}
-      </div></Card>)}
+            onDeleted={async () => { setNotice("Price escalation deleted."); answer.retry(); }} /></RowMenu> : undefined}
+      />)}</CardRows> : null}
     </> : null}
     {editor ? <EscalationForm key={editor.entry?.id ?? "new"} projectId={projectId} entry={editor.entry} suggestions={suggestions}
       onClose={() => setEditor(null)} onSaved={() => { setEditor(null); setNotice("Price escalation saved."); answer.retry(); }} /> : null}

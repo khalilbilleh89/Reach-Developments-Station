@@ -17,6 +17,7 @@ import {
   SortHeader,
   FilterChips,
   SavedViews,
+  Segmented,
   DensitySwitch,
   DatePoint,
   useSort,
@@ -175,19 +176,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
           }
           actions={<>
             <DensitySwitch />
-            <div className="segmented" role="group" aria-label="View">
-              {VIEWS.map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  className="segment"
-                  aria-pressed={view === option.key}
-                  onClick={() => setView(option.key)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <Segmented label="View" value={view} onChange={setView} options={VIEWS.map((option) => ({ value: option.key, label: option.label }))} />
           </>}
         >
           <ToolbarFilter label="As at" active={asOf !== todayISO()}>
@@ -214,12 +203,17 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
             </select>
           </ToolbarFilter>
           <ToolbarFilter label="Only show" active={only !== ""}>
-            <select className="input" value={only} onChange={(event) => setOnly(event.target.value)}>
-              <option value="">Everything</option>
-              <option value="overdue">Overdue only</option>
-              <option value="unapplied">With unapplied cash</option>
-              <option value="disputed">With an open dispute</option>
-            </select>
+            <Segmented
+              label="Only show"
+              value={only}
+              onChange={setOnly}
+              options={[
+                { value: "", label: "Everything" },
+                { value: "overdue", label: "Overdue" },
+                { value: "unapplied", label: "Unapplied cash" },
+                { value: "disputed", label: "Disputed" },
+              ]}
+            />
           </ToolbarFilter>
         </DataToolbar>
         <FilterChips chips={chips} onClearAll={() => { setStatus(""); setBucket(""); setOnly(""); setSearch(""); setAsOf(""); }} />

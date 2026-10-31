@@ -29,6 +29,7 @@ import {
   Notice,
   PromptDialog,
   RateInput,
+  Segmented,
   StatusDot,
   Steps,
   TableScroll,
@@ -651,17 +652,12 @@ function AreaRuleForm({
         </select>
       </Field>
       <Field label="Method">
-        <select
-          className="input"
+        <Segmented
+          label="Method"
           value={form.pricing_method}
-          onChange={(event) => setForm({ ...form, pricing_method: event.target.value })}
-        >
-          {Object.entries(METHOD_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+          options={Object.entries(METHOD_LABELS).map(([value, label]) => ({ value, label }))}
+          onChange={(value) => setForm({ ...form, pricing_method: value })}
+        />
       </Field>
       {form.pricing_method === "fixed_rate_per_area" ? (
         <Field label="Rate per unit of area">
@@ -780,13 +776,12 @@ function PremiumRuleForm({
         </Field>
       ) : null}
       <Field label="Method">
-        <select className="input" value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}>
-          {Object.entries(PREMIUM_METHOD_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <Segmented
+          label="Method"
+          value={form.method}
+          options={Object.entries(PREMIUM_METHOD_LABELS).map(([value, label]) => ({ value, label }))}
+          onChange={(value) => setForm({ ...form, method: value })}
+        />
       </Field>
       <Field label={form.method === "percentage" ? "Premium" : "Amount"}>
         {form.method === "percentage" ? (
@@ -866,16 +861,17 @@ function EscalationRuleForm({
         <input className="input" required value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} />
       </Field>
       <Field label="Trigger">
-        <select
-          className="input"
+        <Segmented
+          label="Trigger"
           value={form.trigger_type}
-          onChange={(event) => setForm({ ...form, trigger_type: event.target.value })}
-        >
-          <option value="date">Date</option>
-          <option value="sales_percentage">Sales percentage</option>
-          <option value="construction_milestone">Construction milestone</option>
-          <option value="market_index">Market index</option>
-        </select>
+          options={[
+            { value: "date", label: "Date" },
+            { value: "sales_percentage", label: "Sales percentage" },
+            { value: "construction_milestone", label: "Construction milestone" },
+            { value: "market_index", label: "Market index" },
+          ]}
+          onChange={(value) => setForm({ ...form, trigger_type: value })}
+        />
       </Field>
       {form.trigger_type === "date" ? (
         <Field label="Eligible from">
@@ -889,10 +885,15 @@ function EscalationRuleForm({
         </Field>
       ) : null}
       <Field label="Scope">
-        <select className="input" value={form.scope_type} onChange={(event) => setForm({ ...form, scope_type: event.target.value })}>
-          <option value="project">Whole project</option>
-          <option value="phase">One phase</option>
-        </select>
+        <Segmented
+          label="Scope"
+          value={form.scope_type}
+          options={[
+            { value: "project", label: "Whole project" },
+            { value: "phase", label: "One phase" },
+          ]}
+          onChange={(value) => setForm({ ...form, scope_type: value })}
+        />
       </Field>
       {form.scope_type === "phase" ? (
         <Field label="Phase">

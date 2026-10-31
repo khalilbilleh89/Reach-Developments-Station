@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
 import { projectHref } from "@/components/shell/navigation";
-import { Badge, Button, ButtonRow, Card, EmptyState, Field, FieldRow, FormDialog, KeyValue, KeyValueGrid, Loading, MoneyInput, Notice, SectionHeader, TableScroll } from "@/components/ui";
+import { Badge, Banner, Button, ButtonRow, Card, CardRow, CardRows, EmptyState, Field, FieldRow, FormDialog, KeyValue, KeyValueGrid, Loading, MoneyInput, Notice, SectionHeader, Segmented } from "@/components/ui";
 import { ApiError, construction } from "@/lib/api";
 import type { BudgetDetail, BudgetLine, BudgetVersion, CostCode } from "@/lib/api";
 import { useAnswer } from "@/lib/answer";
@@ -87,8 +87,12 @@ export function BudgetWorkspace({ projectId, roles, onChanged }: { projectId: st
       {canPrepare && register.status === "ready" && codes.status === "ready" && (!open || open.status === "draft") ? <Button onClick={() => begin({ kind: "code" })}>Add cost code</Button> : null}
     </ButtonRow>
     {register.status === "failed" ? <><Notice tone="error">{register.message}</Notice><Button onClick={register.retry}>Retry budget versions</Button></> : register.status === "denied" ? <Notice tone="info">Whole-project Construction access is required to read budgets.</Notice> : register.status === "loading" ? <Loading label="Loading budget versions" shape="rows" /> : <>
-      <Notice tone={active ? "info" : "warning"}>{active ? `Budget v${active.version_number} is in force. Other versions do not authorize commitments.` : "No construction budget is in force. Preparing or approving a draft does not activate it."}</Notice>
-      {!view.budgetVersion ? versions.length ? <TableScroll label="Budget versions"><thead><tr><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Effective</th><th scope="col">Reason / source</th></tr></thead><tbody>{versions.map(version => <tr key={version.id}><th scope="row"><Link href={versionHref(version.id)}>Budget v{version.version_number}</Link></th><td><Badge tone={budgetTone(version.status)}>{budgetLabel(version.status)}</Badge></td><td>{businessDate(version.effective_date)}</td><td className="cell-prose">{version.change_reason}{version.source_version_id ? <p><Link href={versionHref(version.source_version_id)}>Open source version</Link></p> : null}</td></tr>)}</tbody></TableScroll> : <EmptyState title="No budget versions" hint="Create the first budget, add any missing cost codes, and enter their authorizations. Finance or a Project Manager prepares; an Approver / CFO reviews." /> : null}
+      {active ? <Notice tone="info">{`Budget v${active.version_number} is in force. Other versions do not authorize commitments.`}</Notice> : <Banner tone="warning">No construction budget is in force. Preparing or approving a draft does not activate it.</Banner>}
+      {!view.budgetVersion ? versions.length ? <CardRows label="Budget versions">{versions.map(version => <CardRow key={version.id}
+        title={<Link href={versionHref(version.id)}>Budget v{version.version_number}</Link>}
+        facts={[{ label: "Effective", value: businessDate(version.effective_date) }, { label: "Reason", value: <span className="cell-prose">{version.change_reason}</span> }]}
+        status={<Badge tone={budgetTone(version.status)}>{budgetLabel(version.status)}</Badge>}
+        actions={version.source_version_id ? <Link href={versionHref(version.source_version_id)}>Open source version</Link> : undefined} />)}</CardRows> : <EmptyState title="No budget versions" hint="Create the first budget, add any missing cost codes, and enter their authorizations. Finance or a Project Manager prepares; an Approver / CFO reviews." /> : null}
     </>}
     {codes.status === "failed" ? <><Notice tone="error">Cost codes could not be loaded. Budget lines are unavailable for editing until this read recovers.</Notice><Button onClick={codes.retry}>Retry cost codes</Button></> : codes.status === "denied" ? <Notice tone="info">Cost codes are unavailable to your current scope.</Notice> : null}
     {view.budgetVersion && record.status === "loading" ? <Loading label="Loading selected budget" shape="rows" /> : null}
@@ -140,7 +144,7 @@ function BudgetEditor({ editor, detail, versions, busy, failure, onSubmit, onCan
       <p>A project cost code groups budget and future contract lines. This creates a project-wide code; it does not authorize spending.</p>
       <Field label="Code" error={error("code")}><input className="input" required maxLength={32} value={form.code} onChange={e => change("code", e.target.value)} /></Field>
       <Field label="Name" error={error("name")}><input className="input" required maxLength={200} value={form.name} onChange={e => change("name", e.target.value)} /></Field>
-      <Field label="Category"><select className="input" value={form.cost_category} onChange={e => change("cost_category", e.target.value)}><option value="hard">Hard costs</option><option value="soft">Soft costs</option><option value="contingency">Contingency</option><option value="other">Other</option></select></Field>
+      <Field label="Category"><Segmented label="Category" value={form.cost_category} onChange={value => change("cost_category", value)} options={[{ value: "hard", label: "Hard costs" }, { value: "soft", label: "Soft costs" }, { value: "contingency", label: "Contingency" }, { value: "other", label: "Other" }]} /></Field>
     </> : editor.kind === "line" ? <>
       <p>{editor.code.name}. Enter zero explicitly when no amount is authorized. Control budget and headroom are calculated by the server.</p>
       <FieldRow><Field label="Budget authorization" error={error("approved_budget_amount")}><MoneyInput code={detail?.currency_code ?? null} required value={form.approved_budget_amount} onChange={v => change("approved_budget_amount", v)} /></Field><Field label="Contingency" error={error("contingency_amount")}><MoneyInput code={detail?.currency_code ?? null} required value={form.contingency_amount} onChange={v => change("contingency_amount", v)} /></Field></FieldRow>

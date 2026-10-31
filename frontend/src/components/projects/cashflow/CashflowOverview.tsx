@@ -2,21 +2,22 @@
 
 import {
   Badge,
+  Banner,
   Button,
   Card,
-  Disclosure,
   KeyValue,
   KeyValueGrid,
-  Notice,
   Position,
   PositionFigure,
   PositionSupport,
   PositionSupportItem,
   SectionHeader,
+  SourceNote,
   StatStrip,
   StatStripNote,
   SubPanel,
   TableScroll,
+  Tooltip,
 } from "@/components/ui";
 import type { CashflowSummary } from "@/lib/api";
 import { businessDate, isPositive, money, percent } from "@/lib/format";
@@ -49,6 +50,13 @@ export function CashflowOverview({ summary, onOpenForecast }: { summary: Cashflo
         tone="command"
         title="Cash position"
         description="What the project holds, and how much of it can be spent."
+        actions={
+          <SourceNote
+            coverage="available"
+            label="Spendable cash basis"
+            method="Unrestricted cash is the figure to act on: it is what the project can pay a contractor with today. Restricted cash is buyer money held in escrow against the receipts it came from — it is on the balance sheet and cannot be spent."
+          />
+        }
       >
         <Position layout="split">
           <PositionFigure
@@ -85,29 +93,20 @@ export function CashflowOverview({ summary, onOpenForecast }: { summary: Cashflo
             value={basis.forecast_as_of_date ? businessDate(basis.forecast_as_of_date) : "—"}
           />
         </PositionSupport>
-        <Disclosure title="Spendable cash basis">
-        <p className="footnote">
-          Unrestricted cash is the figure to act on: it is what the project can
-          pay a contractor with today. Restricted cash is buyer money held in
-          escrow against the receipts it came from — it is on the balance sheet
-          and cannot be spent.
-        </p>
-        </Disclosure>
       </Card>
 
       {!summary.has_active_forecast ? (
-        <Card title="Forecast-dependent figures unavailable">
-          <Notice tone="info">No cashflow forecast is in force. Actual cash is shown above. Funding requirements, projected cash, collection coverage and investment returns are unavailable until a forecast is activated. Missing forecasts do not mean no funding is needed.</Notice>
-          <Button onClick={onOpenForecast}>Open Forecast</Button>
-        </Card>
+        <Banner tone="warning" action={<Button onClick={onOpenForecast}>Open Forecast</Button>}>
+          <strong>Forecast-dependent figures unavailable.</strong> No cashflow forecast is in force. Actual cash is shown above. Funding requirements, projected cash, collection coverage and investment returns are unavailable until a forecast is activated. Missing forecasts do not mean no funding is needed.
+        </Banner>
       ) : null}
 
       {summary.has_active_forecast && summary.staleness?.is_stale ? (
-        <Notice tone="warning">
+        <Banner tone="warning" action={<Button onClick={onOpenForecast}>Open Forecast</Button>}>
           The forecast in force was built on sources that have since changed.
           Its figures are what was approved and are still reported exactly as
           approved — see the Forecast section for what moved.
-        </Notice>
+        </Banner>
       ) : null}
 
       {summary.has_active_forecast ? <>
@@ -282,7 +281,8 @@ function Returns({
             />
           </KeyValueGrid>
           <p className="footnote">
-            Operating and development cash, discounted at the forecast&rsquo;s own
+            <Tooltip term="NPV">Net present value: future cash flows discounted back to today&rsquo;s money.</Tooltip>{" "}
+            of operating and development cash, discounted at the forecast&rsquo;s own
             monthly rate. Financing flows are excluded: equity is how the project
             was funded, not what it earned.
           </p>
@@ -313,7 +313,8 @@ function Returns({
             <KeyValue label="Net to investor" value={money(returns.equity_net, currency)} mono />
           </KeyValueGrid>
           <p className="footnote">
-            Stated from the investor&rsquo;s side: a contribution is cash they paid
+            <Tooltip term="IRR">Internal rate of return: the discount rate at which the discounted equity paid in and paid out net to zero.</Tooltip>{" "}
+            stated from the investor&rsquo;s side: a contribution is cash they paid
             out and a distribution is cash they received back.
           </p>
         </SubPanel>

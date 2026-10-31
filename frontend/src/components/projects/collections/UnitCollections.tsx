@@ -13,6 +13,7 @@ import {
   MetricGroup,
   Notice,
   SectionHeader,
+  StageBar,
 } from "@/components/ui";
 import { CollectionProgress } from "./CollectionProgress";
 import { useCurrencyCode } from "@/lib/currency";
@@ -135,6 +136,9 @@ export function UnitCollections({
 
       <section>
         <SectionHeader title="Instalments" />
+        {summary.installments_total > 0 ? (
+          <StageBar label="Instalments paid" done={summary.installments_paid} total={summary.installments_total} />
+        ) : null}
         <KeyValueGrid columns={4}>
           <KeyValue label="Scheduled" mono value={String(summary.installments_total)} />
           <KeyValue label="Paid" mono value={String(summary.installments_paid)} />

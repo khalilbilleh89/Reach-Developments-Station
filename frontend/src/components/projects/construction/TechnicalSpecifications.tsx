@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, Disclosure, DataToolbar, Field, EmptyState, Loading, Notice, RecordPage, RowMenu, SectionHeader, ToolbarFilter } from "@/components/ui";
+import { Badge, Button, Card, Disclosure, DataToolbar, Field, EmptyState, FilterChips, Loading, Notice, RecordPage, RowMenu, SectionHeader, Segmented, ToolbarFilter } from "@/components/ui";
 import { technicalSpecifications, type TechnicalSpecification } from "@/lib/api/technicalSpecifications";
 import { hasAnyRole } from "@/lib/roles";
 import { businessDate } from "@/lib/format";
@@ -108,8 +108,13 @@ export function TechnicalSpecifications({ projectId, roles }: { projectId: strin
     {error ? <Notice tone="error">{error}<Button onClick={() => void load()}>Retry</Button></Notice> : rows === null ? <Loading label="Loading technical specifications" /> : <>
       <DataToolbar search={{ value: search, onChange: setSearch, placeholder: "Search a feature, brand, buyer benefit or unit type" }} count={{ shown: shown.length, total: rows.length, noun: "specification" }} onReset={search || scope || status !== defaultStatus ? () => { setSearch(""); setScope(""); setStatus(canWrite ? "" : "confirmed"); } : undefined}>
         <ToolbarFilter label="Applies to" active={!!scope}><select className="input" value={scope} onChange={event => setScope(event.target.value)}><option value="">Project & units</option>{scopes.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></ToolbarFilter>
-        <ToolbarFilter label="Confirmation" active={!!status}><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All items</option>{statuses.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></ToolbarFilter>
+        <ToolbarFilter label="Confirmation" active={!!status}><Segmented label="Confirmation" value={status} onChange={setStatus} options={[{ value: "", label: "All items" }, ...statuses]} /></ToolbarFilter>
       </DataToolbar>
+      <FilterChips chips={[
+        ...(scope ? [{ key: "scope", label: `Applies to: ${scopes.find(item => item.value === scope)?.label ?? scope}`, onRemove: () => setScope("") }] : []),
+        ...(status !== defaultStatus ? [{ key: "status", label: status ? `Confirmation: ${statuses.find(item => item.value === status)?.label ?? status}` : "All items", onRemove: () => setStatus(defaultStatus) }] : []),
+        ...(search ? [{ key: "search", label: `“${search}”`, onRemove: () => setSearch("") }] : []),
+      ]} />
       {rows.length === 0 ? <EmptyState title="No specifications recorded yet" hint="Add the project’s sourced specifications to build a clear reference for Sales." /> : shown.length === 0 ? <EmptyState title="No matching specifications" hint="Change the search or filters to see more items." /> : null}
       {guideSections.map(group => {
         const items = shown.filter(item => group.categories.includes(item.category));

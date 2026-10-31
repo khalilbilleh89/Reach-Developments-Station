@@ -133,10 +133,12 @@ class TestExperience41Evidence:
 
     def test_penetration_geometry_uses_the_reported_percentage(self) -> None:
         portfolio = read(FRONTEND / "components" / "portfolio" / "Portfolio.tsx")
-        assert "<Meter neutral percent={data.sales_penetration.percentage}" in portfolio
+        # The ring (design system H3c) draws the server's percentage and prints it.
+        assert "<ProgressRing focus percent={data.sales_penetration.percentage}" in portfolio
         assert "data.sales_penetration.percentage === null" in portfolio
-        assert "Number(percent)" in read(UI / "Data.tsx")
-        assert 'neutral ? "meter-fill"' in read(UI / "Data.tsx")
+        progress = read(UI / "Progress.tsx")
+        assert "Number(percent)" in progress
+        assert "{percent}%" in progress
 
 
 def stylesheet_without_comments() -> str:

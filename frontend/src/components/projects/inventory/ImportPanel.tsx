@@ -7,15 +7,37 @@ import { ApiError, inventory } from "@/lib/api";
 import type { ImportReport, WorkbookReport } from "@/lib/api";
 import {
   Button,
+  ChoiceCards,
   DraftBoundary,
   Field,
   FieldRow,
+  FlowSteps,
   FormActions,
   InlineMeta,
   InlineMetaItem,
+  Metric,
+  MetricGroup,
   Notice,
+  Segmented,
   TableScroll,
 } from "@/components/ui";
+
+const WORKBOOK_STEPS = [
+  { key: "prepare", label: "Prepare workbook" },
+  { key: "validate", label: "Validate file" },
+  { key: "review", label: "Review results" },
+  { key: "apply", label: "Apply accepted records" },
+];
+
+const WORKBOOK_MODES = [
+  { value: "create", label: "Create", description: "Create new records. Existing codes are rejected." },
+  { value: "upsert", label: "Create or update", description: "Matches existing records by code and updates them." },
+];
+
+/** One sheet's planned changes, as the server counted them; never added together here. */
+function planned(counts: { create: number; update: number } | undefined): string {
+  return counts ? `${counts.create} new · ${counts.update} updated` : "—";
+}
 
 /**
  * Loading a development's structure, in the order an operator actually works.
@@ -120,12 +142,7 @@ export function ImportPanel({
   return (
     <DraftBoundary dirty={bytes !== null && !report?.applied} busy={busy} onDiscard={() => { setBytes(null); setFilename(""); setSize(0); reset(); }}>
     <div className="stack">
-      <ol className="inventory-import-steps" aria-label="Import progress">
-        <li aria-current={bytes === null ? "step" : undefined}><strong>1</strong> Prepare workbook</li>
-        <li aria-current={bytes !== null && report === null ? "step" : undefined}><strong>2</strong> Validate file</li>
-        <li aria-current={report !== null && !report.applied ? "step" : undefined}><strong>3</strong> Review results</li>
-        <li aria-current={report?.applied ? "step" : undefined}><strong>4</strong> Apply accepted records</li>
-      </ol>
+      <FlowSteps label="Import progress" steps={WORKBOOK_STEPS} current={report?.applied ? WORKBOOK_STEPS.length : report !== null ? 2 : bytes !== null ? 1 : 0} />
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <FieldRow columns={2}>
@@ -144,22 +161,17 @@ export function ImportPanel({
             onChange={(event) => void choose(event)}
           />
         </Field>
-        <Field
+        <ChoiceCards
           label="Mode"
-          hint="Create new records rejects existing codes. Create or update matches existing records by code."
-        >
-          <select
-            className="input"
-            value={mode}
-            onChange={(event) => {
-              setMode(event.target.value as "create" | "upsert");
-              reset();
-            }}
-          >
-            <option value="create">Create</option>
-            <option value="upsert">Create or update</option>
-          </select>
-        </Field>
+          name="inventory-workbook-mode"
+          columns={2}
+          value={mode}
+          options={WORKBOOK_MODES}
+          onChange={(value) => {
+            setMode(value as "create" | "upsert");
+            reset();
+          }}
+        />
       </FieldRow>
 
       <FormActions>
@@ -176,22 +188,16 @@ export function ImportPanel({
 
       {report ? (
         <>
+          <MetricGroup compact>
+            <Metric label="To create" value={report.create_count} size="sm" />
+            <Metric label="To update" value={report.update_count} size="sm" />
+            <Metric label="Errors" value={report.error_count} size="sm" tone={report.error_count > 0 ? "danger" : "neutral"} />
+          </MetricGroup>
           <InlineMeta>
-            <InlineMetaItem label="Phases">
-              {records ? records.phases.create + records.phases.update : 0}
-            </InlineMetaItem>
-            <InlineMetaItem label="Buildings">
-              {records ? records.buildings.create + records.buildings.update : 0}
-            </InlineMetaItem>
-            <InlineMetaItem label="Floors">
-              {records ? records.floors.create + records.floors.update : 0}
-            </InlineMetaItem>
-            <InlineMetaItem label="Units">
-              {records ? records.units.create + records.units.update : 0}
-            </InlineMetaItem>
-            <InlineMetaItem label="To create">{report.create_count}</InlineMetaItem>
-            <InlineMetaItem label="To update">{report.update_count}</InlineMetaItem>
-            <InlineMetaItem label="Errors">{report.error_count}</InlineMetaItem>
+            <InlineMetaItem label="Phases">{planned(records?.phases)}</InlineMetaItem>
+            <InlineMetaItem label="Buildings">{planned(records?.buildings)}</InlineMetaItem>
+            <InlineMetaItem label="Floors">{planned(records?.floors)}</InlineMetaItem>
+            <InlineMetaItem label="Units">{planned(records?.units)}</InlineMetaItem>
           </InlineMeta>
           {report.template_version ? (
             <p className="subtle">Template version {report.template_version}.</p>
@@ -328,14 +334,15 @@ function CsvImport({
           />
         </Field>
         <Field label="Mode">
-          <select
-            className="input"
+          <Segmented
+            label="Mode"
             value={mode}
-            onChange={(event) => setMode(event.target.value as "create" | "upsert")}
-          >
-            <option value="create">Create</option>
-            <option value="upsert">Create or update</option>
-          </select>
+            options={[
+              { value: "create", label: "Create" },
+              { value: "upsert", label: "Create or update" },
+            ]}
+            onChange={(value) => setMode(value)}
+          />
         </Field>
         <Field label="Structure">
           <label className="checkbox">

@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { pageOffset, useRegisterFields } from "@/components/shell/registerState";
 
-import { Badge, Button, ButtonRow, Card, DataToolbar, Disclosure, RecordPage, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Metric, MetricGroup, Notice, Position, PositionFigure, SectionHeader, TableScroll, ToolbarFilter, SourceNote } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, DataToolbar, DensitySwitch, Disclosure, FilterChips, RecordPage, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Metric, MetricGroup, Notice, Position, PositionFigure, SavedViews, SectionHeader, Segmented, TableScroll, ToolbarFilter, SourceNote, Tooltip } from "@/components/ui";
 
 import { ReadState } from "./ReadState";
 import { useAnswer } from "@/lib/answer";
@@ -36,6 +36,10 @@ const groups = [
 
 
 
+/** EAC said in words wherever it labels a figure (I2). */
+const EAC = <Tooltip term="EAC">Estimate at completion: what the construction is now expected to cost when finished.</Tooltip>;
+const HORIZONS = [30, 60, 90].map((days) => ({ value: String(days), label: `${days} days` }));
+
 function Observation({ item }: { item: OutlookItem }) {
 
   return <section className="stack" aria-label={`${item.project_code} ${item.title}`}>
@@ -56,7 +60,7 @@ function Observation({ item }: { item: OutlookItem }) {
 
     </Card> : item.commercial ? <Position compact><PositionFigure lead label="Estimated months to sell" value={item.commercial.estimated_months_to_sell ?? "Indeterminate"} note="Run-rate estimate · no predictive certainty" /><PositionFigure label="Remaining eligible units" value={item.commercial.remaining_units ?? "Unavailable"} /><PositionFigure label="Average monthly net absorption" value={item.commercial.average_monthly_absorption ?? "Unavailable"} note={`${item.commercial.observed_months} complete observed months`} /></Position>
 
-      : item.item_type === "construction_eac" ? <Position compact><PositionFigure lead label="EAC · excluding tax" value={item.amount !== null && item.currency ? money(item.amount, item.currency) : "Unavailable"} /><PositionFigure label="Control budget · excluding tax" value={item.control_budget !== null && item.currency ? money(item.control_budget, item.currency) : "Unavailable"} /></Position>
+      : item.item_type === "construction_eac" ? <Position compact><PositionFigure lead label="EAC · excluding tax" value={item.amount !== null && item.currency ? money(item.amount, item.currency) : "Unavailable"} note={<>What {EAC} means</>} /><PositionFigure label="Control budget · excluding tax" value={item.control_budget !== null && item.currency ? money(item.control_budget, item.currency) : "Unavailable"} /></Position>
 
         : item.currency && item.amount !== null ? <Metric label="SCHEDULED / CONTRACTUAL DUE" value={money(item.amount, item.currency)} note="Outstanding governing installment · not expected or actual cash" /> : <KeyValueGrid>
 
@@ -92,14 +96,23 @@ export function PortfolioOutlook() {
 
   const selected = answer.status === "ready" ? answer.data.items.find(item => item.source_key === fields.observation) : null;
 
-  return <div className="stack"><DataToolbar onReset={project || kind || horizon !== 90 || offset ? () => change({ project: "", horizon: "90", kind: "", offset: "", observation: "" }) : undefined} activeSummary={`${project ? "Selected development" : "All authorized developments"} · ${horizon} days · ${groups.find(([key]) => key === kind)?.[1] ?? "Upcoming dates"}`}>
+  const clearAll = () => change({ project: "", horizon: "90", kind: "", offset: "", observation: "" });
+  const chips = [
+    project ? { key: "project", label: "Selected development", onRemove: () => change({ project: "", offset: "", observation: "" }) } : null,
+    horizon !== 90 ? { key: "horizon", label: `${horizon} days`, onRemove: () => change({ horizon: "90", offset: "", observation: "" }) } : null,
+    kind ? { key: "kind", label: groups.find(([key]) => key === kind)?.[1] ?? kind, onRemove: () => change({ kind: "", offset: "", observation: "" }) } : null,
+  ].filter((chip): chip is NonNullable<typeof chip> => chip !== null);
+
+  return <div className="stack"><DataToolbar onReset={project || kind || horizon !== 90 || offset ? clearAll : undefined} activeSummary={`${project ? "Selected development" : "All authorized developments"} · ${horizon} days · ${groups.find(([key]) => key === kind)?.[1] ?? "Upcoming dates"}`} actions={<DensitySwitch />}>
 
     <ProjectChoice emptyLabel="All authorized developments" value={project} onChange={project => change({ project, offset: "", observation: "" })} />
-    <ToolbarFilter label="Outlook horizon"><select className="input" value={horizon} onChange={(event) => { setHorizon(Number(event.target.value)); setOffset(0); }}>{[30, 60, 90].map((days) => <option key={days} value={days}>{days} days</option>)}</select></ToolbarFilter>
+    <ToolbarFilter label="Outlook horizon" active={horizon !== 90}><Segmented label="Outlook horizon" value={String(horizon)} options={HORIZONS} onChange={(value) => { setHorizon(Number(value)); setOffset(0); }} /></ToolbarFilter>
 
-    <ToolbarFilter label="Outlook source"><select className="input" value={kind} onChange={(event) => { setKind(event.target.value); setOffset(0); }}><option value="">All observations · date order</option>{groups.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></ToolbarFilter>
+    <ToolbarFilter label="Outlook source" active={kind !== ""}><select className="input" value={kind} onChange={(event) => { setKind(event.target.value); setOffset(0); }}><option value="">All observations · date order</option>{groups.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></ToolbarFilter>
 
   </DataToolbar>
+    <FilterChips chips={chips} onClearAll={clearAll} />
+    <SavedViews screen="portfolio-outlook" filters={{ project, horizon: String(horizon), kind }} sort={null} onApply={(saved) => change({ project: String(saved.project ?? ""), horizon: String(saved.horizon ?? "90"), kind: String(saved.kind ?? ""), offset: "", observation: "" })} />
 
     {answer.status === "ready" ? <><p>As of {businessDate(answer.data.as_of)} through {businessDate(answer.data.horizon_end)} · {answer.data.authorized_project_count} authorized developments</p>
 
@@ -113,7 +126,7 @@ export function PortfolioOutlook() {
 
         <th scope="row" className="cell-prose"><IdentityCell name={`${item.project_code} · ${item.project_name}`} meta={item.title} /></th>
 
-        <td className="cell-prose"><span className="figure">{item.currency && item.amount !== null ? money(item.amount, item.currency) : item.commercial ? `${item.commercial.estimated_months_to_sell ?? "Indeterminate"} ${item.commercial.estimated_months_to_sell !== null ? "estimated months" : ""}` : item.availability === "unavailable" ? "Unavailable" : item.status?.replaceAll("_", " ") ?? "Recorded due date"}</span>{item.item_type === "cashflow_forecast" ? <p className="muted">FORECAST · lowest unrestricted cash</p> : item.item_type === "scheduled_collection_due" ? <p className="muted">SCHEDULED DUE · outstanding, not cash</p> : item.item_type === "construction_eac" ? <p className="muted">EAC · excluding tax</p> : null}{item.owner_display_name ? <p>{item.owner_display_name}</p> : null}</td>
+        <td className="cell-prose"><span className="figure">{item.currency && item.amount !== null ? money(item.amount, item.currency) : item.commercial ? `${item.commercial.estimated_months_to_sell ?? "Indeterminate"} ${item.commercial.estimated_months_to_sell !== null ? "estimated months" : ""}` : item.availability === "unavailable" ? "Unavailable" : item.status?.replaceAll("_", " ") ?? "Recorded due date"}</span>{item.item_type === "cashflow_forecast" ? <p className="muted">FORECAST · lowest unrestricted cash</p> : item.item_type === "scheduled_collection_due" ? <p className="muted">SCHEDULED DUE · outstanding, not cash</p> : item.item_type === "construction_eac" ? <p className="muted">{EAC} · excluding tax</p> : null}{item.owner_display_name ? <p>{item.owner_display_name}</p> : null}</td>
 
         <td>{item.lowpoint_month ? <>Low point {businessDate(item.lowpoint_month)}<p className="muted">First deficit: {item.first_deficit_month ? businessDate(item.first_deficit_month) : "None"}</p></> : item.due_date ? businessDate(item.due_date) : item.source_as_of ? businessDate(item.source_as_of) : "See source basis"}</td>
 

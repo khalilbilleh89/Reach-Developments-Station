@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, inventory } from "@/lib/api";
 import type { Phase, PhaseAccess } from "@/lib/api";
-import { Button, Loading, Notice, StatusDot, TableScroll } from "@/components/ui";
+import { Banner, Button, Loading, Notice, Segmented, StatusDot, TableScroll } from "@/components/ui";
 
 /**
  * Which phases one member of a project may see.
@@ -90,26 +90,19 @@ export function PhaseAccessEditor({
     <div className="stack stack-tight">
       {error ? <Notice tone="error">{error}</Notice> : null}
 
-      <div className="segmented" role="group" aria-label={`Inventory scope for ${displayName}`}>
-        <button
-          type="button"
-          className="segment"
-          aria-pressed={phaseScope === "all"}
-          disabled={busy}
-          onClick={() => phaseScope !== "all" && void setScope("all")}
-        >
-          All phases
-        </button>
-        <button
-          type="button"
-          className="segment"
-          aria-pressed={phaseScope === "selected"}
-          disabled={busy}
-          onClick={() => phaseScope !== "selected" && void setScope("selected")}
-        >
-          Selected phases only
-        </button>
-      </div>
+      <fieldset className="fieldset" disabled={busy}>
+        <Segmented
+          label={`Inventory scope for ${displayName}`}
+          value={phaseScope}
+          options={[
+            { value: "all", label: "All phases" },
+            { value: "selected", label: "Selected phases only" },
+          ]}
+          onChange={(scope) => {
+            if (scope !== phaseScope) void setScope(scope);
+          }}
+        />
+      </fieldset>
 
       {phaseScope === "all" ? (
         <p className="footnote">
@@ -117,9 +110,9 @@ export function PhaseAccessEditor({
           but not applied while the scope is “all”.
         </p>
       ) : activeCount === 0 ? (
-        <Notice tone="warning">
+        <Banner tone="warning">
           Narrowed to selected phases with none granted, so this person sees no units at all.
-        </Notice>
+        </Banner>
       ) : null}
 
       {phases === null ? (

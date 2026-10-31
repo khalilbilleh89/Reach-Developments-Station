@@ -81,7 +81,8 @@ test("multiple labeled PDFs have independent edit and delete actions; readers ca
   h.setAnswer({ status: "ready", data: [{ id: "a", label: "Incorporation", filename: "one.pdf", version: 1 }, { id: "b", label: "Tax registration", filename: "two.pdf", version: 1 }] });
   let tree = h.render("CompanyDocuments", { projectId: "project", companyId: "company", canWrite: true });
   assert.equal(find(tree, "DeleteRecordButton").length, 2);
-  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Company Registration Documents", "Incorporation", "Tax registration"]);
+  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Company Registration Documents"]);
+  assert.deepEqual(find(tree, "CardRow").map(node => node.props.title), ["Incorporation", "Tax registration"]);
   tree = h.render("CompanyDocuments", { projectId: "project", companyId: "company", canWrite: false });
   assert.equal(find(tree, "DeleteRecordButton").length, 0);
   assert.equal(find(tree, "Button").filter(node => node.props.children === "Download PDF").length, 2);

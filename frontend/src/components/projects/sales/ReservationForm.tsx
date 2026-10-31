@@ -4,7 +4,7 @@ import { ValidationSummary } from "@/components/ui/ValidationSummary";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesClient, SalesPricePreview, SalesUnitOption } from "@/lib/api";
-import { DraftBoundary, Button, Field, FieldRow, FlowActions, FlowSteps, KeyValue, KeyValueGrid, Loading, MoneyInput, Notice, SubPanel } from "@/components/ui";
+import { Banner, DraftBoundary, Button, Field, FieldRow, FlowActions, FlowSteps, KeyValue, KeyValueGrid, Loading, MoneyInput, Notice, SubPanel } from "@/components/ui";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
 import { useCurrencyCode } from "@/lib/currency";
 import { SalesPriceInput } from "./SalesPriceInput";
@@ -88,7 +88,7 @@ export function ReservationForm({ clientId, projectId, unitId, currencyId, unitO
     <ValidationSummary error={error} />
     <FlowSteps label="Reservation steps" steps={STEPS} current={step} />
     <Button data-leaves-editor disabled={busy} onClick={onChangeUnit}>Change selected unit</Button>
-    {step === 1 && eligibility ? <Notice tone="info">{eligibility}<Button onClick={() => void refreshEligibility()}>Refresh selected unit</Button>{freshOption ? <Button onClick={() => {setVersion(freshOption.unit_price_version_id); setEligibility(null); setPreview(null);}}>Use current list reference {freshOption.reference_price_ex_tax}</Button> : null}</Notice> : null}
+    {step === 1 && eligibility ? <Banner tone="warning" action={<><Button onClick={() => void refreshEligibility()}>Refresh selected unit</Button>{freshOption ? <Button onClick={() => {setVersion(freshOption.unit_price_version_id); setEligibility(null); setPreview(null);}}>Use current list reference {freshOption.reference_price_ex_tax}</Button> : null}</>}>{eligibility}</Banner> : null}
     {step === 1 ? <SalesPriceInput projectId={projectId} unitId={unitId} versionId={version} currencyId={currencyId ?? unitOption.currency_id} value={price} onChange={value => {setPrice(value); setPreview(null);}} onPreview={setPreview} disabled={busy || !!eligibility} /> : null}
     {step === 0 && buyerError ? <Notice tone="error">{buyerError} <Button onClick={() => setBuyerRetry(buyerRetry + 1)}>Retry buyers</Button></Notice> : null}
     {step === 0 && buyers === null ? <Loading label="Loading buyers…" /> : null}

@@ -14,9 +14,12 @@ import {
   Button,
   ButtonRow,
   Card,
+  DataToolbar,
+  DensitySwitch,
   EmptyState,
   Field,
   FieldRow,
+  FilterChips,
   RecordPage,
   DraftBoundary,
   FormActions,
@@ -28,7 +31,11 @@ import {
   Notice,
   PageHeader,
   PromptDialog,
+  Segmented,
+  Switch,
   TableScroll,
+  ToolbarFilter,
+  Tooltip,
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 
@@ -159,13 +166,19 @@ export function PreLaunchTab({
         </Position><p className="footnote">Recorded means entered but not yet confirmed as cash. A different authorised Finance or CFO user confirms payment. Master Administrator / Boss can confirm their own expenses.</p></Card>
       ) : null}
       <div className="prelaunch-ledger-layout">
-      <Card title="Expense register" description="Search notes, counterparties, references or categories. Filters apply to the register; position totals remain project-wide." actions={<Button small aria-pressed={schedule} onClick={() => setSchedule(!schedule)}>{schedule ? "Show entries" : "Show schedule"}</Button>}>
-        <FieldRow><Field label="Search expenses"><input className="input" type="search" value={search} onChange={event => setSearch(event.target.value)} /></Field><Field label="Expense status"><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option><option value="recorded">Recorded</option><option value="confirmed">Confirmed</option><option value="reversed">Reversed</option><option value="removed">Removed</option></select></Field></FieldRow>
+      <Card title="Expense register" description="Search notes, counterparties, references or categories. Filters apply to the register; position totals remain project-wide." actions={<Segmented label="Expense presentation" value={schedule ? "schedule" : "entries"} onChange={value => setSchedule(value === "schedule")} options={[{ value: "entries", label: "Entries" }, { value: "schedule", label: "Schedule" }]} />}>
+        <DataToolbar search={{ value: search, onChange: setSearch, label: "Search expenses", placeholder: "Notes, counterparty, reference or category" }} actions={schedule ? <DensitySwitch /> : undefined}>
+          <ToolbarFilter label="Expense status" active={status !== ""}><select className="input" value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option><option value="recorded">Recorded</option><option value="confirmed">Confirmed</option><option value="reversed">Reversed</option><option value="removed">Removed</option></select></ToolbarFilter>
+        </DataToolbar>
+        <FilterChips chips={[
+          ...(status ? [{ key: "status", label: `Status: ${status.charAt(0).toUpperCase()}${status.slice(1)}`, onRemove: () => setStatus("") }] : []),
+          ...(search ? [{ key: "search", label: `“${search}”`, onRemove: () => setSearch("") }] : []),
+        ]} />
         {register ? <p className="register-result-count">{expenses.length} matching {expenses.length === 1 ? "entry" : "entries"}{search || status ? <Button small variant="link" onClick={() => { setSearch(""); setStatus(""); }}>Clear filters</Button> : null}</p> : null}
         {register === null ? readError ? null : <Loading label="Loading Authorities expenses" shape="rows" /> : register.expenses.length === 0 ? (
           <div className="card-body"><EmptyState title="No Authorities expenses" hint="Record authority, utility and other allowed development expenses here." /></div>
         ) : expenses.length === 0 ? <EmptyState title="No matching expenses" actions={<Button onClick={() => { setSearch(""); setStatus(""); }}>Reset filters</Button>} /> : (
-          schedule ? <TableScroll label="Authorities expense register" fixedFirst>
+          schedule ? <TableScroll label="Authorities expense register" fixedFirst stickyHeader>
             <thead><tr><th scope="col">Notes / reference</th><th scope="col">Category</th><th scope="col">Counterparty / authority</th><th scope="col">Date</th><th scope="col" className="num">Total including VAT</th><th scope="col">Status</th><th scope="col">Reference</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
             <tbody>{expenses.map((row) => (
               <tr key={row.id}>
@@ -186,9 +199,9 @@ export function PreLaunchTab({
           </article>)}</div>
         )}
       </Card>
-      {register ? <Card title="Expenses by category" description="Current recorded and confirmed expenses. Removed and reversed entries are excluded." actions={<Button small aria-pressed={showEmptyCategories} onClick={() => setShowEmptyCategories(!showEmptyCategories)}>{showEmptyCategories ? "Hide empty categories" : "Include empty categories"}</Button>}>
+      {register ? <Card title="Expenses by category" description="Current recorded and confirmed expenses. Removed and reversed entries are excluded." actions={<Switch checked={showEmptyCategories} onChange={setShowEmptyCategories}>Include empty categories</Switch>}>
         <div className="expense-category-list">{register.categories.filter(category => showEmptyCategories || nonzero(category.recorded_amount) || nonzero(category.confirmed_paid_amount)).map(category => <section key={category.category}><h3>{categoryLabel(category.category)}</h3><dl><div><dt>Recorded</dt><dd>{money(category.recorded_amount, currencyCode)}</dd></div><div><dt>Confirmed paid</dt><dd>{money(category.confirmed_paid_amount, currencyCode)}</dd></div><div><dt>Total expenses</dt><dd>{money(category.total_amount, currencyCode)}</dd></div><div><dt>Share of confirmed paid</dt><dd>{nonzero(register.confirmed_paid_amount) ? category.confirmed_share_percent + "%" : "No confirmed payments"}</dd></div></dl></section>)}</div>
-        <p className="footnote">Amounts include VAT where recorded. Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
+        <p className="footnote">Amounts include <Tooltip term="VAT">Value added tax</Tooltip> where recorded. Total expenses include unconfirmed entries; confirmed paid is the cash amount. Percentages use confirmed paid only.</p>
       </Card> : null}
       </div>
       {adding ? <ExpenseDialog projectId={projectId} currencyId={currencyId} currencyCode={currencyCode} busy={busy} error={error} onCancel={() => { if (!busy) setAdding(false); }} onSubmit={(body) => { void run(() => prelaunch.record(projectId, body)); }} /> : null}

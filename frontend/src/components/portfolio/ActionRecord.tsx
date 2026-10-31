@@ -68,6 +68,14 @@ export function CreateAction({ projectId, source = { source_type: "manual" }, on
 
 const transitions: Record<ActionStatus, ActionStatus[]> = { open: ["in_progress", "completed", "cancelled"], in_progress: ["open", "completed", "cancelled"], completed: ["open"], cancelled: ["open"] };
 const labels: Record<ActionStatus, string> = { open: "Reopen", in_progress: "Start", completed: "Complete", cancelled: "Cancel action" };
+const statusTones: Record<ActionStatus, "neutral" | "info" | "success" | "muted"> = { open: "neutral", in_progress: "info", completed: "success", cancelled: "muted" };
+/** The step an action's own status already implies (K4): start it, finish it, or nothing while closed. */
+const nextSteps: Record<ActionStatus, { text: string; move?: ActionStatus }> = {
+  open: { text: "Not started. Start it when the owner picks it up.", move: "in_progress" },
+  in_progress: { text: "In progress. Complete it once the work is done.", move: "completed" },
+  completed: { text: "Completed. Reopen it with a reason if the work resumes." },
+  cancelled: { text: "Cancelled. Reopen it with a reason if it is needed after all." },
+};
 
 export function ActionRecord({ id, canWrite, onClose, onChanged }: { id: string; canWrite: boolean; onClose: () => void; onChanged: () => void }) {
   const [revision, setRevision] = useState(0);
@@ -89,18 +97,28 @@ export function ActionRecord({ id, canWrite, onClose, onChanged }: { id: string;
     finally { setBusy(false); }
   }
   const action = answer.status === "ready" ? answer.data : null;
+  const step = action ? nextSteps[action.status] : null;
+  const editable = canWrite && action && (action.status === "open" || action.status === "in_progress");
   return <RecordPage title={action?.title ?? "Management action"} subtitle={action ? `${action.project_code} · ${action.project_name}` : undefined}
-    status={action ? <Badge>{action.status.replaceAll("_", " ")}</Badge> : undefined}
-    facts={action ? [{ label: "Owner", value: action.owner.display_name }, { label: "Due", value: businessDate(action.due_date), note: action.due_state.replaceAll("_", " "), tone: action.due_state === "overdue" ? "danger" : undefined }] : undefined}
+    status={action ? <Badge tone={statusTones[action.status]}>{action.status.replaceAll("_", " ")}</Badge> : undefined}
+    strip={action ? {
+      lead: { label: "Due", value: businessDate(action.due_date), note: action.due_state.replaceAll("_", " "), tone: action.due_state === "overdue" ? "danger" : undefined },
+      items: [
+        { label: "Owner", value: action.owner.display_name },
+        { label: "Origin", value: action.source_type.replaceAll("_", " "), note: action.source_observation_date ? `Observed ${businessDate(action.source_observation_date)}` : undefined },
+        { label: "Created by", value: action.created_by.display_name, note: eventTime(action.created_at) },
+        { label: "Updated", value: eventTime(action.updated_at) },
+      ],
+    } : undefined}
+    next={action && step ? { text: step.text, action: canWrite && step.move ? <Button small variant="primary" disabled={busy} onClick={() => void move(step.move!)}>{labels[step.move]}</Button> : undefined } : undefined}
+    more={editable ? <Button variant="quiet" disabled={busy} data-leaves-editor onClick={() => { setTab("action"); setEditing(true); }}>Edit owner, due date or details</Button> : undefined}
     tabs={[{ key: "action", label: "Action" }, { key: "source", label: "Source" }, { key: "history", label: "History" }]} activeTab={tab} onSelectTab={setTab} onClose={onClose}><DraftBoundary dirty={!editing && reason !== ""} busy={busy} onDiscard={() => setReason("")}>
     {!action ? <ReadState answer={answer} label="Reading action…" /> : tab === "action" ? <div className="stack">
       {editing && canWrite ? <ActionForm key={action.version} project={action.project_id} initial={action} source={action} onSaved={refresh} onCancel={refresh} /> : <>
         <p className="cell-prose">{action.description || "No description recorded."}</p>
-        <KeyValueGrid><KeyValue label="Created by" value={action.created_by.display_name} /><KeyValue label="Created" value={eventTime(action.created_at)} /><KeyValue label="Updated" value={eventTime(action.updated_at)} /></KeyValueGrid>
         <Notice tone="info">Completing this action records management work. The source condition and its financial or delivery state remain independently governed.</Notice>
         {canWrite ? <><Field label="Transition reason" optional hint="Required to cancel or reopen a completed/cancelled action."><textarea className="input" maxLength={2000} name="reason" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><ButtonRow>
           {transitions[action.status].map((status) => <Button key={status} disabled={busy} onClick={() => void move(status)}>{status === "open" && action.status === "in_progress" ? "Return to open" : labels[status]}</Button>)}
-          {action.status === "open" || action.status === "in_progress" ? <Button disabled={busy} data-leaves-editor onClick={() => setEditing(true)}>Edit owner, due date or details</Button> : null}
         </ButtonRow></> : null}
       </>}
       {error ? <Notice tone="error">{error} <Button small onClick={refresh}>Reload action</Button></Notice> : null}

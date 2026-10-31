@@ -23,6 +23,8 @@ import {
   Button,
   Card,
   DataToolbar,
+  DensitySwitch,
+  FilterChips,
   IdentityCell,
   EmptyState,
   Field,
@@ -37,9 +39,13 @@ import {
   Notice,
   PageHeader,
   RateInput,
+  SavedViews,
+  Segmented,
+  SortHeader,
   StatusDot,
   TableScroll,
   ToolbarFilter,
+  useSort,
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 import { ConfigurationPanel } from "@/components/projects/pricing/ConfigurationPanel";
@@ -65,6 +71,15 @@ const STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   active: "Active",
   superseded: "Superseded",
+};
+
+/** Presentation only: the word beside it already carries the meaning. */
+const STATUS_TONES: Record<string, Tone> = {
+  draft: "neutral",
+  submitted: "info",
+  approved: "success",
+  active: "success",
+  superseded: "muted",
 };
 
 /**
@@ -343,6 +358,7 @@ export function PricingTab({
           framed
           search={{ value: search, onChange: setSearch, placeholder: "Unit reference", label: "Search this page" }}
           count={register ? { shown: rows.length, total: register.total, noun: "unit" } : undefined}
+          actions={<DensitySwitch />}
           onReset={
             filtered
               ? () => {
@@ -381,6 +397,23 @@ export function PricingTab({
             </select>
           </ToolbarFilter>
         </DataToolbar>
+        <FilterChips
+          chips={[
+            filters.phase_id ? { key: "phase", label: `Phase: ${phases.find((phase) => phase.id === filters.phase_id)?.code ?? "Selected"}`, onRemove: () => setFilters({ ...filters, phase_id: "" }) } : null,
+            filters.market_flag ? { key: "market", label: `Market: ${MARKET_LABELS[filters.market_flag] ?? filters.market_flag}`, onRemove: () => setFilters({ ...filters, market_flag: "" }) } : null,
+            search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+          ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)}
+          onClearAll={() => {
+            setSearch("");
+            setFilters({ phase_id: "", market_flag: "" });
+          }}
+        />
+        <SavedViews
+          screen="pricing_register"
+          filters={{ phase_id: filters.phase_id, market_flag: filters.market_flag }}
+          sort={null}
+          onApply={(saved) => setFilters({ phase_id: String(saved.phase_id ?? ""), market_flag: String(saved.market_flag ?? "") })}
+        />
 
         <Card flush>
           {register === null ? (
@@ -442,10 +475,10 @@ export function PricingTab({
                           <span className="muted">Not priced</span>
                         ) : (
                           <>
-                            <span className="figure">v{row.version_number}</span>
-                            <span className="cell-secondary">
-                              {row.status ? (STATUS_LABELS[row.status] ?? row.status) : ""}
-                            </span>
+                            <span className="figure">v{row.version_number}</span>{" "}
+                            {row.status ? (
+                              <StatusDot tone={STATUS_TONES[row.status] ?? "neutral"}>{STATUS_LABELS[row.status] ?? row.status}</StatusDot>
+                            ) : null}
                           </>
                         )}
                       </td>
@@ -516,6 +549,24 @@ function BenchmarksPanel({
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const scopeOf = useCallback(
+    (benchmark: MarketBenchmark) => phases.find((phase) => phase.id === benchmark.phase_id)?.code ?? "Whole project",
+    [phases],
+  );
+  // Ordering the benchmarks already on screen; every value compared is the server's.
+  const readBenchmark = useCallback((benchmark: MarketBenchmark, column: string): string | null => {
+    switch (column) {
+      case "scope": return `${benchmark.unit_type_code ?? "Any type"} ${scopeOf(benchmark)}`;
+      case "basis": return benchmark.area_basis;
+      case "price": return benchmark.benchmark_price_per_area;
+      case "tolerance": return benchmark.tolerance_fraction;
+      case "observed": return benchmark.comparison_date;
+      case "source": return benchmark.source_name;
+      case "state": return benchmark.is_active ? "Active" : "Retired";
+      default: return null;
+    }
+  }, [scopeOf]);
+  const { sort, toggle, sorted } = useSort(benchmarks, readBenchmark);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -576,14 +627,15 @@ function BenchmarksPanel({
             />
           </Field>
           <Field label="Area basis">
-            <select
-              className="input input-short"
+            <Segmented
+              label="Area basis"
               value={form.area_basis}
-              onChange={(event) => setForm({ ...form, area_basis: event.target.value })}
-            >
-              <option value="internal">Internal</option>
-              <option value="weighted">Weighted</option>
-            </select>
+              options={[
+                { value: "internal", label: "Internal" },
+                { value: "weighted", label: "Weighted" },
+              ]}
+              onChange={(value) => setForm({ ...form, area_basis: value })}
+            />
           </Field>
           <Field label="Price per unit of area">
             <MoneyInput
@@ -631,25 +683,20 @@ function BenchmarksPanel({
         <TableScroll label="Market benchmarks" compact>
           <thead>
             <tr>
-              <th scope="col">Scope</th>
-              <th scope="col">Basis</th>
-              <th scope="col" className="num">
-                Price per area
-              </th>
-              <th scope="col" className="num">
-                Tolerance
-              </th>
-              <th scope="col">Observed</th>
-              <th scope="col">Source</th>
-              <th scope="col">State</th>
+              <SortHeader column="scope" sort={sort} onToggle={toggle}>Scope</SortHeader>
+              <SortHeader column="basis" sort={sort} onToggle={toggle}>Basis</SortHeader>
+              <SortHeader column="price" sort={sort} onToggle={toggle} className="num">Price per area</SortHeader>
+              <SortHeader column="tolerance" sort={sort} onToggle={toggle} className="num">Tolerance</SortHeader>
+              <SortHeader column="observed" sort={sort} onToggle={toggle}>Observed</SortHeader>
+              <SortHeader column="source" sort={sort} onToggle={toggle}>Source</SortHeader>
+              <SortHeader column="state" sort={sort} onToggle={toggle}>State</SortHeader>
             </tr>
           </thead>
           <tbody>
-            {benchmarks.map((benchmark) => (
+            {sorted.map((benchmark) => (
               <tr key={benchmark.id}>
                 <th scope="row">
-                  {benchmark.unit_type_code ?? "Any type"} ·{" "}
-                  {phases.find((phase) => phase.id === benchmark.phase_id)?.code ?? "Whole project"}
+                  {benchmark.unit_type_code ?? "Any type"} · {scopeOf(benchmark)}
                 </th>
                 <td>{benchmark.area_basis}</td>
                 <td className="num">

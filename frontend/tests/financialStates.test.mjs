@@ -12,7 +12,7 @@ const h = React.createElement;
 // Render the real conditional components. Presentation primitives are reduced
 // to their visible facts so tests assert the decision a reader is offered.
 const ui = new Proxy({}, { get: (_, name) => props => h(name === "Button" ? "button" : "section", { "data-tone": props.tone },
-  props.title, props.label, props.value, props.note, props.description, props.children) });
+  props.title, props.label, props.value, props.note, props.description, props.children, props.action) });
 function load(path, imports = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {

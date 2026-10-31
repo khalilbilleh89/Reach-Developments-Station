@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
 import { ApiError } from "@/lib/api";
-import { Button, Field, FieldRow, FormActions, FormSection, Notice, Segmented } from "@/components/ui";
+import { Button, Field, FieldRow, FormActions, FormOutline, FormSection, Notice, Segmented, StickyActions } from "@/components/ui";
 
 /**
  * One field in an edit form, described rather than hand-written each time.
@@ -187,9 +187,8 @@ export function EditForm({
     );
   };
 
-  return (
-    <form onSubmit={submit} ref={form}>
-      <UnsavedChangesGuard dirty={dirty} busy={busy} form={form} />
+  const body = (
+    <>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <fieldset className="draft-fields" disabled={busy}>
       {groups.map((group, index) =>
@@ -205,6 +204,28 @@ export function EditForm({
       )}
       {children ? <fieldset className="form-extra-fields" disabled={busy}>{children}</fieldset> : null}
       </fieldset>
+    </>
+  );
+  // A long form — three titled sections or more — gets its section links and
+  // a save bar that stays in view and says whether anything is unsaved (J3).
+  const titles = Array.from(new Set(groups.flatMap((group) => (group.title ? [group.title] : []))));
+  if (titles.length >= 3) {
+    return (
+      <form onSubmit={submit} ref={form} className="form-layout">
+        <UnsavedChangesGuard dirty={dirty} busy={busy} form={form} />
+        <FormOutline sections={titles} />
+        <div className="form-layout-body">
+          {body}
+          <StickyActions dirty={dirty} submitLabel={submitLabel} busy={busy} onCancel={onCancel} />
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} ref={form}>
+      <UnsavedChangesGuard dirty={dirty} busy={busy} form={form} />
+      {body}
       <FormActions>
         <Button variant="primary" type="submit" disabled={busy}>
           {busy ? "Saving…" : submitLabel}

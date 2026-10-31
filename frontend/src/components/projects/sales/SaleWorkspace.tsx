@@ -19,6 +19,7 @@ import type {
 } from "@/lib/api";
 import { Disclosure,
   Badge,
+  Banner,
   DraftBoundary,
   Button,
   ButtonRow,
@@ -42,6 +43,7 @@ import { Disclosure,
   PromptDialog,
   RateInput,
   SectionHeader,
+  Segmented,
   Steps,
   SubPanel,
   TableScroll,
@@ -790,7 +792,7 @@ export function SaleWorkspace({
 
       {activeSection === "commercial" && terms ? (
         <>
-          {preparing && terms.deposit_gate_status === "pending" ? <Notice tone="info">Sales Operations must record deposit evidence, or the approver must waive the deposit, before this unit can be reserved.</Notice> : null}
+          {preparing && terms.deposit_gate_status === "pending" ? <Banner tone="info">Sales Operations must record deposit evidence, or the approver must waive the deposit, before this unit can be reserved.</Banner> : null}
           <section>
             <SectionHeader level={2}
               title="Reservation"
@@ -816,10 +818,10 @@ export function SaleWorkspace({
               <KeyValue label="Deposit evidence" value={terms.deposit_confirmation_reference} />
             </KeyValueGrid>
             {lockExpired && live ? (
-              <Notice tone="warning">
+              <Banner tone="warning">
                 The price lock on this reservation ran out on {businessDate(terms.price_locked_until)}. It
                 cannot go to contract or be edited until it is re-quoted at the unit&rsquo;s current price.
-              </Notice>
+              </Banner>
             ) : null}
           </section>
 
@@ -860,12 +862,12 @@ export function SaleWorkspace({
               absorbs does not reduce what the buyer contracts to pay.
             </p>
             {terms.exception_approval_required ? (
-              <Notice tone="warning">
+              <Banner tone="warning">
                 {terms.exception_reason ?? "This quote needs approval."}{" "}
                 {terms.exception_required_role
                   ? `Only ${terms.exception_required_role.replace("_", " ")} may approve it.`
                   : ""}
-              </Notice>
+              </Banner>
             ) : null}
           </section>
 
@@ -1184,7 +1186,7 @@ export function SaleWorkspace({
           <LegalSummary timeline={sale.legal} />
           {canWriteSale && sale.sale.status === "draft" ? <SpaDetailsForm key={sale.sale.id} sale={sale.sale} busy={busy}
             onSave={(body) => run(() => sales.updateContract(projectId, sale.sale.id, body), "SPA details saved.")} /> : null}
-          {sale.sale.status === "signature_pending" ? <Notice tone="info">Legal must record the SPA preparation and both signatures under SPA & registry. Sales Operations can then complete the sale after the required payment evidence is recorded.</Notice> : null}
+          {sale.sale.status === "signature_pending" ? <Banner tone="info" action={<Button small onClick={() => setSection("legal")}>Open Legal</Button>}>Legal must record the SPA preparation and both signatures under SPA & registry. Sales Operations can then complete the sale after the required payment evidence is recorded.</Banner> : null}
           <section>
             <SectionHeader level={2}
               title="Sale contract"
@@ -1376,16 +1378,17 @@ export function SaleWorkspace({
                 >
                   <FieldRow columns={2}>
                     <Field label="Initiated by">
-                      <select
-                        className="input"
+                      <Segmented
+                        label="Initiated by"
                         value={cancelForm.initiated_by_party}
-                        onChange={(event) => setCancelForm({ ...cancelForm, initiated_by_party: event.target.value })}
-                      >
-                        <option value="buyer">Buyer</option>
-                        <option value="seller">Seller</option>
-                        <option value="mutual">Mutual</option>
-                        <option value="developer_default_process">Developer default process</option>
-                      </select>
+                        onChange={(initiated_by_party) => setCancelForm({ ...cancelForm, initiated_by_party })}
+                        options={[
+                          { value: "buyer", label: "Buyer" },
+                          { value: "seller", label: "Seller" },
+                          { value: "mutual", label: "Mutual" },
+                          { value: "developer_default_process", label: "Developer default process" },
+                        ]}
+                      />
                     </Field>
                     <Field label="Reason">
                       <input

@@ -2,6 +2,7 @@
 
 import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { SalesImport } from "./SalesImport";
 
 import { ApiError, sales } from "@/lib/api";
@@ -12,6 +13,7 @@ import {
   Card,
   RecordPage,
   DataToolbar,
+  DensitySwitch,
   DraftBoundary,
   EmptyState,
   Field,
@@ -27,6 +29,7 @@ import {
   SubPanel,
   TableScroll,
   RowMenu,
+  Segmented,
   useSort,
 } from "@/components/ui";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
@@ -47,6 +50,21 @@ function readClientColumn(client: SalesClient, column: string): string | null {
     case "standing": return client.is_active ? "Active" : "Inactive";
     default: return null;
   }
+}
+
+/**
+ * What a buyer's own record says comes next (design system K4): the identity
+ * checks the server holds, then whether a unit can be connected. Nothing here
+ * is a judgement the browser formed; each line restates the record's status.
+ */
+function buyerNext(buyer: SalesClient, onConnect?: (buyer: SalesClient) => void): { text: string; action?: ReactNode } {
+  if (!buyer.is_active) return { text: "This buyer is inactive. Tick Active buyer below to connect a unit again." };
+  if (buyer.kyc_status === "rejected") return { text: "Identity checks were rejected. Review the buyer's details before any unit is connected." };
+  if (buyer.kyc_status !== "cleared") return { text: `Identity checks: ${kycLabel(buyer.kyc_status).toLowerCase()}. Update the status below as they progress.` };
+  return {
+    text: "Identity checks are cleared. Connect a unit to start a reservation for this buyer.",
+    action: onConnect ? <Button small data-leaves-editor onClick={() => onConnect(buyer)}>Connect unit</Button> : undefined,
+  };
 }
 
 function BuyerAgentAssignment({projectId, buyer, onSaved}: {
@@ -231,7 +249,23 @@ export function ClientsPanel({
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {editing ? <RecordPage title={`Edit ${editing.display_name}`} onClose={() => setEditing(null)}><EditForm
+      {editing ? <RecordPage
+        eyebrow="Buyer"
+        icon="user"
+        title={`Edit ${editing.display_name}`}
+        onClose={() => setEditing(null)}
+        strip={{
+          lead: { label: "Client number", value: editing.client_number },
+          items: [
+            { label: "Identity checks", value: <Badge tone={kycTone(editing.kyc_status)}>{kycLabel(editing.kyc_status)}</Badge> },
+            { label: "Standing", value: editing.is_active ? <StatusDot tone="success">Active</StatusDot> : <StatusDot tone="muted">Inactive</StatusDot> },
+            { label: "Sales agent", value: editing.agent_name ?? "No agent", tone: editing.agent_name ? undefined : "muted" },
+            ...("email" in editing ? [{ label: "Contact", value: editing.email ?? editing.phone ?? "Not recorded" }] : []),
+          ],
+        }}
+        next={buyerNext(editing, canWrite ? onConnect : undefined)}
+        more={canAdmin ? <DeleteRecordButton label="buyer" recordName={editing.display_name} description="This removes a buyer with no transaction history. A buyer with contracts or payments cannot be deleted; deactivate them instead. The audit trail is retained." onDelete={reason => sales.deleteClient(projectId, editing.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : undefined}
+      ><EditForm
         key={editing.id} fields={clientFields}
         initial={Object.fromEntries(clientFields.map(field => [field.name, asValue(editing[field.name as keyof SalesClient] as never)]))}
         onCancel={() => setEditing(null)} onSave={async changes => {
@@ -258,6 +292,7 @@ export function ClientsPanel({
         }}
         count={{ shown: clients.length, noun: "buyer" }}
         onReset={search ? () => setSearch("") : undefined}
+        actions={<DensitySwitch />}
       />
 
       {clients.length === 0 ? (
@@ -431,14 +466,12 @@ export function ClientsPanel({
                     />
                   </Field>
                   <Field label="Role">
-                    <select
-                      className="input"
+                    <Segmented
+                      label="Role"
                       value={party.party_role}
-                      onChange={(event) => setParty({ ...party, party_role: event.target.value })}
-                    >
-                      <option value="purchaser">Purchaser</option>
-                      <option value="joint_purchaser">Joint purchaser</option>
-                    </select>
+                      onChange={(party_role) => setParty({ ...party, party_role })}
+                      options={[{ value: "purchaser", label: "Purchaser" }, { value: "joint_purchaser", label: "Joint purchaser" }]}
+                    />
                   </Field>
                 </FieldRow>
                 <FieldRow columns={2}>
