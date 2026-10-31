@@ -54,3 +54,45 @@ class PreferencesRead(BaseModel):
 
 class PreferencesUpdate(StrictRequest):
     register_density: Density
+
+
+class ProjectHit(BaseModel):
+    """A development the caller may open, found by code or name."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    code: str
+    name: str
+    status: str
+    city: str | None = None
+
+
+class UnitHit(BaseModel):
+    """A unit the caller may see, found by its reference or number."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    project_code: str
+    unit_reference: str
+    unit_number: str
+    commercial_status: str
+
+
+class ClientHit(BaseModel):
+    """A buyer on the register, by number and display name only; no contact detail."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    project_code: str
+    client_number: str
+    display_name: str
+
+
+class SearchRead(BaseModel):
+    """What the command palette shows for a query, each list already scoped to the caller."""
+
+    query: str
+    projects: list[ProjectHit]
+    units: list[UnitHit]
+    clients: list[ClientHit]

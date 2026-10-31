@@ -10,12 +10,22 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
+from app.modules.inventory.models import Unit
+from app.modules.inventory.permissions import visible_units
+from app.modules.projects.models import Project
+from app.modules.projects.permissions import visible_projects
+from app.modules.sales.models import Client
+from app.modules.sales.permissions import SALES_READER_ROLES, visible_clients
 from app.modules.workspace.models import UserPreference, UserSavedView
 from app.modules.workspace.schemas import (
+    ClientHit,
     PreferencesUpdate,
+    ProjectHit,
     SavedViewCreate,
     SavedViewRead,
     SavedViewUpdate,
+    SearchRead,
+    UnitHit,
 )
 
 #: How many views one person may keep on one register. A register with more
@@ -179,3 +189,108 @@ def update_preferences(
     session.commit()
     session.refresh(row)
     return row
+
+
+# --------------------------------------------------------------------------- #
+# Global search (design system F2)
+# --------------------------------------------------------------------------- #
+
+#: How many of each kind a query returns. The palette shows a handful; a
+#: person who wants more narrows the query.
+SEARCH_LIMIT = 6
+#: How many projects a unit or buyer search looks inside. Each is narrowed by
+#: that project's own phase and advisor rules, so the cost is one query per
+#: project; a portfolio larger than this searches its first projects by code.
+SEARCH_PROJECT_SPAN = 25
+
+
+def search(session: Session, actor: ActorContext, query: str) -> SearchRead:
+    """Projects, units and buyers matching ``query``, each as the caller may see them.
+
+    Every list is scoped the same way the register it comes from is scoped:
+    projects by membership, units by phase grant inside each visible project,
+    buyers by the sales reader roles and an advisor's own book. Nothing is
+    fetched and filtered afterwards; the narrowing is in each query.
+    """
+    needle = query.strip()
+    if len(needle) < 2:
+        return SearchRead(query=needle, projects=[], units=[], clients=[])
+    pattern = f"%{needle}%"
+
+    projects = list(
+        session.scalars(
+            visible_projects(
+                select(Project).where(Project.name.ilike(pattern) | Project.code.ilike(pattern)),
+                actor=actor,
+            )
+            .order_by(Project.code)
+            .limit(SEARCH_LIMIT)
+        )
+    )
+    span = list(
+        session.scalars(
+            visible_projects(select(Project), actor=actor)
+            .order_by(Project.code)
+            .limit(SEARCH_PROJECT_SPAN)
+        )
+    )
+
+    units: list[UnitHit] = []
+    for project in span:
+        if len(units) >= SEARCH_LIMIT:
+            break
+        statement = visible_units(
+            select(Unit).where(
+                Unit.project_id == project.id,
+                Unit.is_active.is_(True),
+                Unit.unit_reference.ilike(pattern) | Unit.unit_number.ilike(pattern),
+            ),
+            session,
+            project_id=project.id,
+            actor=actor,
+        )
+        for unit in session.scalars(
+            statement.order_by(Unit.unit_reference).limit(SEARCH_LIMIT - len(units))
+        ):
+            units.append(
+                UnitHit(
+                    id=unit.id,
+                    project_id=project.id,
+                    project_code=project.code,
+                    unit_reference=unit.unit_reference,
+                    unit_number=unit.unit_number,
+                    commercial_status=unit.commercial_status,
+                )
+            )
+
+    clients: list[ClientHit] = []
+    if actor.has_any_role(*SALES_READER_ROLES):
+        for project in span:
+            if len(clients) >= SEARCH_LIMIT:
+                break
+            statement = visible_clients(
+                select(Client).where(
+                    Client.project_id == project.id,
+                    Client.display_name.ilike(pattern) | Client.client_number.ilike(pattern),
+                ),
+                actor=actor,
+            )
+            for row in session.scalars(
+                statement.order_by(Client.client_number).limit(SEARCH_LIMIT - len(clients))
+            ):
+                clients.append(
+                    ClientHit(
+                        id=row.id,
+                        project_id=project.id,
+                        project_code=project.code,
+                        client_number=row.client_number,
+                        display_name=row.display_name,
+                    )
+                )
+
+    return SearchRead(
+        query=needle,
+        projects=[ProjectHit.model_validate(project) for project in projects],
+        units=units,
+        clients=clients,
+    )
