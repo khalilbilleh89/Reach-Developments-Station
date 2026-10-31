@@ -40,6 +40,7 @@ import {
   SectionHeader,
   StatusDot,
   TableScroll,
+  Segmented,
   Timeline,
   TimelineItem,
   ToolbarFilter,
@@ -224,7 +225,7 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
   const [filter, setFilter] = useState<Filter>("");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
-  const [presentation, setPresentation] = useState("approvals");
+  const [presentation, setPresentation] = useState<"approvals" | "schedule">("approvals");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -382,7 +383,7 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
           </ToolbarFilter>
         </DataToolbar>
 
-        <div className="row-actions" role="group" aria-label="Permit presentation"><Button small aria-pressed={presentation === "approvals"} onClick={() => setPresentation("approvals")}>Approvals</Button><Button small aria-pressed={presentation === "schedule"} onClick={() => setPresentation("schedule")}>Schedule</Button></div>
+        <Segmented label="Permit presentation" value={presentation} onChange={setPresentation} options={[{ value: "approvals", label: "Approvals" }, { value: "schedule", label: "Schedule" }]} />
         <div>
           {register === null ? (
             <Loading label="Loading permits…" shape="rows" />

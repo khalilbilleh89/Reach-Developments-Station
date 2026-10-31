@@ -31,6 +31,7 @@ import {
   Position,
   PositionFigure,
   SectionHeader,
+  Segmented,
   StatusDot,
   TableScroll,
 } from "@/components/ui";
@@ -466,7 +467,7 @@ export function LandTab({
           onReset={search ? () => setSearch("") : undefined}
         />
 
-        <div className="land-layout-controls" aria-label="Land presentation"><Button small aria-pressed={layout === "parcels"} onClick={() => setLayout("parcels")}>Parcels</Button><Button small aria-pressed={layout === "schedule"} onClick={() => setLayout("schedule")}>Schedule</Button></div></div>
+        <div className="land-layout-controls"><Segmented label="Land presentation" value={layout} onChange={setLayout} options={[{ value: "parcels", label: "Parcels" }, { value: "schedule", label: "Schedule" }]} /></div></div>
         <div className="land-register-surface">
           {parcels === null ? (
             <Loading label="Loading the land register…" shape="rows" rows={5} />

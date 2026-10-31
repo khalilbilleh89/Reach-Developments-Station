@@ -39,14 +39,14 @@ const register = {total:121,units:[unit]};
 const prices = {priced_count:100,unpriced_count:21,repricing_count:2,totals:[{currency_id:"JOD",amount:"1000000.00"},{currency_id:"EUR",amount:"500000.00"}],rows:[{unit_id:"u1",price:"100000.00",currency_id:"JOD",repricing_required:false}]};
 test("stock distinguishes zero and unknown measurements and uses the current launch price", () => {
  const render=mount(source,"StockTable",deps,{projectId:"p",register,prices,seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}});
- const initial=render(); nodes(initial).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick(); const tree=render();
+ const initial=render(); nodes(initial).find(n=>n.type==="Segmented").props.onChange("table"); const tree=render();
  const cells=nodes(tree).filter(n=>n.type==="td").map(textOf);
  assert.ok(cells.includes("90.1 sqm")); assert.ok(cells.includes("0 sqm")); assert.ok(cells.includes("—")); assert.ok(cells.includes("JOD 100000.00"));
  const headings=nodes(tree).filter(n=>n.type==="th").map(textOf); assert.ok(!headings.includes("Roof garden")); assert.ok(!headings.includes("Status"));
 });
 test("stock expands optional areas and omits price cells for roles without pricing access", () => {
  const render=mount(source,"StockTable",deps,{projectId:"p",register,prices:null,seesPrice:false,priceError:null,expanded:true,onExpanded:()=>{}});
- const initial=render(); nodes(initial).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick(); const tree=render();
+ const initial=render(); nodes(initial).find(n=>n.type==="Segmented").props.onChange("table"); const tree=render();
  const headings=nodes(tree).filter(n=>n.type==="th").map(textOf); assert.ok(headings.includes("Roof garden")); assert.ok(headings.includes("Front garden")); assert.ok(!headings.some(s=>s.includes("Launch price")));
 });
 test("stock totals use the entire selection and keep currencies separate", () => {
@@ -55,13 +55,13 @@ test("stock totals use the entire selection and keep currencies separate", () =>
 });
 test("a stale launch price is labelled for review instead of displayed", () => {
  const render=mount(source,"StockTable",deps,{projectId:"p",register,prices:{...prices,rows:[{...prices.rows[0],repricing_required:true}]},seesPrice:true,priceError:null,expanded:false,onExpanded:()=>{}});
- const initial=render(); nodes(initial).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick(); const tree=render();
+ const initial=render(); nodes(initial).find(n=>n.type==="Segmented").props.onChange("table"); const tree=render();
  assert.ok(textOf(tree).includes("Review price")); assert.ok(!textOf(tree).includes("JOD 100000.00"));
 });
 
 test("floor browsing keeps identical labels in distinct buildings separate and states page scope", () => {
  const render=mount(source,"StockTable",deps,{projectId:"p",register:{total:5,units:[{...unit,id:"a",building_id:"a",floor_id:"one",commercial_status:"available"},{...unit,id:"b",building_id:"b",floor_id:"two",commercial_status:"unreleased"}]},prices:null,seesPrice:false,priceError:null,expanded:false,onExpanded:()=>{}});
- nodes(render()).find(n=>n.type==="Button" && textOf(n)==="Property cards").props.onClick();
+ nodes(render()).find(n=>n.type==="Segmented").props.onChange("browse");
  const tree=render();
  assert.equal(nodes(tree).filter(n=>n.props?.className==="stock-floor-group").length,2);
  assert.equal(nodes(tree).filter(n=>n.type==="RecordLink").length,2);
@@ -96,15 +96,15 @@ test("building selection isolates identical labels and survives changing present
  const nav=nodes(tree).find(n=>n.props?.["aria-label"]==="Buildings on this inventory page");
  nodes(nav).filter(n=>n.type==="button")[2].props.onClick();
  tree=render(); assert.deepEqual(nodes(tree).filter(n=>n.type==="RecordLink").map(n=>n.props.id),["b"]);
- nodes(tree).find(n=>n.type==="Button" && textOf(n)==="Property cards").props.onClick();
+ nodes(tree).find(n=>n.type==="Segmented").props.onChange("browse");
  tree=render(); assert.deepEqual(nodes(tree).filter(n=>n.type==="RecordLink").map(n=>n.props.id),["b"]);
- nodes(tree).find(n=>n.type==="Button" && textOf(n)==="Schedule").props.onClick();
+ nodes(tree).find(n=>n.type==="Segmented").props.onChange("table");
  assert.equal(nodes(render()).filter(n=>n.type==="RecordLink").length,2);
 });
 
 test("property cards separate commercial availability from delivery blockers and preserve missing quantities", () => {
  const render=mount(source,"StockTable",deps,{projectId:"p",register:{total:1,units:[{...unit,commercial_status:"available",delivery_status:"handover_blocked",parking_count:null}]},prices,seesPrice:false,priceError:null,expanded:false,onExpanded:()=>{}});
- nodes(render()).find(n=>n.type==="Button" && textOf(n)==="Property cards").props.onClick();
+ nodes(render()).find(n=>n.type==="Segmented").props.onChange("browse");
  const tree=render();
  const badges=nodes(tree).filter(n=>n.type==="Badge");
  assert.ok(badges.some(n=>textOf(n)==="Available" && n.props.tone==="success"));
