@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import "./globals.css";
 import "./development.css";
-import "./platform.css";
 
 // Self-hosted at build time by next/font: no request to a font host at runtime.
 const sans = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });

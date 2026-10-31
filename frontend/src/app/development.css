@@ -34,9 +34,6 @@
 
 .development-content { min-width: 0; }
 
-.development-workspace .card { border: 1px solid var(--line-default); border-radius: var(--dev-radius); box-shadow: var(--dev-shadow); }
-.development-workspace .card-header { padding: 22px 24px; }
-.development-workspace .card-title { letter-spacing: -.02em; }
 .development-workspace .record-breadcrumb { margin-bottom: 24px; font-size: .8rem; }
 .development-workspace .record-workspace-header {
   gap: 24px;
@@ -77,8 +74,6 @@
 
 .development-workspace .stock-register { border-radius: var(--dev-radius); border: 1px solid var(--line-default); background: var(--surface); overflow: hidden; }
 .development-workspace .stock-register-heading { padding: 22px 24px; }
-.development-workspace .table-scroll { scrollbar-gutter: stable; }
-.development-workspace tbody td, .development-workspace tbody th { padding-top: 16px; padding-bottom: 16px; }
 .development-workspace tbody tr:focus-within { background: var(--surface-selected); }
 .development-workspace .field-label { line-height: 1.5; }
 .app:not(.app-narrow):not([data-rail="collapsed"]) .development-nav { display: none; }
@@ -124,7 +119,6 @@
 
 .development-workspace .stock-summary { border-radius: var(--dev-radius); overflow: hidden; border: 1px solid var(--line-default); box-shadow: var(--dev-shadow); margin: 0; }
 .development-workspace .stock-summary > div { padding: 20px; }
-.development-workspace .stock-summary-lead strong { color: var(--accent); }
 @media (max-width: 760px) {
   .stock-browser { grid-template-columns: 1fr; }
   .stock-hierarchy { border-right: 0; border-bottom: 1px solid var(--line-default); padding: 16px; }
@@ -211,7 +205,8 @@
 .atlas-unit,.atlas-legend > span { --unit-colour: var(--text-muted); --unit-wash: var(--surface-secondary); }
 .atlas-unit[data-tone="success"],.atlas-legend > span[data-tone="success"] { --unit-colour: var(--success); --unit-wash: var(--success-soft); }
 .atlas-unit[data-tone="warning"],.atlas-legend > span[data-tone="warning"] { --unit-colour: var(--warning); --unit-wash: var(--warning-soft); }
-.atlas-unit[data-tone="accent"],.atlas-unit[data-tone="info"],.atlas-legend > span[data-tone="accent"],.atlas-legend > span[data-tone="info"] { --unit-colour: var(--accent); --unit-wash: var(--accent-soft); }
+.atlas-unit[data-tone="accent"],.atlas-legend > span[data-tone="accent"] { --unit-colour: var(--accent); --unit-wash: var(--surface-secondary); }
+.atlas-unit[data-tone="info"],.atlas-legend > span[data-tone="info"] { --unit-colour: var(--info); --unit-wash: var(--info-soft); }
 .atlas-unit[data-tone="danger"],.atlas-legend > span[data-tone="danger"] { --unit-colour: var(--danger); --unit-wash: var(--danger-soft); }
 .atlas-legend i,.atlas-unit-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--unit-colour); flex-shrink: 0; }
 .atlas-buildings { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,28rem),1fr)); align-items: start; gap: 24px; }
@@ -248,11 +243,8 @@
 .parcel-architectural .parcel-estate-facts .kv { gap: 20px 32px; }
 .parcel-architectural .parcel-estate-context h3 { font-family: var(--font-display); font-size: 1.5rem; }
 
-.development-workspace .page-head { border-bottom: 1px solid var(--line-default); padding-bottom: 16px; margin-bottom: 20px; gap: 12px; }
 
-.development-workspace .page-title { font-family: var(--font-display); font-weight: 600; letter-spacing: -.045em; font-size: clamp(2rem,2.8vw,2.6rem); }
 
-.development-workspace .page-subtitle { max-width: 65ch; line-height: 1.6; font-size: .85rem; margin-top: 6px; }
 @media (max-width: 760px) {
   .building-atlas { padding: 16px; }
   .atlas-toolbar { flex-direction: column; gap: 16px; }
@@ -320,14 +312,12 @@
 }
 /* Secondary surfaces are a quiet neutral ground; records and primary reading areas stay white.
  * Shared primitives (buttons, tabs, page glyphs, rail icons) are styled once, in globals.css. */
-.development-workspace { --dev-radius: 12px; --dev-shadow: none; min-width: 0; --dev-blue-wash: var(--surface-secondary); --dev-blue-line: var(--line-default); }
+.development-workspace { --dev-radius: var(--radius-card); --dev-shadow: none; min-width: 0; --dev-blue-wash: var(--surface-secondary); --dev-blue-line: var(--line-default); }
 
 .development-workspace .workspace-facts,
 .development-workspace .atlas-building > header { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
 .development-workspace .briefing-dates { border-top: 2px solid var(--brand-gold); }
 .development-workspace .briefing-dates > header { background: var(--dev-blue-wash); margin: -24px -24px 20px; padding: 20px 24px 10px; }
-.development-workspace .tab { display: inline-flex; align-items: center; gap: 8px; }
-.development-workspace .tab > .icon { width: 17px; height: 17px; flex: none; color: currentcolor; }
 
 
 .development-nav-links a[aria-current="page"] { color: var(--accent); box-shadow: var(--dev-shadow); background: var(--accent-soft); border-color: var(--dev-blue-line); }
