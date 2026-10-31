@@ -72,6 +72,8 @@ export { Steps, Timeline, TimelineItem } from "./Timeline";
 export type { TimelineState } from "./Timeline";
 
 export { Disclosure } from "./Disclosure";
+export { Views } from "./Views";
+export type { View } from "./Views";
 export { Segmented } from "./Segmented";
 export { RowMenu } from "./RowMenu";
 export { ToastProvider, useToast } from "./Toast";
