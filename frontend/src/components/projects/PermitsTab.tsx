@@ -408,7 +408,7 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                 </div>
                 <p className="subtle">{typeLabel(permit.permit_type_code)} · {permit.authority}</p>
                 <div className="permit-journey"><span className="eyebrow">Workflow position · current status only</span><ol aria-label="Approval journey">{["Preparation","Authority review","Decision","Issued"].map((label,index) => <li key={label} data-current={permitJourneyPosition(permit.status) === index} aria-current={permitJourneyPosition(permit.status) === index ? "step" : undefined}><span aria-hidden="true">{index + 1}</span><strong>{label}</strong></li>)}</ol>{permitJourneyPosition(permit.status) === null ? <p className="footnote">{STATUS_LABELS[permit.status] ?? permit.status} · no active journey step</p> : null}</div>
-                <div className="permit-next-action"><strong><Icon name="chevron" />Next action</strong><p>{permit.next_action ?? "No next action recorded"}</p></div>
+                {permit.next_action ? <div className="permit-next-action"><strong>Next action</strong><p>{permit.next_action}</p></div> : <p className="subtle permit-next-action-empty">No next action recorded</p>}
                 <KeyValueGrid columns={2}>
                   <KeyValue label="Required by" value={businessDate(permit.planned_issue_date)} />
                   <KeyValue label="Statutory clock" value={slaLabel(permit)} />

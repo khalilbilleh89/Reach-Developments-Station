@@ -23,7 +23,7 @@ export function ParcelCollection({ parcels, canSeeCost, onOpen }: {
           <KeyValue label="Ownership share" value={parcel.ownership_share_fraction != null ? percent(parcel.ownership_share_fraction) : "Not recorded"} />
           <KeyValue label="Cadastral reference" value={parcel.cadastral_reference ?? "Not recorded"} />
         </KeyValueGrid></div>
-        <footer className="parcel-estate-footer"><span><Icon name="documents" />Title, site and supporting records</span><Button variant="primary" onClick={() => onOpen(parcel)}>Open parcel {parcel.plot_number}</Button></footer>
+        <footer className="parcel-estate-footer"><span><Icon name="documents" />Title, site and supporting records</span><Button onClick={() => onOpen(parcel)}>Open parcel {parcel.plot_number}</Button></footer>
       </div>
       <aside className="parcel-estate-context">
         {canSeeCost && parcel.financials_visible !== false ? <section><span className="eyebrow"><Icon name="money" />Acquisition</span><p className="parcel-estate-price">{money(parcel.purchase_price, parcel.base_currency_code)}</p><p className="footnote">Recorded purchase price · fees separate</p><div className="parcel-estate-date"><span>Acquired</span><strong>{businessDate(parcel.acquisition_date)}</strong></div></section> : <section><span className="eyebrow"><Icon name="money" />Acquisition</span><p>{businessDate(parcel.acquisition_date)}</p></section>}

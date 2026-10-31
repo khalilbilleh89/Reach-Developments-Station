@@ -83,12 +83,12 @@
 .land-register-surface { min-width: 0; }
 .land-schedule { border: 1px solid var(--line-default); border-radius: var(--dev-radius); overflow: hidden; background: var(--surface); }
 .parcel-collection { display: grid; gap: 24px; }
-.parcel-estate { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--dev-radius); overflow: hidden; }
+.parcel-estate { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line-default); border-top: 2px solid var(--brand-gold); border-radius: var(--dev-radius); overflow: hidden; }
 .parcel-estate-main { min-width: 0; }
 .parcel-estate-identity { padding: 24px 28px; background: var(--surface-secondary); border-bottom: 1px solid var(--line-default); }
 .parcel-estate-kicker { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: var(--text-xs); }
 .parcel-estate-title { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin: 22px 0 12px; }
-.parcel-estate-title h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: clamp(2.5rem, 4vw, 4rem); line-height: 1.05; letter-spacing: -.04em; overflow-wrap: anywhere; }
+.parcel-estate-title h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--title-page); line-height: 1.1; letter-spacing: -.03em; white-space: nowrap; }
 .parcel-estate-area { text-align: right; min-width: 0; }
 .parcel-estate-area strong { display: block; font-size: clamp(1.5rem, 2.4vw, 2.25rem); font-weight: 500; letter-spacing: -.04em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .parcel-estate-area span,.parcel-estate-deed { font-size: var(--text-xs); color: var(--text-secondary); }
@@ -235,9 +235,9 @@
 .land-register-toolbar > :first-child { flex: 1; min-width: 0; }
 .land-register-toolbar .land-layout-controls { flex-shrink: 0; }
 .parcel-architectural { grid-template-columns: minmax(0,2fr) minmax(240px,1fr); border-radius: 6px; }
-.parcel-architectural .parcel-estate-identity { background: var(--surface); border-top: 2px solid var(--brand-gold); padding: 26px 28px 22px; }
+.parcel-architectural .parcel-estate-identity { background: var(--surface); padding: 26px 28px 22px; }
 .parcel-architectural .parcel-estate-title { margin: 18px 0; }
-.parcel-architectural .parcel-estate-title h2 { font-size: clamp(3rem,5vw,5rem); }
+.parcel-architectural .parcel-estate-title h2 { font-size: var(--title-page); }
 .parcel-architectural .parcel-estate-area strong { font-size: clamp(2rem,3vw,3rem); }
 
 .parcel-architectural .parcel-estate-facts .kv { gap: 20px 32px; }
@@ -265,7 +265,7 @@
   .development-nav-links { display: flex; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }
   .development-nav-links a { flex-shrink: 0; }
   .parcel-architectural .parcel-estate-title { flex-direction: row; align-items: center; gap: 16px; }
-  .parcel-architectural .parcel-estate-title h2 { font-size: 2.8rem; }
+  .parcel-architectural .parcel-estate-title h2 { font-size: 1.6rem; }
   .parcel-architectural .parcel-estate-area { text-align: right; }
   .parcel-architectural .parcel-estate-area strong { font-size: 1.7rem; }
   .parcel-architectural .parcel-estate-area span { display: block; max-width: 8rem; }

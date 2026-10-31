@@ -387,8 +387,9 @@ textarea {
   margin-bottom: 0;
 }
 
-/* A button in a column keeps its own width; a stretched action reads as a banner. */
-.stack > .button {
+/* A button or view switch in a column keeps its own width; stretched, it reads as a banner. */
+.stack > .button,
+.stack > .segmented {
   align-self: flex-start;
 }
 
@@ -6556,4 +6557,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 /* A transaction reference is one token; it never breaks across lines. */
 .sales-reference {
   white-space: nowrap;
+}
+
+/* An absent next action is a quiet line, not a callout. */
+.permit-next-action-empty {
+  margin: var(--space-4) 0;
 }
