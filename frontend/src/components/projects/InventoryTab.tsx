@@ -14,6 +14,9 @@ import {
   Button,
   Card,
   DataToolbar,
+DensitySwitch,
+FilterChips,
+SavedViews,
   EmptyState,
   Icon,
   IdentityCell,
@@ -391,13 +394,6 @@ export function InventoryTab({
         <>
         <DataToolbar
           framed
-          activeSummary={[
-            phases.find((phase) => phase.id === filters.phase_id)?.name,
-            buildings.find((building) => building.id === filters.building_id)?.name,
-            floors.find((floor) => floor.id === filters.floor_id)?.label,
-            filters.asset_class || null,
-            filters.search ? `“${filters.search}”` : null,
-          ].filter(Boolean).join(" · ")}
           search={{
             value: filters.search,
             onChange: (value) => setFilters({ ...filters, search: value }),
@@ -405,13 +401,14 @@ export function InventoryTab({
             label: "Search units",
           }}
           count={register ? { shown: register.units.length, total: register.total, noun: "unit" } : undefined}
-          actions={
-            canWriteStructure && view !== "stock" ? (
+          actions={<>
+            <DensitySwitch />
+            {canWriteStructure && view !== "stock" ? (
               <Button variant="primary" disabled={!!hierarchyError} onClick={() => setAddingUnit(true)}>
                 Add unit
               </Button>
-            ) : undefined
-          }
+            ) : null}
+          </>}
           onReset={
             filtered
               ? () => setFilters({ phase_id: "", building_id: "", floor_id: "", asset_class: "", is_active: "", search: "" })
@@ -465,6 +462,23 @@ export function InventoryTab({
           <ToolbarFilter label="Activity" active={filters.is_active !== ""}><select className="input" value={filters.is_active} onChange={e => setFilters({...filters, is_active: e.target.value})}><option value="">Active and inactive</option><option value="true">Active only</option><option value="false">Inactive only</option></select></ToolbarFilter>
           <ToolbarFilter label="Property class" active={filters.asset_class !== ""}><select className="input" value={filters.asset_class} onChange={event=>setFilters({...filters,asset_class:event.target.value})}><option value="">All classes</option>{["apartment","villa","townhouse","commercial","other"].map(value=><option key={value} value={value}>{value}</option>)}</select></ToolbarFilter>
         </DataToolbar>
+        <FilterChips
+          chips={[
+            filters.phase_id ? { key: "phase", label: `Phase: ${phases.find((phase) => phase.id === filters.phase_id)?.name ?? filters.phase_id}`, onRemove: () => setFilters({ phase_id: "" }) } : null,
+            filters.building_id ? { key: "building", label: `Building: ${buildings.find((building) => building.id === filters.building_id)?.name ?? filters.building_id}`, onRemove: () => setFilters({ building_id: "" }) } : null,
+            filters.floor_id ? { key: "floor", label: `Floor: ${floors.find((floor) => floor.id === filters.floor_id)?.label ?? filters.floor_id}`, onRemove: () => setFilters({ floor_id: "" }) } : null,
+            filters.asset_class ? { key: "class", label: `Class: ${filters.asset_class}`, onRemove: () => setFilters({ asset_class: "" }) } : null,
+            filters.is_active ? { key: "active", label: filters.is_active === "true" ? "Active only" : "Inactive only", onRemove: () => setFilters({ is_active: "" }) } : null,
+            filters.search ? { key: "search", label: `“${filters.search}”`, onRemove: () => setFilters({ search: "" }) } : null,
+          ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)}
+          onClearAll={() => setFilters({ phase_id: "", building_id: "", floor_id: "", asset_class: "", is_active: "", search: "" })}
+        />
+        <SavedViews
+          screen={`inventory_${view}`}
+          filters={{ phase_id: filters.phase_id, building_id: filters.building_id, floor_id: filters.floor_id, asset_class: filters.asset_class, is_active: filters.is_active }}
+          sort={null}
+          onApply={(saved) => setFilters({ phase_id: String(saved.phase_id ?? ""), building_id: String(saved.building_id ?? ""), floor_id: String(saved.floor_id ?? ""), asset_class: String(saved.asset_class ?? ""), is_active: String(saved.is_active ?? "") })}
+        />
 
         <Card flush>
           {register === null ? (

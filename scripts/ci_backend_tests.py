@@ -142,6 +142,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
     "portfolio": ("portfolio",),
     "management_actions": ("management_actions", "migration_management_actions"),
     "management_reporting": ("management_reporting",),
+    "workspace": ("workspace",),
     # One-time legacy cutover tooling under ``scripts/migration/``. Its tests are
     # named ``test_cutover_*`` rather than ``test_migration_*`` because that
     # prefix is already spoken for: the ten ``migration_<domain>`` entries above

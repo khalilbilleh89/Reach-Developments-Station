@@ -271,10 +271,12 @@ test("selected trigger preserves governed details and routes changes through the
 });
 
 test("the select-all tick can be cleared on a page holding a unit that cannot be released", async()=>{
-  // The regression: `checked` was true only when every row on the page was
-  // picked, but only releasable rows can be picked. One already-Available row
-  // made `checked` unreachable, so the browser reported every click as "now
-  // checked" and the handler kept re-selecting. There was no way back off.
+  // The regression this guards: the header tick once read "every row on the
+  // page", but only releasable rows can be picked, so one already-Available
+  // row made it unreachable and every press re-selected. The shared register
+  // selection (design system E1) decides the header from what is picked
+  // against what can be picked: full once every ready row is ticked, part-way
+  // while some are, and a second press always clears.
   const units=[
     {id:"sold-out",unit_reference:"Akoya 3101",commercial_status:"available",legal_status:"no_spa",collection_status:"not_started",delivery_status:"not_started",release_eligible:true,release_blockers:[]},
     {id:"ready",unit_reference:"Akoya 3104",commercial_status:"unreleased",legal_status:"no_spa",collection_status:"not_started",delivery_status:"not_started",release_eligible:true,release_blockers:[]},
@@ -288,15 +290,31 @@ test("the select-all tick can be cleared on a page holding a unit that cannot be
   },{projectId:"project",roles:new Set(["project_manager"]),onClose(){}});
   view.render();view.flush();await settle();
 
-  const box = tree => nodes(tree).find(node=>node.type==="input"&&node.props["aria-label"]==="Select every unit ready to release");
-  const row = tree => nodes(tree).find(node=>node.type==="input"&&node.props["aria-label"]==="Release Akoya 3104");
+  const box = tree => nodes(tree).find(node=>node.type==="SelectAllCell");
+  const row = (tree,reference) => nodes(tree).find(node=>node.type==="SelectCell"&&node.props.label===`Select ${reference}`);
+  const bar = tree => nodes(tree).find(node=>node.type==="BulkBar");
 
-  box(view.render()).props.onChange({target:{checked:true}});
+  const quiet=view.render();
+  assert.equal(box(quiet).props.checked,false);
+  assert.equal(row(quiet,"Akoya 3101").props.disabled,true,"a unit already on sale cannot be picked");
+  assert.equal(bar(quiet).props.count,0,"nothing is selected until somebody ticks");
+
+  box(quiet).props.onChange();
   const picked=view.render();
-  assert.equal(row(picked).props.checked,true,"select-all picks the releasable unit");
-  assert.equal(box(picked).props.checked,false,"one unpickable row means the header never reads as fully ticked");
+  assert.equal(row(picked,"Akoya 3104").props.checked,true,"select-all picks the releasable unit");
+  assert.equal(row(picked,"Akoya 3101").props.checked,false,"and leaves the one already on sale alone");
+  assert.equal(box(picked).props.checked,true,"every unit that can be picked is picked");
+  assert.equal(box(picked).props.indeterminate,false);
+  assert.equal(bar(picked).props.count,1,"the bulk bar counts the selection");
 
-  box(picked).props.onChange({target:{checked:true}});
+  box(picked).props.onChange();
   const cleared=view.render();
-  assert.equal(row(cleared).props.checked,false,"a second press clears the selection");
+  assert.equal(row(cleared,"Akoya 3104").props.checked,false,"a second press clears the selection");
+  assert.equal(bar(cleared).props.count,0);
+
+  row(cleared,"Akoya 3104").props.onChange();
+  const one=view.render();
+  assert.equal(row(one,"Akoya 3104").props.checked,true,"a row ticks itself");
+  bar(one).props.onClear();
+  assert.equal(bar(view.render()).props.count,0,"and the bulk bar's Clear empties it");
 });

@@ -9,7 +9,7 @@ import { ANALYSIS_FINANCIAL_READERS, ANALYSIS_FUNDAMENTAL_READERS, ANALYSIS_TECH
 import type { Roles } from "@/lib/roles";
 import { businessDate, money } from "@/lib/format";
 import type { ReactNode } from "react";
-import { CountComposition, CountSeries, UnitGrid, SourceNote, Disclosure, Views, Button, SectionHeader, KeyValueGrid, KeyValue, StatusDot, Field, FieldRow, FormActions, Loading, Meter, Notice, Position, PositionFigure, Tabs, TabPanel, TableScroll } from "@/components/ui";
+import { CountComposition, CountSeries, UnitGrid, SourceNote, Disclosure, Views, DateRange, Button, SectionHeader, KeyValueGrid, KeyValue, StatusDot, Field, FieldRow, FormActions, Loading, Meter, Notice, Position, PositionFigure, Tabs, TabPanel, TableScroll } from "@/components/ui";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
 import { FeasibilityView } from "./FeasibilityView";
@@ -197,9 +197,8 @@ export function ProjectAnalysis({ projectId, roles }: { projectId: string; roles
     <div className="analysis-period">
       <Disclosure title="Observation period" context={period}>
         <form onSubmit={(event) => { event.preventDefault(); const params = new URLSearchParams(); if (from) params.set("period_from", from); if (to) params.set("period_to", to); if (asOf) params.set("as_of", asOf); setQuery(params.size ? `?${params}` : ""); }}>
+          <Field label="Period" optional hint="Presets end today; choose Custom for exact dates. Leave both empty for the default."><DateRange label="Observation period" from={from} to={to} onChange={(range) => { setFrom(range.from); setTo(range.to); }} /></Field>
           <FieldRow columns={3}>
-            <Field label="From" optional><input className="input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></Field>
-            <Field label="To" optional><input className="input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></Field>
             <Field label="As of" optional><input className="input" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} /></Field>
           </FieldRow>
           <FormActions><Button type="submit">Apply period</Button></FormActions>

@@ -110,6 +110,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `users` | Never fabricated. Administrators create them. |
 | `user_project_access` | An access grant is a decision, not migrated data. |
 | `user_phase_access` | As above. |
+| `user_saved_views` | A person's saved register filters; a working habit, never migrated. |
+| `user_preferences` | How a person likes a register drawn; never migrated. |
 | `country_packs` | Jurisdiction configuration. |
 | `country_approval_thresholds` | Jurisdiction configuration. |
 | `currencies` | Configuration; a batch declares which it expects, never defines them. |

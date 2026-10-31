@@ -14,6 +14,12 @@ import {
   StatusDot,
   TableScroll,
   ToolbarFilter,
+  SortHeader,
+  FilterChips,
+  SavedViews,
+  DensitySwitch,
+  DatePoint,
+  useSort,
 } from "@/components/ui";
 import { collections } from "@/lib/api";
 import type { CollectionRegisterRow } from "@/lib/api";
@@ -35,6 +41,22 @@ import {
   unitCollectionLabel,
   unitCollectionTone,
 } from "@/components/projects/collections/labels";
+
+/** What each sortable column reads from a row: the server's own values, compared, never summed. */
+function readAccountColumn(row: CollectionRegisterRow, column: string): string | number | null {
+  switch (column) {
+    case "unit": return row.unit_reference;
+    case "scheduled": return row.summary.scheduled_total;
+    case "collected": return row.summary.allocated_total;
+    case "unapplied": return row.summary.unapplied_cash;
+    case "outstanding": return row.summary.outstanding_total;
+    case "overdue": return row.summary.overdue_total;
+    case "oldest": return row.summary.oldest_overdue_days;
+    case "state": return row.summary.derived_collection_status;
+    case "follow_up": return row.summary.next_action_date;
+    default: return null;
+  }
+}
 
 const VIEWS = [
   { key: "accounts", label: "Accounts" },
@@ -106,6 +128,16 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
   const currencyFor = (row: { currency_id: string }) => currencyCodeOf(row.currency_id);
   const filtered = asOf !== todayISO() || search !== "" || status !== "" || bucket !== "" || only !== "";
 
+  // Ordering the rows already on screen; every figure compared is the server's.
+  const { sort, setSort, toggle, sorted } = useSort(visible, readAccountColumn);
+  const chips = [
+    status ? { key: "status", label: `Status: ${unitCollectionLabel(status)}`, onRemove: () => setStatus("") } : null,
+    bucket ? { key: "bucket", label: `Age: ${bucketLabel(bucket)}`, onRemove: () => setBucket("") } : null,
+    only ? { key: "only", label: only === "overdue" ? "Overdue only" : only === "unapplied" ? "With unapplied cash" : "With an open dispute", onRemove: () => setOnly("") } : null,
+    asOf !== todayISO() ? { key: "as_of", label: `As at ${businessDate(asOf)}`, onRemove: () => setAsOf("") } : null,
+    search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+  ].filter((chip): chip is NonNullable<typeof chip> => chip !== null);
+
   return (
     <>
       <PageHeader icon="collections" title="Collections" subtitle={sectionDescription("collections")} compact />
@@ -122,7 +154,6 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
 
         <DataToolbar
           framed
-          activeSummary={[status ? unitCollectionLabel(status) : null, bucket ? bucketLabel(bucket) : null, only === "overdue" ? "Overdue only" : only === "unapplied" ? "With unapplied cash" : only === "disputed" ? "With an open dispute" : null, search ? `“${search}”` : null].filter(Boolean).join(" · ")}
           search={{ value: search, onChange: setSearch, placeholder: "Unit, buyer or contract", label: "Search accounts" }}
           count={
             rows && view === "accounts"
@@ -142,7 +173,8 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                 }
               : undefined
           }
-          actions={
+          actions={<>
+            <DensitySwitch />
             <div className="segmented" role="group" aria-label="View">
               {VIEWS.map((option) => (
                 <button
@@ -156,16 +188,10 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                 </button>
               ))}
             </div>
-          }
+          </>}
         >
-          <ToolbarFilter label="As at">
-            <input
-              className="input"
-              type="date"
-              value={asOf}
-              title="Aging is derived for this date, not snapshotted."
-              onChange={(event) => setAsOf(event.target.value || todayISO())}
-            />
+          <ToolbarFilter label="As at" active={asOf !== todayISO()}>
+            <DatePoint label="As at" value={asOf} onChange={(value) => setAsOf(value === todayISO() ? "" : value)} />
           </ToolbarFilter>
           <ToolbarFilter label="Status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -196,6 +222,8 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
             </select>
           </ToolbarFilter>
         </DataToolbar>
+        <FilterChips chips={chips} onClearAll={() => { setStatus(""); setBucket(""); setOnly(""); setSearch(""); setAsOf(""); }} />
+        {view === "accounts" ? <SavedViews screen="collections" filters={{ status, bucket, only }} sort={sort} onApply={(saved, savedSort) => { change({ status: String(saved.status ?? ""), bucket: String(saved.bucket ?? ""), only: String(saved.only ?? "") }); setSort(savedSort); }} /> : null}
 
         <Card flush>
           {view === "accounts" && rows === null ? (
@@ -216,32 +244,20 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
               <TableScroll label="Receivables" fixedFirst stickyHeader>
                 <thead>
                   <tr>
-                    <th scope="col">Account</th>
+                    <SortHeader column="unit" sort={sort} onToggle={toggle}>Account</SortHeader>
                     <th scope="col">Contract</th>
-                    <th scope="col" className="num">
-                      Scheduled
-                    </th>
-                    <th scope="col" className="num">
-                      Collected
-                    </th>
-                    <th scope="col" className="num">
-                      Unapplied
-                    </th>
-                    <th scope="col" className="num">
-                      Outstanding
-                    </th>
-                    <th scope="col" className="num">
-                      Overdue
-                    </th>
-                    <th scope="col" className="num">
-                      Oldest
-                    </th>
-                    <th scope="col">State</th>
-                    <th scope="col">Next follow-up</th>
+                    <SortHeader column="scheduled" sort={sort} onToggle={toggle} className="num">Scheduled</SortHeader>
+                    <SortHeader column="collected" sort={sort} onToggle={toggle} className="num">Collected</SortHeader>
+                    <SortHeader column="unapplied" sort={sort} onToggle={toggle} className="num">Unapplied</SortHeader>
+                    <SortHeader column="outstanding" sort={sort} onToggle={toggle} className="num">Outstanding</SortHeader>
+                    <SortHeader column="overdue" sort={sort} onToggle={toggle} className="num">Overdue</SortHeader>
+                    <SortHeader column="oldest" sort={sort} onToggle={toggle} className="num">Oldest</SortHeader>
+                    <SortHeader column="state" sort={sort} onToggle={toggle}>State</SortHeader>
+                    <SortHeader column="follow_up" sort={sort} onToggle={toggle}>Next follow-up</SortHeader>
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((row) => {
+                  {sorted.map((row) => {
                     const code = currencyFor(row);
                     return (
                       <tr key={row.sale_id} aria-selected={open?.sale_id === row.sale_id}>

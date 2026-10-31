@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
 import { ContractHeaderEditor } from "./construction/ContractWorkflow";
-import { CONSTRUCTION_READERS, ECONOMICS_READERS, hasAnyRole } from "@/lib/roles";
+import { CONSTRUCTION_READERS, ECONOMICS_READERS, TECHNICAL_WRITERS, hasAnyRole } from "@/lib/roles";
 
 import {
   Badge,
@@ -12,6 +12,7 @@ import {
   DataToolbar,
   EmptyState,
   IdentityCell,
+  InlineEdit,
   Loading,
   Notice,
   PageHeader,
@@ -162,7 +163,7 @@ export function ConstructionTab({ projectId, roles = new Set<string>(), currency
       ) : null}
       {section === "cash" ? <CashSection projectId={projectId} /> : null}
       {section === "milestones" ? (
-        <MilestonesSection projectId={projectId} />
+        <MilestonesSection projectId={projectId} roles={roles} />
       ) : null}
       {section === "forecast" ? (
         <ForecastSection projectId={projectId} />
@@ -806,7 +807,9 @@ function CashSection({ projectId }: { projectId: string }) {
  * the second makes an instalment fall due, and a screen that collapsed them
  * would show a buyer's payment as triggered when nothing had been certified.
  */
-function MilestonesSection({ projectId }: { projectId: string }) {
+function MilestonesSection({ projectId, roles }: { projectId: string; roles: Set<string> }) {
+  // The same people who may move a milestone by its form may correct its forecast in place.
+  const canForecast = hasAnyRole(roles, TECHNICAL_WRITERS);
   const [rows, setRows] = useState<ConstructionMilestone[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -869,7 +872,23 @@ function MilestonesSection({ projectId }: { projectId: string }) {
             </td>
             <td>{row.scope_label ?? "Whole project"}</td>
             <td>{businessDate(row.planned_date)}</td>
-            <td>{businessDate(row.forecast_date)}</td>
+            <td>
+              <InlineEdit
+                label={`Forecast date for ${row.code}`}
+                type="date"
+                value={row.forecast_date ?? ""}
+                display={businessDate(row.forecast_date)}
+                disabled={!canForecast}
+                onSave={async (value) => {
+                  try {
+                    await construction.updateMilestone(projectId, row.id, { forecast_date: value || null });
+                  } catch (caught) {
+                    throw new Error(caught instanceof ApiError ? caught.message : "Could not save the forecast date.");
+                  }
+                  await load();
+                }}
+              />
+            </td>
             <td>{businessDate(row.actual_achieved_date)}</td>
             <td>{businessDate(row.certified_date)}</td>
             <td

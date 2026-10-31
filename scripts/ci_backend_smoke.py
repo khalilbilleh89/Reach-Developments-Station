@@ -70,6 +70,11 @@ BACKBONE = (
 # Node IDs intentionally name a few existing, real PostgreSQL cases, not whole
 # expensive domain files. A new module must register its contract here.
 DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
+    "workspace": (
+        "tests/modules/test_workspace.py::test_a_view_is_saved_listed_renamed_and_removed_by_its_owner",
+        "tests/modules/test_workspace.py::test_another_persons_view_is_not_found",
+        "tests/modules/test_workspace.py::test_preferences_default_and_persist_per_person",
+    ),
     "marketing": (
         "tests/modules/test_marketing.py::test_content_lifecycle",
         "tests/modules/test_marketing.py::test_access",
@@ -189,6 +194,10 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
 # Exact reviewed ownership: names alone must not certify an arbitrary migration.
 # New revisions register BOTH their owner and their own integrity test(s).
 MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "0057_workspace_views.py": (
+        "workspace",
+        ("tests/modules/test_workspace.py::test_migration_roundtrip",),
+    ),
     "0056_project_drawings.py": (
         "consultant_engineering",
         (

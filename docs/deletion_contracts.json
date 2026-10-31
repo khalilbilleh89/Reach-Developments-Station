@@ -886,5 +886,13 @@
     "removal_route": "DELETE /technical-specifications/{specification_id}/images/{image_id}?reason=...",
     "ui_file": "frontend/src/components/projects/construction/SpecificationImages.tsx",
     "notes": "Whole-project specification writers; reasoned retained removal with audit. Parent specifications with any image history are retained, including drafts; removed parents/images cannot serve bytes. No cascading evidence deletion."
+  },
+  {
+    "handler": "workspace.create_saved_view",
+    "create_route": "POST /views",
+    "status": "implemented",
+    "removal_route": "DELETE /views/{view_id} (served under /me)",
+    "ui_file": "frontend/src/components/ui/SavedViews.tsx",
+    "notes": "A saved view belongs to the person who saved it and holds filters and a sort, no record data. Its owner removes it from the register's saved-views strip; another person's view is not found. Removal is audited with the view's last state; no downstream record references a view."
   }
 ]
