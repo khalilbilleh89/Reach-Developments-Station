@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useEffect, useState } from "react";
 import { ApiError, projects } from "@/lib/api";
 import type { LandAnalytics as Analytics, LandParcel } from "@/lib/api";
@@ -17,7 +18,9 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
   const [rate, setRate] = useState("");
   const [gdv, setGdv] = useState(parcel.expected_gdv_amount ?? "");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   useEffect(() => {
     let cancelled = false;
     void projects.landAnalytics(projectId, parcel.id).then(result => {
@@ -34,7 +37,6 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
     <div className="stack">
       <SectionHeader title="Land economics" description="Acquisition costs and development assumptions for this parcel." />
       {error ? <Notice tone="error">{error}<Button onClick={() => setAttempt(value => value + 1)}>Retry analytics</Button></Notice> : null}
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
       {!data && !error ? <Loading label="Calculating land analytics…" /> : null}
       {data ? <>
         <KeyValueGrid columns={2}>

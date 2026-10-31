@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
 import { ApiError, projects } from "@/lib/api";
@@ -29,7 +30,9 @@ export function DocumentsTab({ projectId, canWrite }: { projectId: string; canWr
   const [error, setError] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -79,7 +82,7 @@ export function DocumentsTab({ projectId, canWrite }: { projectId: string; canWr
     ...(!editing?.filename ? [{ name: "external_url", label: "Link" }] : []),
     { name: "notes", label: "Notes", kind: "textarea" },
   ];
-  const alerts = <>{error ? <Notice tone="error">{error}</Notice> : null}{lookupError ? <><Notice tone="error">{lookupError}</Notice><Button onClick={() => void loadChoices()}>Retry document choices</Button></> : null}{notice ? <Notice tone="success">{notice}</Notice> : null}</>;
+  const alerts = <>{error ? <Notice tone="error">{error}</Notice> : null}{lookupError ? <><Notice tone="error">{lookupError}</Notice><Button onClick={() => void loadChoices()}>Retry document choices</Button></> : null}</>;
   const typeManager = <Card title="Document types" description="Types added here belong to this project. A type used in document history is protected from deletion.">
     <DraftBoundary dirty={!!typeName} busy={busy} onDiscard={() => setTypeName("")}><form onSubmit={addType}><Field label="New document type"><input className="input" required maxLength={200} disabled={busy} value={typeName} onChange={e => setTypeName(e.target.value)} /></Field><FormActions><Button type="submit" disabled={busy || !typeName.trim()}>Add type</Button></FormActions></form></DraftBoundary>
     {types.filter(v => v.removable).map(v => <div className="row-actions" key={v.id}><span>{v.label}</span><DeleteRecordButton label="type" recordName={v.label} onDelete={reason => projects.deleteDocumentType(projectId, v.id, reason)} onDeleted={async () => { if (form.document_type_code === v.code) setForm(f => ({ ...f, document_type_code: "" })); await loadChoices(); }} /></div>)}

@@ -1,5 +1,7 @@
 "use client";
 
+import * as ui from "@/components/ui";
+import { } from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 import { SalesImport } from "./SalesImport";
 import { ApiError, sales } from "@/lib/api";
@@ -51,7 +53,9 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
   const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<SalesAgent | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const load = useCallback(async () => {
     try { setAgents(await sales.agents(projectId, search ? {search} : {})); setError(null); }
     catch (caught) { setAgents(null); setError(caught instanceof ApiError ? caught.message : "Could not load Agents."); }
@@ -68,7 +72,6 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
 
   return <div className="stack">
     {error ? <Notice tone="error">{error}<Button onClick={() => void load()}>Retry</Button></Notice> : null}
-    {notice ? <Notice tone="success">{notice}</Notice> : null}
     <DataToolbar search={{value: search, onChange: setSearch, label: "Search agents", placeholder: "Agent name"}}
       count={agents ? {shown: agents.length, noun: "agent"} : undefined}
       onReset={search ? () => setSearch("") : undefined}

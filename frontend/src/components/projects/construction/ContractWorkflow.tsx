@@ -1,4 +1,5 @@
 "use client";
+import * as ui from "@/components/ui";
 import { useState } from "react";
 import { ApiError, construction } from "@/lib/api";
 import type { ContractDetail } from "@/lib/api";
@@ -55,7 +56,9 @@ export function ContractWorkflow({ projectId, detail, reading, unavailable, onCh
   const [editor, setEditor] = useState<Editor | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Error | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const begin = (next: Editor) => { setFailure(null); setNotice(null); setEditor(next); };
   async function save(body: Record<string, unknown>) {
     if (!editor || busy || reading || unavailable) return;
@@ -77,7 +80,6 @@ export function ContractWorkflow({ projectId, detail, reading, unavailable, onCh
   const editorBlocker = unavailable ? "The contract could not be refreshed. Cancel this form, then refresh before saving." : !editor ? null : editor.kind === "header" ? workflow.editing_blocker : ({ signed: workflow.signed_registration_blocker, cancel: workflow.cancellation_blocker, complete: workflow.completion_blocker, terminate: workflow.termination_blocker })[editor.kind];
   const actions: [Action, string | null][] = detail.status === "draft" ? [["signed", workflow.signed_registration_blocker], ["cancel", workflow.cancellation_blocker]] : detail.status === "submitted" ? [["signed", workflow.signed_registration_blocker], ["cancel", workflow.cancellation_blocker]] : detail.status === "active" ? [["complete", workflow.completion_blocker], ["terminate", workflow.termination_blocker]] : [];
   return <div className="stack">
-    {notice ? <Notice tone="success">{notice}</Notice> : null}
     {detail.status === "draft" || detail.status === "submitted" || detail.status === "cancelled" ? <Notice tone="info">Activate the signed agreement using its total contract price. No contract lines or budget are required.</Notice> : <Notice tone="info">This contract carries a standing commitment. Completion or termination does not reduce the money committed.</Notice>}
     <ButtonRow>{!workflow.editing_blocker ? <><Button disabled={unavailable || busy || reading} onClick={() => begin({ kind: "header" })}>Edit draft terms</Button></> : <p>{workflow.editing_blocker}</p>}</ButtonRow>
     {actions.map(([action, blocker]) => <div key={action}><Button disabled={unavailable || busy || reading || !!blocker} onClick={() => begin({ kind: action })}>{labels[action]}</Button>{blocker ? <p className="footnote">{blocker}</p> : null}</div>)}

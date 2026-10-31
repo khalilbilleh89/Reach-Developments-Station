@@ -1,4 +1,5 @@
 "use client";
+import * as ui from "@/components/ui";
 import { useState } from "react";
 import { matrices, type Framework, type MatrixRecord } from "@/lib/api/matrix";
 import { useAnswer } from "@/lib/answer";
@@ -11,13 +12,14 @@ export function MatrixTab({ projectId }: { projectId: string }) {
  const answer = useAnswer(true, () => matrices.list(projectId), [projectId]);
  const [editor, setEditor] = useState<{ framework: Framework; record?: MatrixRecord } | null>(null);
  const [query, setQuery] = useState("");
- const [notice, setNotice] = useState("");
+ // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+ const setNotice = (text: string) => { if (text) toast({ title: text }); };
  const rows = answer.status === "ready" ? answer.data.analyses : [];
  const filtered = rows.filter(row => (row.title + " " + templates[row.framework].name).toLowerCase().includes(query.toLowerCase()));
  const canManage = answer.status === "ready" && answer.data.can_manage;
  return <div className="stack">
   <PageHeader title="Matrix" icon="overview" subtitle="Make your thinking visible. Six perspectives for clearer decisions."/>
-  {notice ? <Notice tone="success">{notice}</Notice> : null}
   {answer.status === "loading" ? <Loading label="Loading your analyses…"/> : null}
   {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button onClick={answer.retry}>Retry</Button></Notice> : null}
   {answer.status === "denied" || answer.status === "off" ? <Notice tone="info">Matrix requires access to the whole project.</Notice> : null}

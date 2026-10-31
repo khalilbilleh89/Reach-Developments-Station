@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useState } from "react";
 import { useAnswer } from "@/lib/answer";
 import { drawings, drawingCategories, drawingStatuses, filterDrawings } from "@/lib/api/drawings";
@@ -82,11 +83,12 @@ export function Drawings({ projectId, canWrite }: { projectId: string; canWrite:
   const [status, setStatus] = useState("");
   const [editor, setEditor] = useState<{ row?: Drawing } | null>(null);
   const [viewing, setViewing] = useState<Drawing | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const rows = answer.status === "ready" ? filterDrawings(answer.data, search, category, status) : [];
   return <div className="stack">
     <SectionHeader title="Drawings" description="Project drawings and floor plans, organized for quick review." actions={canWrite ? <Button variant="primary" onClick={() => setEditor({})}>Add drawing</Button> : undefined} />
-    {notice ? <Notice tone="success">{notice}</Notice> : null}
     <Card><FieldRow columns={3}>
       <Field label="Find a drawing"><input className="input" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, number, floor or revision…" /></Field>
       <Field label="Category"><select className="input" value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{Object.entries(drawingCategories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>

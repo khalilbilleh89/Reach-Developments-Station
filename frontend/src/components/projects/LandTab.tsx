@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
 
 import { useCallback, useEffect, useState } from "react";
@@ -256,7 +257,9 @@ export function LandTab({
   const [layout, setLayout] = useState<"parcels" | "schedule">("parcels");
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -453,7 +456,6 @@ export function LandTab({
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         <div className="land-register-toolbar"><DataToolbar
           framed

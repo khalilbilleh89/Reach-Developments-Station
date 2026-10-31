@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
@@ -79,7 +80,9 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const [addingCurrency, setAddingCurrency] = useState(false);
   const [addingPack, setAddingPack] = useState(false);
@@ -235,7 +238,6 @@ export function ProjectsRegister({ onOpen, roles }: { onOpen: (id: string) => vo
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         <DataToolbar
           framed

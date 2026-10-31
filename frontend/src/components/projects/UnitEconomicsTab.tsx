@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -117,7 +118,9 @@ function ApprovedUnitEconomicsTab({ projectId, roles }: { projectId: string; rol
   const [versions, setVersions] = useState<AllocationVersion[] | null>(null);
   const [costs, setCosts] = useState<UnitCost[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [denied, setDenied] = useState(false);
   // Separate from `denied`, because these are two different answers. A reader
   // scoped to selected phases may see their units' economics and may not see
@@ -221,7 +224,6 @@ function ApprovedUnitEconomicsTab({ projectId, roles }: { projectId: string; rol
       {header}
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         <Tabs label="Unit economics sections" tabs={TABS} active={tab} onSelect={setTab} />
         <TabPanel group="Unit economics sections" tab={tab}>

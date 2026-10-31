@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, projects, users } from "@/lib/api";
@@ -38,7 +39,9 @@ export function AccessTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [directoryError, setDirectoryError] = useState(false);
   const [directoryRevision, setDirectoryRevision] = useState(0);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const [busy, setBusy] = useState(false);
   const [scopeFor, setScopeFor] = useState<ProjectAccess | null>(null);
 
@@ -103,7 +106,6 @@ export function AccessTab({ projectId }: { projectId: string }) {
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
         {directoryError ? <><Notice tone="error">Could not load the user directory.</Notice><Button onClick={() => setDirectoryRevision(v => v + 1)}>Retry users</Button></> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         <Card>
           <form className="form-inline" onSubmit={grant}>

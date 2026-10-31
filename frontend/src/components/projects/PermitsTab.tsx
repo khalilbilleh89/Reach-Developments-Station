@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -227,7 +228,9 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
   const [search, setSearch] = useState("");
   const [presentation, setPresentation] = useState<"approvals" | "schedule">("approvals");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
 
   const load = useCallback(async () => {
     try {
@@ -330,7 +333,6 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
-        {notice ? <Notice tone="success">{notice}</Notice> : null}
 
         {register ? (
           <StatStrip>

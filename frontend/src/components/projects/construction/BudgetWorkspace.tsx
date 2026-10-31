@@ -1,5 +1,6 @@
 "use client";
 
+import * as ui from "@/components/ui";
 import Link from "next/link";
 import { useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
@@ -31,7 +32,9 @@ export function BudgetWorkspace({ projectId, roles, onChanged }: { projectId: st
   const [editor, setEditor] = useState<Editor | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiError | Error | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The barrel's hook, or a no-op where a test harness stands the barrel in.
+  const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
+  const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
   const register = useAnswer(true, () => construction.budgets(projectId), [projectId, revision]);
   const codes = useAnswer(true, () => construction.costCodes(projectId), [projectId, revision]);
   const record = useAnswer(!!view.budgetVersion, () => construction.budget(projectId, view.budgetVersion), [projectId, view.budgetVersion, revision]);
@@ -83,7 +86,6 @@ export function BudgetWorkspace({ projectId, roles, onChanged }: { projectId: st
       {open && open.id !== view.budgetVersion ? <Link className="button button-primary" href={versionHref(open.id)}>Continue v{open.version_number} · {budgetLabel(open.status)}</Link> : null}
       {canPrepare && register.status === "ready" && codes.status === "ready" && (!open || open.status === "draft") ? <Button onClick={() => begin({ kind: "code" })}>Add cost code</Button> : null}
     </ButtonRow>
-    {notice ? <Notice tone="success">{notice}</Notice> : null}
     {register.status === "failed" ? <><Notice tone="error">{register.message}</Notice><Button onClick={register.retry}>Retry budget versions</Button></> : register.status === "denied" ? <Notice tone="info">Whole-project Construction access is required to read budgets.</Notice> : register.status === "loading" ? <Loading label="Loading budget versions" shape="rows" /> : <>
       <Notice tone={active ? "info" : "warning"}>{active ? `Budget v${active.version_number} is in force. Other versions do not authorize commitments.` : "No construction budget is in force. Preparing or approving a draft does not activate it."}</Notice>
       {!view.budgetVersion ? versions.length ? <TableScroll label="Budget versions"><thead><tr><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Effective</th><th scope="col">Reason / source</th></tr></thead><tbody>{versions.map(version => <tr key={version.id}><th scope="row"><Link href={versionHref(version.id)}>Budget v{version.version_number}</Link></th><td><Badge tone={budgetTone(version.status)}>{budgetLabel(version.status)}</Badge></td><td>{businessDate(version.effective_date)}</td><td className="cell-prose">{version.change_reason}{version.source_version_id ? <p><Link href={versionHref(version.source_version_id)}>Open source version</Link></p> : null}</td></tr>)}</tbody></TableScroll> : <EmptyState title="No budget versions" hint="Create the first budget, add any missing cost codes, and enter their authorizations. Finance or a Project Manager prepares; an Approver / CFO reviews." /> : null}
