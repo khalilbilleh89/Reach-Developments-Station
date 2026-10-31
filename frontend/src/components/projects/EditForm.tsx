@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
 import { ApiError } from "@/lib/api";
-import { Button, Field, FieldRow, FormActions, FormSection, Notice } from "@/components/ui";
+import { Button, Field, FieldRow, FormActions, FormSection, Notice, Segmented } from "@/components/ui";
 
 /**
  * One field in an edit form, described rather than hand-written each time.
@@ -125,8 +125,17 @@ export function EditForm({
         : field.width === "medium"
           ? "input input-medium"
           : "input";
+    // A choice among a handful of meaningful options is a toggle, not a
+    // dropdown (design system J2); a longer list stays a select.
     const input =
-      field.kind === "select" ? (
+      field.kind === "select" && (field.options ?? []).length <= 4 && (field.options ?? []).length > 0 ? (
+        <Segmented
+          label={field.label}
+          value={String(value ?? "")}
+          options={(field.options ?? []).map((option) => ({ value: option.value, label: option.label || "None" }))}
+          onChange={(next) => set(field.name, next)}
+        />
+      ) : field.kind === "select" ? (
         <select
           className="input"
           value={String(value ?? "")}

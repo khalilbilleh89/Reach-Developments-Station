@@ -50,29 +50,57 @@ test("a late price preview cannot replace the preview for the current agreed pri
 });
 
 test("reservation save validation retains buyer, terms and exact price; double submit is suppressed",async()=>{
+  // The reservation is prepared in three steps (design system J4): buyer,
+  // terms, review. What a step records stays recorded when the save fails,
+  // and the review step is the only one whose submit reaches the server.
   const calls=[];let reject;
-  const view=mount("ReservationForm","ReservationForm",{"@/lib/api":{ApiError,sales:{clients:async()=>[{id:"buyer",display_name:"Buyer",client_number:"B1"}],createReservation:async(_,payload)=>{calls.push(payload);return new Promise((_,no)=>{reject=no;});}}}},
+  const view=mount("ReservationForm","ReservationForm",{"@/lib/format":formatExports,"@/lib/api":{ApiError,sales:{clients:async()=>[{id:"buyer",display_name:"Buyer",client_number:"B1"}],createReservation:async(_,payload)=>{calls.push(payload);return new Promise((_,no)=>{reject=no;});}}}},
     {projectId:"project",unitId:"unit",currencyId:"JOD",unitOption:unit,onCreated(){throw Error("Unexpected success");},onCancel(){},onChangeUnit(){}});
   view.render();await settle();
   const field=(name)=>nodes(view.render()).find(node=>node.props?.name===name);
+  const steps=()=>nodes(view.render()).find(node=>node.type==="FlowSteps").props.current;
+  const actions=()=>nodes(view.render()).find(node=>node.type==="FlowActions").props;
+  const form=()=>nodes(view.render()).find(node=>node.type==="form");
+
+  assert.equal(steps(),0);
+  assert.equal(actions().nextDisabled,true,"no buyer, no next");
+  assert.equal(field("expires_on"),undefined,"the terms wait for the buyer");
   field("client_id").props.onChange({target:{value:"buyer"}});
+  assert.equal(actions().nextDisabled,false);
+  await form().props.onSubmit({preventDefault(){}});
+  assert.equal(calls.length,0,"Enter on the buyer step records nothing");
+  assert.equal(steps(),1,"it moves to the terms");
+
   field("expires_on").props.onChange({target:{value:"2026-10-01"}});
   field("price_locked_until").props.onChange({target:{value:"2026-10-01"}});
   let price=nodes(view.render()).find(node=>node.type==="SalesPriceInput");
   price.props.onChange("143000.25");
+  assert.equal(actions().nextDisabled,true,"no preview, no next");
   price=nodes(view.render()).find(node=>node.type==="SalesPriceInput");
   price.props.onPreview({sales_price_ex_tax:"143000.25"});
-  const form=nodes(view.render()).find(node=>node.type==="form");
-  const first=form.props.onSubmit({preventDefault(){}});
-  await form.props.onSubmit({preventDefault(){}});
+  assert.equal(actions().nextDisabled,false);
+  actions().onNext();
+  assert.equal(steps(),2);
+  const fact=(label)=>nodes(view.render()).find(node=>node.type==="KeyValue"&&node.props.label===label)?.props.value;
+  assert.equal(fact("Buyer"),"Buyer · B1","the review names the buyer");
+  assert.match(fact("Agreed price, ex tax"),/143,000\.25/,"and the exact price");
+
+  const first=form().props.onSubmit({preventDefault(){}});
+  await form().props.onSubmit({preventDefault(){}});
   assert.equal(calls.length,1);
   assert.equal(calls[0].sales_price_ex_tax,"143000.25");
   assert.equal(calls[0].expected_price_version_id,"version");
   assert.equal(calls[0].creation_request_id,"request-key");
+  assert.equal(calls[0].client_id,"buyer");
+  assert.equal(calls[0].expires_on,"2026-10-01");
   reject(new ApiError("Correct the expiry"));await first;
-  assert.equal(field("client_id").props.value,"buyer");
+  assert.equal(steps(),2,"a failed save keeps the review on screen");
+  assert.equal(fact("Buyer"),"Buyer · B1");
+  actions().onBack();
+  assert.equal(nodes(view.render()).find(node=>node.type==="SalesPriceInput").props.value,"143000.25","the exact price is retained");
   assert.equal(field("expires_on").props.value,"2026-10-01");
-  assert.equal(nodes(view.render()).find(node=>node.type==="SalesPriceInput").props.value,"143000.25");
+  actions().onBack();
+  assert.equal(field("client_id").props.value,"buyer","and so is the buyer");
 });
 
 test("ordinary Sales workflow has a Sales API boundary and Inventory has no commercial creation",()=>{

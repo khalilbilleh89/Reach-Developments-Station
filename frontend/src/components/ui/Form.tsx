@@ -67,6 +67,11 @@ export function FieldRow({
   return <div className={columns === 2 ? "field-row" : `field-row field-row-${columns}`}>{children}</div>;
 }
 
+/** The anchor a form section answers to, from its title: "Scope and responsibility" → "section-scope-and-responsibility". */
+export function sectionId(title: string): string {
+  return `section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
 /** A titled group of related fields inside one form. */
 export function FormSection({
   title,
@@ -78,13 +83,61 @@ export function FormSection({
   children: ReactNode;
 }) {
   return (
-    <div className="form-section">
+    <div className="form-section" id={sectionId(title)}>
       <div className="form-section-head">
         <h3 className="form-section-title">{title}</h3>
         {description ? <p className="form-section-description">{description}</p> : null}
       </div>
       <div className="form-section-fields">{children}</div>
     </div>
+  );
+}
+
+/**
+ * The sections of a long form, as links down the side (design system J3), so
+ * a person lands on "Issue dates" without scrolling past everything above it.
+ * Wrap the form in `form-layout` and put this first; the body follows.
+ */
+export function FormOutline({ sections, label = "Form sections" }: { sections: string[]; label?: string }) {
+  return (
+    <nav className="form-outline" aria-label={label}>
+      <ol>
+        {sections.map((title) => (
+          <li key={title}><a href={`#${sectionId(title)}`}>{title}</a></li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+/**
+ * A few meaningful options as cards rather than a dropdown (design system
+ * J2): a permit type, a payment method. Real radio inputs, so the keyboard
+ * and a screen reader get a group with one choice; the card is its label.
+ */
+export function ChoiceCards({ label, name, value, options, onChange, required, columns = 3 }: {
+  label: string;
+  name: string;
+  value: string;
+  options: { value: string; label: string; description?: string }[];
+  onChange: (value: string) => void;
+  required?: boolean;
+  columns?: 2 | 3 | 4;
+}) {
+  return (
+    <fieldset className={`choice-cards choice-cards-${columns}`}>
+      <legend className="field-label">{label}</legend>
+      {options.map((option) => {
+        const checked = option.value === value;
+        return (
+          <label key={option.value} className={checked ? "choice-card choice-card-checked" : "choice-card"}>
+            <input type="radio" name={name} value={option.value} checked={checked} required={required} onChange={() => onChange(option.value)} />
+            <span className="choice-card-label">{option.label}</span>
+            {option.description ? <span className="choice-card-description">{option.description}</span> : null}
+          </label>
+        );
+      })}
+    </fieldset>
   );
 }
 
@@ -281,17 +334,26 @@ export function FormActions({ children }: { children: ReactNode }) {
  */
 export function StickyActions({
   note,
+  dirty,
   submitLabel,
   busy,
   onCancel,
 }: {
   note?: string;
+  /** Whether there is anything to save; shown as the unsaved-change state (design system J3). */
+  dirty?: boolean;
   submitLabel: string;
   busy?: boolean;
   onCancel?: () => void;
 }) {
   return (
     <div className="sticky-actions">
+      {dirty !== undefined ? (
+        <p className={dirty ? "sticky-actions-note sticky-actions-dirty" : "sticky-actions-note"} aria-live="polite">
+          <span className="sticky-actions-dot" aria-hidden="true" />
+          {dirty ? "Unsaved changes" : "Nothing to save yet"}
+        </p>
+      ) : null}
       {note ? <p className="sticky-actions-note">{note}</p> : null}
       {onCancel ? (
         <Button data-leaves-editor onClick={onCancel} disabled={busy}>

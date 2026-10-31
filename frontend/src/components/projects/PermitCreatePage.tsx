@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, projects } from "@/lib/api";
 import type { LandParcel, Permit, PermitType } from "@/lib/api";
-import { Button, Card, DraftBoundary, Field, FieldRow, FormActions, FormSection, Notice, PageHeader } from "@/components/ui";
+import { Button, Card, ChoiceCards, DraftBoundary, Field, FieldRow, FormOutline, FormSection, Notice, PageHeader, StickyActions } from "@/components/ui";
 
 const DETAILS = [
   ["authority_reference", "Authority reference", "text", "Application", 120],
@@ -75,7 +75,9 @@ export function PermitCreatePage({ projectId, types, parcels, permits, canSeeCos
     <article className="record-workspace">
       <Button data-leaves-editor onClick={onCancel} disabled={busy}>Back to permits</Button>
       <PageHeader icon="permits" title="Add permit" subtitle="Enter everything you know and save once. No preliminary registration is needed." />
-      <Card><form onSubmit={submit}>
+      <Card><form onSubmit={submit} className="form-layout">
+        <FormOutline sections={["Permit", "Scope and responsibility", "Application", "Submission dates", "Issue dates", "Management"]} />
+        <div className="form-layout-body">
         {error ? <Notice tone="error">{error}</Notice> : null}
         <fieldset disabled={busy} className="draft-fields">
           <FormSection title="Permit">
@@ -87,7 +89,7 @@ export function PermitCreatePage({ projectId, types, parcels, permits, canSeeCos
             {newType ? <FieldRow columns={2}>
               <Field label="New type code"><input className="input" required maxLength={64} value={typeCode} onChange={e => setTypeCode(e.target.value)} /></Field>
               <Field label="New type name" hint="The type and permit are saved together."><input className="input" required maxLength={200} value={typeName} onChange={e => setTypeName(e.target.value)} /></Field>
-            </FieldRow> : <Field label="Permit type"><select className="input" required value={String(values.permit_type_code)} onChange={e => set("permit_type_code", e.target.value)}>
+            </FieldRow> : (types?.filter(type => type.is_active).length ?? 0) <= 6 ? <ChoiceCards label="Permit type" name="permit_type_code" required value={String(values.permit_type_code)} onChange={value => set("permit_type_code", value)} options={(types ?? []).filter(type => type.is_active).map(type => ({ value: type.code, label: type.label, description: type.code }))} /> : <Field label="Permit type"><select className="input" required value={String(values.permit_type_code)} onChange={e => set("permit_type_code", e.target.value)}>
               <option value="">{types === null ? "Loading types…" : "Choose a type, or enter a new one above"}</option>
               {types?.filter(type => type.is_active).map(type => <option key={type.id} value={type.code}>{type.label}</option>)}
             </select></Field>}
@@ -110,8 +112,9 @@ export function PermitCreatePage({ projectId, types, parcels, permits, canSeeCos
           </FormSection>)}
           <label className="checkbox"><input type="checkbox" checked={Boolean(values.is_blocking)} onChange={e => set("is_blocking", e.target.checked)} />Blocking the programme</label>
           <label className="checkbox"><input type="checkbox" checked={Boolean(values.is_critical_path)} onChange={e => set("is_critical_path", e.target.checked)} />On the critical path</label>
-          <FormActions><Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Add permit"}</Button><Button data-leaves-editor onClick={onCancel} disabled={busy}>Cancel</Button></FormActions>
         </fieldset>
+        <StickyActions dirty={dirty} submitLabel="Add permit" busy={busy} onCancel={onCancel} />
+        </div>
       </form></Card>
     </article>
   </DraftBoundary>;

@@ -2422,6 +2422,7 @@ input[type="file"].input {
 .form-section {
   padding: var(--space-5) 0;
   border-top: 1px solid var(--line-soft);
+  scroll-margin-top: calc(var(--context-bar-height) + var(--space-4));
 }
 
 .form-section:first-child {
@@ -2501,10 +2502,57 @@ input[type="file"].input {
 }
 
 .sticky-actions-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   margin-right: auto;
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+.sticky-actions-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--line-strong); }
+.sticky-actions-dirty { color: var(--text-primary); font-weight: 500; }
+.sticky-actions-dirty .sticky-actions-dot { background: var(--brand-gold); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ---- Long forms: section links beside the fields (design system J3) ---- */
+
+.form-layout { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+.form-layout-body { min-width: 0; }
+.form-outline { position: sticky; top: calc(var(--context-bar-height) + var(--space-4)); }
+.form-outline ol { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.form-outline a { display: block; padding: 0.35rem var(--space-3); border-left: 2px solid var(--line-soft); color: var(--text-secondary); font-size: var(--text-sm); text-decoration: none; }
+.form-outline a:hover { border-left-color: var(--accent); color: var(--text-primary); }
+
+/* ---- Choice cards (design system J2) ------------------------------------ */
+
+.choice-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-4); padding: 0; border: 0; min-width: 0; }
+.choice-cards-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.choice-cards-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.choice-cards > legend { grid-column: 1 / -1; padding: 0; margin-bottom: var(--space-1); }
+.choice-card { position: relative; display: grid; gap: 2px; padding: var(--space-3) var(--space-4); border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); cursor: pointer; transition: border-color var(--motion-fast) var(--ease), background-color var(--motion-fast) var(--ease); }
+.choice-card:hover { border-color: var(--line-strong); }
+.choice-card input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
+.choice-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.choice-card-checked { border-color: var(--brand-gold); background: var(--accent-soft); }
+.choice-card-label { font-size: var(--text-sm); font-weight: 600; }
+.choice-card-description { color: var(--text-muted); font-size: var(--text-xs); }
+.field > .segmented { flex-wrap: wrap; max-width: 100%; overflow-x: visible; }
+
+/* ---- Stepped flows (design system J4, H3c) ------------------------------ */
+
+.flow-steps { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); margin: 0 0 var(--space-5); padding: 0; list-style: none; }
+.flow-step { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-soft); border-radius: var(--radius-card); color: var(--text-muted); }
+.flow-step-mark { display: grid; flex: none; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid var(--line-default); background: var(--surface); font-size: var(--text-xs); font-weight: 650; font-variant-numeric: tabular-nums; }
+.flow-step-text { display: grid; min-width: 0; }
+.flow-step-label { font-size: var(--text-sm); font-weight: 600; white-space: nowrap; }
+.flow-step-hint { overflow: hidden; color: var(--text-muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.flow-step-current { border-color: var(--brand-gold); background: var(--accent-soft); color: var(--text-primary); }
+.flow-step-current .flow-step-mark { border-color: var(--accent); background: var(--accent); color: var(--text-inverse); }
+.flow-step-done { color: var(--text-secondary); }
+.flow-step-done .flow-step-mark { border-color: var(--success); background: var(--success); color: var(--text-inverse); }
+.flow-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: flex-end; margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--line-soft); }
+.flow-actions-note { margin-right: auto; color: var(--text-muted); font-size: var(--text-sm); }
+.flow-review { padding: var(--space-4) var(--space-5); border: 1px solid var(--line-soft); border-radius: var(--radius-card); background: var(--surface-secondary); }
 
 /* ---- Toolbar ----------------------------------------------------------- */
 
@@ -5895,6 +5943,14 @@ a:not([class]):hover { color: var(--accent-hover); }
   .context-utilities .context-fact {
     display: none;
   }
+
+  .form-layout { grid-template-columns: minmax(0, 1fr); }
+  .form-outline { position: static; }
+  .form-outline ol { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; padding-bottom: var(--space-2); }
+  .form-outline a { border-left: 0; border-bottom: 2px solid var(--line-soft); white-space: nowrap; }
+  .choice-cards, .choice-cards-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow-steps { grid-auto-flow: row; grid-auto-columns: auto; }
+  .flow-step-hint { display: none; }
 
   .context-search-text { display: none; }
   .context-search .kbd { display: none; }

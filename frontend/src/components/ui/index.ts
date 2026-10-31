@@ -51,16 +51,19 @@ export { ExternalLink, isUrl } from "./Link";
 export type { BandHeat, MetricTone } from "./Data";
 export { EmptyState, Loading, Notice } from "./Feedback";
 export {
+  ChoiceCards,
   DataToolbar,
   Field,
   FieldRow,
   Form,
   FormActions,
+  FormOutline,
   FormSection,
   MoneyInput,
   RateInput,
   StickyActions,
   ToolbarFilter,
+  sectionId,
 } from "./Form";
 export { FormDialog } from "./FormDialog";
 export { PageHeader, SectionHeader } from "./Headers";
@@ -73,6 +76,8 @@ export type { TimelineState } from "./Timeline";
 
 export { Disclosure } from "./Disclosure";
 export { Views } from "./Views";
+export { FlowActions, FlowSteps } from "./Flow";
+export type { FlowStep } from "./Flow";
 export { BulkBar, CardRow, CardRows, DATE_PRESETS, DatePoint, DateRange, FilterChips, InlineEdit, SelectAllCell, SelectCell, SortHeader, useSelection, useSort } from "./Register";
 export type { DatePreset, FilterChip, SortKey } from "./Register";
 export { SavedViews } from "./SavedViews";
