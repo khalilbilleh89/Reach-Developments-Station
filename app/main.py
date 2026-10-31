@@ -65,6 +65,7 @@ from app.modules.sales.faq_api import router as faq_router
 from app.modules.sales.operations_api import router as operations_router
 from app.modules.settings.api import router as settings_router
 from app.modules.unit_economics.api import router as unit_economics_router
+from app.modules.workspace.api import router as workspace_router
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +294,7 @@ def create_app() -> FastAPI:
         prelaunch_router,
         unit_economics_router,
         audit_router,
+        workspace_router,
     ):
         app.include_router(router, prefix=settings.API_V1_PREFIX)
     _reserve_api_namespace(app, settings.API_V1_PREFIX)

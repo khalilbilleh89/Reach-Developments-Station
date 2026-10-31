@@ -21,9 +21,10 @@ import {
   Button,
   ButtonRow,
   Card,
+  CardRow,
+  CardRows,
   DataToolbar,
   Disclosure,
-  IdentityCell,
   ConfirmDialog,
   Tabs,
   TabPanel,
@@ -40,7 +41,6 @@ import {
   PageHeader,
   SectionHeader,
   StatusDot,
-  TableScroll,
   Segmented,
   Timeline,
   TimelineItem,
@@ -427,81 +427,37 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
                 <div className="permit-record-review">{permitReviewNotes(permit).map(note => <p key={note}><Icon name="alert" />{note}</p>)}</div><footer className="permit-approval-footer"><Button small onClick={() => setSelected(permit)}>Open approval</Button></footer>
               </article>)}
             </div> : <div className="permit-approval-schedule">
-            <TableScroll label="Permit register" fixedFirst>
-              <thead>
-                <tr>
-                  <th scope="col">Permit</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Next action</th>
-                  <th scope="col">Required by</th>
-                  <th scope="col">Authority</th>
-                  <th scope="col">Forecast / received</th>
-                  <th scope="col" className="num">
-                    Days in stage
-                  </th>
-                  <th scope="col">Statutory clock</th>
-                  <th scope="col">Flags</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((permit) => (
-                  // A permit the authority has had longer than the law allows,
-                  // or one consents management says is holding the programme,
-                  // carries a rail rather than a red row: the words in the
-                  // status and flag columns still say which of the two it is.
-                  <tr
-                    key={permit.id}
-                    className={permit.sla_overdue || permit.is_blocking ? "row-flag" : undefined}
-                  >
-                    <th scope="row">
-                      <button className="button-link" type="button" onClick={() => setSelected(permit)}>
-                        <IdentityCell name={permit.permit_code} meta={typeLabel(permit.permit_type_code)} />
-                      </button>
-                    </th>
-                    <td>
-                      <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>
-                        {STATUS_LABELS[permit.status] ?? permit.status}
-                      </Badge>
-                    </td>
-                    <td className="cell-prose">{permit.next_action ?? "No next action recorded"}</td>
-                    <td className="figure">{businessDate(permit.planned_issue_date)}</td>
-                    <td className="cell-prose">
-                      {permit.authority}
-                      {permit.authority_reference ? <span className="cell-secondary mono">{permit.authority_reference}</span> : null}
-                    </td>
-                    <td className="figure">
-                      {permit.issue_date
-                        ? businessDate(permit.issue_date)
-                        : permit.forecast_issue_date
-                          ? businessDate(permit.forecast_issue_date)
-                          : "—"}
-                      {!permit.issue_date && permit.forecast_issue_date ? (
-                        <span className="cell-secondary">forecast</span>
-                      ) : null}
-                    </td>
-                    <td className="num">{permit.days_in_stage}</td>
-                    <td>
-                      {permit.sla_overdue ? (
-                        <StatusDot tone="danger">{slaLabel(permit)}</StatusDot>
-                      ) : permit.sla_days_remaining === null ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <StatusDot tone="success">{slaLabel(permit)}</StatusDot>
-                      )}
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
-                        {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
-                        {permit.expired_flag ? <Badge tone="danger">Expired</Badge> : null}
-                        {permitReviewNotes(permit).length ? <Badge tone="warning">Review record</Badge> : null}
-                        {!permit.prerequisite_satisfied ? <Badge tone="muted">Prerequisite open</Badge> : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableScroll>
+            <CardRows label="Permit register">
+              {shown.map((permit) => (
+                // A permit the authority has had longer than the law allows,
+                // or one consents management says is holding the programme,
+                // carries a rail rather than a red card: the words in the
+                // status and flags still say which of the two it is.
+                <CardRow
+                  key={permit.id}
+                  flagged={permit.sla_overdue || permit.is_blocking}
+                  title={permit.permit_code}
+                  meta={<>{typeLabel(permit.permit_type_code)} · {permit.authority}{permit.authority_reference ? <> · <span className="mono">{permit.authority_reference}</span></> : null}</>}
+                  onOpen={() => setSelected(permit)}
+                  facts={[
+                    { label: "Stage", value: <Badge tone={STATUS_TONES[permit.status] ?? "neutral"}>{STATUS_LABELS[permit.status] ?? permit.status}</Badge> },
+                    { label: "Required by", value: businessDate(permit.planned_issue_date) },
+                    { label: permit.issue_date ? "Received" : "Forecast", value: permit.issue_date ? businessDate(permit.issue_date) : permit.forecast_issue_date ? businessDate(permit.forecast_issue_date) : "—" },
+                    { label: "Days in stage", value: permit.days_in_stage },
+                    { label: "Statutory clock", value: permit.sla_overdue ? <StatusDot tone="danger">{slaLabel(permit)}</StatusDot> : permit.sla_days_remaining === null ? <span className="muted">—</span> : <StatusDot tone="success">{slaLabel(permit)}</StatusDot> },
+                    { label: "Next action", value: <span className="cell-prose">{permit.next_action ?? "No next action recorded"}</span> },
+                  ]}
+                  status={<>
+                    {permit.is_blocking ? <Badge tone="warning">Blocking</Badge> : null}
+                    {permit.is_critical_path ? <Badge tone="info">Critical path</Badge> : null}
+                    {permit.expired_flag ? <Badge tone="danger">Expired</Badge> : null}
+                    {permitReviewNotes(permit).length ? <Badge tone="warning">Review record</Badge> : null}
+                    {!permit.prerequisite_satisfied ? <Badge tone="muted">Prerequisite open</Badge> : null}
+                  </>}
+                  actions={<Button small onClick={() => setSelected(permit)}>Open approval</Button>}
+                />
+              ))}
+            </CardRows>
             </div>}
             </>
           )}

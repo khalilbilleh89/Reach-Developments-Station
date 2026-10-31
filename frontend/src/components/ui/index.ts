@@ -73,6 +73,10 @@ export type { TimelineState } from "./Timeline";
 
 export { Disclosure } from "./Disclosure";
 export { Views } from "./Views";
+export { BulkBar, CardRow, CardRows, DATE_PRESETS, DatePoint, DateRange, FilterChips, InlineEdit, SelectAllCell, SelectCell, SortHeader, useSelection, useSort } from "./Register";
+export type { DatePreset, FilterChip, SortKey } from "./Register";
+export { SavedViews } from "./SavedViews";
+export { DensityProvider, DensitySwitch, useDensity } from "./Density";
 export type { View } from "./Views";
 export { Segmented } from "./Segmented";
 export { RowMenu } from "./RowMenu";

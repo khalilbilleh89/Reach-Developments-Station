@@ -8,7 +8,7 @@ import type { CurrentUser, ProjectDetail } from "@/lib/api";
 import { useSession } from "@/lib/api/session";
 import { roleSet } from "@/lib/roles";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
-import { Loading, Notice } from "@/components/ui";
+import { DensityProvider, Loading, Notice } from "@/components/ui";
 import { RecordPageHost } from "@/components/ui/RecordPage";
 import { AppSidebar, MobileNavigation } from "./AppSidebar";
 import { ContextBar } from "./ContextBar";
@@ -147,6 +147,7 @@ export function AppShell({
 
   return (
     <RecordPageHost.Provider value={pageHost}>
+      <DensityProvider>
       <div className={narrow ? "app app-narrow" : "app"} data-rail={rail}>
         <a className="skip-link" href={navOpen ? "#mobile-navigation" : "#main"} onClick={() => { if (!navOpen) content.current?.focus(); }}>Skip to main content</a>
         <AppSidebar {...sidebarProps} />
@@ -167,6 +168,7 @@ export function AppShell({
           </main>
         </div>
       </div>
+      </DensityProvider>
     </RecordPageHost.Provider>
   );
 }

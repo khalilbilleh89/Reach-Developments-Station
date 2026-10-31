@@ -30,6 +30,8 @@ const PATHS = {
   plus: "M8 3v10M3 8h10",
   swap: "M4 6.5 6.5 4 9 6.5M6.5 4v8M12 9.5 9.5 12 7 9.5",
   filter: "M2.5 4h11M4.5 8h7M6.5 12h3",
+  edit: "M11.5 2.5 13.5 4.5 6 12H4v-2ZM9.5 4.5l2 2",
+  pin: "M6 2.5h4M7 2.5v4L4.5 9h7L9 6.5v-4M8 9v4.5",
   blueprint: "M3 2.5h10v11H3ZM3 7h6M9 2.5v7h4M6 10v3.5",
   history: "M2 7a6 6 0 1 1 1.5 5M2 2.5V7h4.5M8 4.5V8l2.5 1.5",
   layers: "M8 2 14 5 8 8 2 5ZM2 8l6 3 6-3M2 11l6 3 6-3",

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, inventory, sales } from "@/lib/api";
 import type { Unit, UnitRegister, UnitReleaseResult, UnitStatusEvent } from "@/lib/api";
-import { Button, Card, Field, Loading, Notice, PromptDialog, RegisterPagination, TableScroll } from "@/components/ui";
+import { BulkBar, Button, Card, Field, Loading, Notice, PromptDialog, RegisterPagination, SelectAllCell, SelectCell, TableScroll } from "@/components/ui";
 import { CommercialUnitControls } from "./CommercialUnitControls";
 import { UnitStanding } from "../inventory/unit/UnitStanding";
 import { UnitHistory } from "../inventory/unit/UnitHistory";
@@ -85,24 +85,16 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
         {outcome.skipped ? <ul className="unit-release-requirements">{outcome.outcomes.filter(row=>!row.released).map(row=><li key={row.unit_id}>{row.unit_reference}: {row.blockers.join("; ")}</li>)}</ul> : null}
       </Notice> : null}
       {failure?.key === key ? <Notice tone="error">{failure.message}<Button onClick={()=>setRevision(value=>value+1)}>Retry</Button></Notice> : !rows ? <Loading label="Loading commercial stock" /> : <>
-        {canRelease ? <div className="toolbar">
-          <Button variant="primary" disabled={busy || chosen.length===0} onClick={()=>void releaseChosen()}>Release selected</Button>
-          <span className="footnote">{ready.length===0 ? "No unit on this page is ready to go on sale." : `${ready.length} ready to release on this page · ${chosen.length} ticked`}</span>
-        </div> : null}
-        <TableScroll label="Commercial stock"><thead><tr>{canRelease ? <th><label><input type="checkbox" aria-label="Select every unit ready to release"
-          // Ticked only when every row on the page is picked. A page whose
-          // released units cannot be picked shows a dash instead, because a
-          // full tick above three plainly unticked rows reads as a lie.
-          ref={box=>{if(box) box.indeterminate = chosen.length>0 && chosen.length<rows.units.length;}}
-          checked={chosen.length>0 && chosen.length===rows.units.length} disabled={busy || ready.length===0}
-          // Decided from what is picked, never from the box's own checked state.
-          // On a page holding one unreleasable row this can never read as ticked,
-          // so the browser called every click "now checked" and the selection had
-          // no way back off: clearing it was impossible.
-          onChange={()=>setPicked(chosen.length>0 ? new Set() : new Set(ready.map(unit=>unit.id)))} /></label></th> : null}<th>Unit</th><th>Commercial</th><th>Legal</th><th>Collections</th><th>Delivery</th></tr></thead><tbody>{rows.units.map(unit=><tr key={unit.id}>{canRelease ? <td><label><input type="checkbox" aria-label={`Release ${unit.unit_reference}`}
-          checked={picked.has(unit.id)} disabled={busy || !ready.some(row=>row.id===unit.id)}
-          onChange={e=>setPicked(current=>{const next = new Set(current); if(e.target.checked) next.add(unit.id); else next.delete(unit.id); return next;})} /></label></td> : null}<th scope="row"><Button disabled={busy} onClick={()=>void loadUnit(unit.id)}>{unit.unit_reference}</Button></th><td>{statusLabel(unit.commercial_status)}{unit.release_blockers.length && ["unreleased","held"].includes(unit.commercial_status) ? <span className="footnote"> — {unit.release_blockers.join("; ")}</span> : null}</td><td>{statusLabel(unit.legal_status)}</td><td>{statusLabel(unit.collection_status)}</td><td>{statusLabel(unit.delivery_status)}</td></tr>)}</tbody></TableScroll>
+        {canRelease ? <p className="footnote">{ready.length===0 ? "No unit on this page is ready to go on sale." : `${ready.length} ready to release on this page.`}</p> : null}
+        <TableScroll label="Commercial stock"><thead><tr>{canRelease ? <SelectAllCell label="Select every unit ready to release"
+          // Ticked only when every ready row on the page is picked; a dash while some are. Decided from
+          // what is picked, never from the box's own state, so the selection always has a way back off.
+          checked={chosen.length>0 && chosen.length===ready.length} indeterminate={chosen.length>0 && chosen.length<ready.length}
+          onChange={()=>setPicked(chosen.length>0 ? new Set() : new Set(ready.map(unit=>unit.id)))} /> : null}<th>Unit</th><th>Commercial</th><th>Legal</th><th>Collections</th><th>Delivery</th></tr></thead><tbody>{rows.units.map(unit=><tr key={unit.id}>{canRelease ? <SelectCell label={`Select ${unit.unit_reference}`} checked={picked.has(unit.id)} disabled={busy || !ready.some(row=>row.id===unit.id)} onChange={()=>{ setPicked(current=>{const next = new Set(current); if(next.has(unit.id)) next.delete(unit.id); else next.add(unit.id); return next;}); }} /> : null}<th scope="row"><Button disabled={busy} onClick={()=>void loadUnit(unit.id)}>{unit.unit_reference}</Button></th><td>{statusLabel(unit.commercial_status)}{unit.release_blockers.length && ["unreleased","held"].includes(unit.commercial_status) ? <span className="footnote"> — {unit.release_blockers.join("; ")}</span> : null}</td><td>{statusLabel(unit.legal_status)}</td><td>{statusLabel(unit.collection_status)}</td><td>{statusLabel(unit.delivery_status)}</td></tr>)}</tbody></TableScroll>
         {rows.units.length===0 ? <p>No matching units.</p> : null}
+        {canRelease ? <BulkBar count={chosen.length} noun="unit" onClear={()=>setPicked(new Set())}>
+          <Button small variant="primary" disabled={busy} onClick={()=>void releaseChosen()}>Release selected</Button>
+        </BulkBar> : null}
         <RegisterPagination offset={offset} total={rows.total} pageSize={50} onChange={setOffset} />
       </>}
     </>}
