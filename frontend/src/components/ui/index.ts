@@ -80,7 +80,9 @@ export { Banner } from "./Banner";
 export { Switch, Tooltip, AvatarStack, Kbd } from "./Controls";
 export { AttentionList } from "./Attention";
 export type { AttentionEntry } from "./Attention";
-export { CountComposition, CountSeries } from "./CountVisuals";
+export { CountComposition, CountSeries, UnitGrid } from "./CountVisuals";
+export { SourceNote } from "./SourceNote";
+export type { Coverage } from "./SourceNote";
 export { RecordWorkspace, RecordLink, useRecordTab, useRecordHref } from "./RecordWorkspace";
 export type { WorkspaceFact, WorkspaceHeadline } from "./RecordWorkspace";
 

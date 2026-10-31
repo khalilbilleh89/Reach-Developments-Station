@@ -8,7 +8,7 @@ import type { Availability, Context, Demand, Fundamental, Financial, Technical, 
 import { ANALYSIS_FINANCIAL_READERS, ANALYSIS_FUNDAMENTAL_READERS, ANALYSIS_TECHNICAL_READERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { businessDate, money } from "@/lib/format";
-import { CountComposition, CountSeries, Disclosure, Button, SectionHeader, KeyValueGrid, KeyValue, StatusDot, Field, FieldRow, FormActions, Loading, Meter, Notice, Position, PositionFigure, Tabs, TabPanel, TableScroll } from "@/components/ui";
+import { CountComposition, CountSeries, UnitGrid, SourceNote, Disclosure, Button, SectionHeader, KeyValueGrid, KeyValue, StatusDot, Field, FieldRow, FormActions, Loading, Meter, Notice, Position, PositionFigure, Tabs, TabPanel, TableScroll } from "@/components/ui";
 import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
 
 import { FeasibilityView } from "./FeasibilityView";
@@ -35,22 +35,14 @@ const amounts = (values: Money[]) => values.length ? values.map((value) => money
  * sample, and the method behind a link that opens in place. Nothing is
  * dropped; the reason and the source basis are still both reachable.
  */
-function Basis({ value }: { value: Availability }) {
-  return <div className="source-basis">
-    <div className="source-basis-status">
-      <StatusDot tone={value.availability === "available" ? "success" : value.availability === "partial" ? "warning" : "muted"}>
-        {value.availability === "available" ? "Available" : value.availability === "partial" ? "Partial coverage" : "Unavailable"}
-      </StatusDot>
-      <span>{value.sample_size} records in sample</span>
-      {value.availability !== "available" && value.reason ? <span className="source-basis-reason">{value.reason}</span> : null}
-    </div>
-    <div className="source-basis-detail">
-      <Disclosure title="Method">
-        {value.availability === "available" && value.reason ? <p>{value.reason}</p> : null}
-        <p className="footnote">{value.source_basis}</p>
-      </Disclosure>
-    </div>
-  </div>;
+function Basis({ value, chip }: { value: Availability; chip?: boolean }) {
+  return <SourceNote
+    coverage={value.availability}
+    sampleSize={value.sample_size}
+    reason={value.reason}
+    chip={chip}
+    method={<>{value.availability === "available" && value.reason ? <span>{value.reason} </span> : null}{value.source_basis}</>}
+  />;
 }
 /**
  * One dimension of the record population, as a row of small facts.
@@ -89,30 +81,28 @@ function RankingTable({ rows, title }: { rows: Ranking[]; title: string }) {
 function FundamentalView({ data }: { data: Fundamental }) {
   const p = data.position, f = data.forecast;
   return <div className="stack"><ContextNote context={data.context} />
-    <div className="analysis-position"><section className="analysis-primary"><SectionHeader title="Inventory absorption" description="Current eligible inventory and standing contracts." />
+    <div className="analysis-position"><section className="analysis-primary"><SectionHeader title="Inventory absorption" description="Current eligible inventory and standing contracts." actions={<Basis value={p} chip />} />
     {p.availability === "available" ? <Position compact>
       <PositionFigure lead label="Remaining eligible units" value={p.remaining_units} />
       <PositionFigure label="Commercial penetration" value={p.penetration.percentage === null ? "Unavailable" : `${p.penetration.percentage}%`} note={`${p.penetration.numerator} / ${p.penetration.denominator}`} />
       <PositionFigure label="Available units" value={p.available_units} />
       <PositionFigure label="Active sold units" value={p.active_sold_units} />
     </Position> : <Notice tone="info">{p.reason}</Notice>}
-    {p.availability === "available" ? <CountComposition label="Commercial inventory" note={`Current snapshot · ${businessDate(data.context.snapshot_as_of)} · ${p.total_units} total unit records`} rows={Object.entries(p.commercial).map(([status, count]) => ({ label: statusLabel(status), count, tone: statusTone(status) }))} /> : null}
-    <Basis value={p} /></section>
+    {p.availability === "available" ? <UnitGrid label="Commercial inventory" note={`Current snapshot · ${businessDate(data.context.snapshot_as_of)} · ${p.total_units} total unit records`} rows={Object.entries(p.commercial).map(([status, count]) => ({ label: statusLabel(status), count, tone: statusTone(status) }))} /> : null}
+    </section>
     <aside className="analysis-outlook">
-      <SectionHeader title="Run-rate sellout estimate" />
+      <SectionHeader title="Run-rate sellout estimate" actions={<Basis value={f} />} />
       <Position compact><PositionFigure lead label="Estimated time to sell" value={f.estimated_months_to_sell === null ? "Unavailable" : `${f.estimated_months_to_sell} months`} note={`${f.average_monthly_absorption ?? "Unavailable"} net units/month`} /></Position>
       <p className="footnote">{businessDate(f.window_from)} to {businessDate(f.window_to)} · {f.observed_months} complete observed months</p>
       <Disclosure title="Observed absorption"><p>Net absorption: {f.monthly_net_absorption.join(", ")}</p></Disclosure>
-      <Basis value={f} />
     </aside></div>
     <section className="analysis-primary">
-      {data.sales_basis.availability === "unavailable" ? <Notice tone="info">Monthly sales activity is unavailable. {data.sales_basis.reason}</Notice> : data.monthly_sales.length ? <CountSeries label="Monthly net sales activity" note={`${businessDate(data.context.period_from)} — ${businessDate(data.context.period_to)} · Units · ${data.sales_basis.availability} · Below zero means net cancellations`} rows={data.monthly_sales.map((row) => ({ label: businessDate(row.month).replace(/^1 /, ""), count: row.net_absorption, detail: `${row.activations} activations, ${row.cancellations} cancellations` }))} /> : <Notice tone="info">No monthly sales observations returned for this period.</Notice>}
-      <Basis value={data.sales_basis} />
+      {data.sales_basis.availability === "unavailable" ? <Notice tone="info">Monthly sales activity is unavailable. {data.sales_basis.reason}</Notice> : data.monthly_sales.length ? <CountSeries label="Monthly net sales activity" note={`${businessDate(data.context.period_from)} — ${businessDate(data.context.period_to)} · Below zero means net cancellations`} actions={<Basis value={data.sales_basis} chip />} rows={data.monthly_sales.map((row) => ({ label: businessDate(row.month).replace(/^1 /, ""), count: row.net_absorption, detail: `${row.activations} activations, ${row.cancellations} cancellations` }))} /> : <Notice tone="info">No monthly sales observations returned for this period.</Notice>}
       <Disclosure title="Monthly selling demand" context={`${data.monthly_sales.length} months`}><TableScroll fixedFirst label="Monthly selling demand"><thead><tr><th scope="col">Month</th><th scope="col" className="num">Activations</th><th scope="col" className="num">Cancellations</th><th scope="col" className="num">Net absorption</th><th scope="col" className="num">New contracted value</th></tr></thead><tbody>{data.monthly_sales.map((row) => <tr key={row.month}><th scope="row">{businessDate(row.month)}</th><td className="num">{row.activations}</td><td className="num">{row.cancellations}</td><td className="num">{row.net_absorption}</td><td className="num">{amounts(row.contracted_value)}</td></tr>)}</tbody></TableScroll></Disclosure>
     </section>
     <Disclosure title="Inventory scope & status dimensions" context={`${p.total_units} total records`}><p className="muted">{p.eligible_units} units are eligible for absorption analysis. Eligibility excludes inactive, held, unreleased and withdrawn units. Overview register counts follow your inventory access and filters. These are current record dimensions, not a single combined status.</p><div className="analysis-dimensions"><CountComposition label="Commercial" note="Current record dimension" rows={dimension(p.commercial)} /><CountComposition label="Legal" note="Current record dimension" rows={dimension(p.legal)} /><CountComposition label="Delivery" note="Current record dimension" rows={dimension(p.delivery)} /></div></Disclosure>
-    <section className="analysis-group" aria-label="Sales ranking"><SectionHeader title="Sales ranking" /><RankingTable title="Sales branches" rows={data.branches} /><RankingTable title="Salespeople" rows={data.salespeople} /><Basis value={data.ranking_basis} /></section>
-    <section className="analysis-group" aria-label="Demand by product"><SectionHeader title="Demand by product" /><DemandTable title="Property type demand" rows={data.property_types} /><DemandTable title="View demand" rows={data.views} /><Basis value={data.view_basis} /></section>
+    <section className="analysis-group" aria-label="Sales ranking"><SectionHeader title="Sales ranking" actions={<Basis value={data.ranking_basis} chip />} /><RankingTable title="Sales branches" rows={data.branches} /><RankingTable title="Salespeople" rows={data.salespeople} /></section>
+    <section className="analysis-group" aria-label="Demand by product"><SectionHeader title="Demand by product" actions={<Basis value={data.view_basis} chip />} /><DemandTable title="Property type demand" rows={data.property_types} /><DemandTable title="View demand" rows={data.views} /></section>
     <Disclosure title="Observed view premiums" context={`${data.observed_premiums.length} cohorts`}>{data.observed_premiums.length ? <><TableScroll fixedFirst label="Observed view premiums"><thead><tr><th scope="col">Cohort</th><th scope="col">Coverage</th><th scope="col" className="num">Observed premium</th><th scope="col" className="num">View sample</th><th scope="col" className="num">Baseline sample</th><th scope="col">Comparison</th></tr></thead><tbody>{data.observed_premiums.map((row) => <tr key={`${row.property_type}-${row.view}`}><th scope="row">{display(row.property_type)} · {display(row.view)}</th><td><StatusDot tone={row.availability === "available" ? "success" : row.availability === "partial" ? "warning" : "muted"}>{row.availability === "available" ? "Available" : row.availability === "partial" ? "Partial" : "Unavailable"}</StatusDot></td><td className="num">{row.percentage === null ? "Unavailable" : `${row.percentage}%`}</td><td className="num">{row.sample_size}</td><td className="num">{row.baseline_sample}</td><td>{row.currency && row.area_unit ? `${row.view_price_per_gross_area ?? "Unavailable"} vs ${row.baseline_price_per_gross_area ?? "Unavailable"} ${row.currency}/${row.area_unit}` : row.reason ?? row.baseline}</td></tr>)}</tbody></TableScroll><p className="muted">Every recorded cohort is listed, including those with no comparable sale — an absent premium is a fact about the records, not a gap in the page. The method is identical for every row and is stated once below rather than repeated on each.</p>{data.observed_premiums[0] ? <p className="footnote">{data.observed_premiums[0].source_basis}</p> : null}</> : <p>No comparable structured view cohorts recorded.</p>}</Disclosure>
   </div>;
 }
@@ -149,8 +139,8 @@ function FinancialView({ data }: { data: Financial }) {
 }
 function TechnicalView({ data, projectId }: { data: Technical; projectId: string }) {
   return <div className="stack"><ContextNote context={data.context} /><div className="analysis-position">
-    <section className="analysis-primary"><SectionHeader title="Recorded technical product profile" description="The current product mix recorded for this development." />{Object.keys(data.product_types).length ? <CountComposition label="Property types" note="Current recorded unit classifications" rows={Object.entries(data.product_types).map(([label,count]) => ({label:display(label),count}))} /> : <Notice tone="info">No product mix is recorded. <Link href={`/projects/?project=${encodeURIComponent(projectId)}&section=inventory`}>Open inventory</Link> to review units and their classifications.</Notice>}<Basis value={data.basis} /></section>
-    <aside className="analysis-outlook"><SectionHeader title="Features and attachments" /><Position compact><PositionFigure lead label="Recorded feature coverage" value={data.feature_coverage.percentage === null ? "Unavailable" : `${data.feature_coverage.percentage}%`} note={`${data.feature_coverage.numerator ?? "—"} / ${data.feature_coverage.denominator ?? "—"} units`} /></Position><Counts label="Attachments" values={data.attachments} /><Basis value={data.feature_coverage} /></aside>
+    <section className="analysis-primary"><SectionHeader title="Recorded technical product profile" description="The current product mix recorded for this development." actions={<Basis value={data.basis} chip />} />{Object.keys(data.product_types).length ? <CountComposition label="Property types" note="Current recorded unit classifications" rows={Object.entries(data.product_types).map(([label,count]) => ({label:display(label),count}))} /> : <Notice tone="info">No product mix is recorded. <Link href={`/projects/?project=${encodeURIComponent(projectId)}&section=inventory`}>Open inventory</Link> to review units and their classifications.</Notice>}</section>
+    <aside className="analysis-outlook"><SectionHeader title="Features and attachments" actions={<Basis value={data.feature_coverage} />} /><Position compact><PositionFigure lead label="Recorded feature coverage" value={data.feature_coverage.percentage === null ? "Unavailable" : `${data.feature_coverage.percentage}%`} note={`${data.feature_coverage.numerator ?? "—"} / ${data.feature_coverage.denominator ?? "—"} units`} /></Position><Counts label="Attachments" values={data.attachments} /></aside>
     </div><Disclosure title="Physical area ranges" context={`${data.areas.length} components`}>{data.areas.length ? <><TableScroll fixedFirst label="Approved physical areas"><thead><tr><th scope="col">Component</th><th scope="col">Measure</th><th scope="col" className="num">Minimum</th><th scope="col" className="num">Maximum</th><th scope="col" className="num">Average</th><th scope="col" className="num">Sample</th></tr></thead><tbody>{data.areas.map((row) => <tr key={`${row.component}-${row.unit_of_measure}`}><th scope="row">{display(row.component)}</th><td>{row.unit_of_measure}</td><td className="num">{row.minimum}</td><td className="num">{row.maximum}</td><td className="num">{row.average}</td><td className="num">{row.sample_size}</td></tr>)}</tbody></TableScroll><p className="muted">Gross uses all six approved physical components. Parking and storage are separate attachments.</p></> : <Notice tone="info">{data.area_coverage.reason ?? "No approved physical areas are recorded."}</Notice>}<Basis value={data.area_coverage} /></Disclosure><Disclosure title="Recorded features"><Counts label="Recorded features" values={data.features} /></Disclosure><Disclosure title={<> Permits · Obtained / Issued </>}><Basis value={data.permit_basis} /><Counts label="Statutory permit status" values={data.permits} /></Disclosure><Disclosure title="Consultant design context"><KeyValueGrid>{Object.entries(data.consultant).map(([key, value]) => <KeyValue key={key} label={capitalise(display(key))} value={value ?? "Not recorded"} />)}</KeyValueGrid><Basis value={data.consultant_basis} /></Disclosure><Disclosure title="Physical construction progress" context={`${data.construction_stages.length} stages`}>{data.construction_stages.length ? <TableScroll fixedFirst label="Construction stages"><thead><tr><th scope="col">Stage</th><th scope="col" className="num">Completed units</th><th scope="col" className="num">Units in scope</th></tr></thead><tbody>{data.construction_stages.map((row) => <tr key={row.name}><th scope="row">{row.name}</th><td className="num">{row.completed_units}</td><td className="num">{row.denominator}</td></tr>)}</tbody></TableScroll> : <Notice tone="info">{data.construction_basis.reason ?? "No construction stages are configured for this development."}</Notice>}<Basis value={data.construction_basis} /></Disclosure></div>;
 }
 function AnalysisAnswer({ projectId, section, query }: { projectId: string; section: Section; query: string }) {
