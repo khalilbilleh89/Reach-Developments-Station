@@ -7,6 +7,8 @@ import type { ReactNode } from "react";
 import { rememberRegisterLink } from "@/components/shell/registerState";
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
+import { NextBar, RecordStrip } from "./RecordStrip";
+import { RowMenu } from "./RowMenu";
 import { Tabs, TabPanel } from "./Tabs";
 import { contextualRecordHref, recordReturn } from "@/components/shell/recordRoutes";
 import type { RecordKind } from "@/components/shell/recordRoutes";
@@ -35,9 +37,15 @@ export function RecordLink({ projectId, kind, id, tab, children, className = "bu
 }
 
 /** A business record owns the page. No overlay, focus trap, Close or Escape navigation. */
-export function RecordWorkspace({ projectId, kind, eyebrow, icon, title, subtitle, meta, status, headline, facts, actions, tabs, activeTab, onSelectTab, children }: {
+export function RecordWorkspace({ projectId, kind, eyebrow, icon, title, subtitle, meta, status, headline, facts, actions, more, strip, next, tabs, activeTab, onSelectTab, children }: {
   projectId: string; kind: RecordKind; eyebrow?: string; icon?: IconName; title: string; subtitle?: ReactNode;
   meta?: ReactNode; status?: ReactNode; headline?: WorkspaceHeadline; facts?: WorkspaceFact[]; actions?: ReactNode;
+  /** Further actions behind one control, so the head keeps two (design system K4). */
+  more?: ReactNode;
+  /** The figures the record is opened for, the lead on gold (K4); replaces the headline and facts. */
+  strip?: { lead: WorkspaceFact; items: WorkspaceFact[] };
+  /** What the record needs next, with the one action that does it. */
+  next?: { text: ReactNode; action?: ReactNode };
   tabs?: { key: string; label: string; icon?: IconName }[]; activeTab?: string; onSelectTab?: (key: string) => void; children: ReactNode;
 }) {
   const params = useSearchParams(), router = useRouter(), heading = useRef<HTMLHeadingElement>(null);
@@ -58,12 +66,14 @@ export function RecordWorkspace({ projectId, kind, eyebrow, icon, title, subtitl
     </nav>
     <header className="record-workspace-header">
       <div className="workspace-identity">{icon ? <Icon name={icon} /> : null}<div><p className="eyebrow">{eyebrow}</p><h1 ref={heading} tabIndex={-1}>{title}</h1>{subtitle ? <div className="workspace-context">{subtitle}</div> : null}</div></div>
-      {headline ? <div className={`workspace-value ${headline.tone ? "workspace-value-secondary" : ""}`}><strong>{headline.value}</strong><span>{headline.label}</span></div> : null}
-      {actions ? <div className="workspace-actions">{actions}</div> : null}
+      {headline && !strip ? <div className={`workspace-value ${headline.tone ? "workspace-value-secondary" : ""}`}><strong>{headline.value}</strong><span>{headline.label}</span></div> : null}
+      {actions || more ? <div className="workspace-actions">{actions}{more ? <RowMenu label="More actions">{more}</RowMenu> : null}</div> : null}
       {meta ? <div className="workspace-meta">{meta}</div> : null}
     </header>
     {status ? <div className="workspace-status">{status}</div> : null}
-    {facts?.length ? <dl className="workspace-facts">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd>{fact.note ? <p>{fact.note}</p> : null}</div>)}</dl> : null}
+    {strip ? <RecordStrip lead={strip.lead} items={strip.items} /> : null}
+    {next ? <NextBar action={next.action}>{next.text}</NextBar> : null}
+    {facts?.length && !strip ? <dl className="workspace-facts">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd>{fact.note ? <p>{fact.note}</p> : null}</div>)}</dl> : null}
     {tabs?.length && activeTab && onSelectTab ? <div className="workspace-tabs"><Tabs label={group} tabs={tabs} active={activeTab} onSelect={onSelectTab} /></div> : null}
     <div className="workspace-content">{tabs?.length && activeTab ? <TabPanel group={group} tab={activeTab}>{children}</TabPanel> : children}</div>
   </article>;

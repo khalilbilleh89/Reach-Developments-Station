@@ -508,7 +508,8 @@ export function PaymentPlanWorkspace({
       eyebrow="Payment plan" icon="payments"
       title={detail.plan.plan_number}
       subtitle={`${detail.unit_reference} · ${detail.sale_number} · ${detail.client_display_name}`}
-      actions={<><RecordLink projectId={projectId} kind="sale" id={detail.sale_id}>Open Sale</RecordLink><RecordLink projectId={projectId} kind="unit" id={detail.unit_id}>Open Unit</RecordLink>{canDeletePlan ? <Button variant="danger" onClick={() => setAsk({ title: `Delete payment plan ${detail.plan.plan_number}?`, label: "Reason", hint: "This plan is still a draft and has no collection history. Deleting it removes the draft schedule and its installments. The sale itself will not be deleted.", confirmLabel: "Delete payment plan", destructive: true, run: deleteUnusedPlan })}>Delete payment plan</Button> : null}{canDiscardRevision && current ? <Button variant="danger" onClick={() => askThen({ title: `Discard Version ${current.version.version_number}?`, label: "Reason", hint: `Version ${current.version.version_number} is still a draft. The active schedule will remain unchanged.`, confirmLabel: "Discard draft", destructive: true }, (reason) => paymentPlans.discardVersion(projectId, planId, current.version.id, reason), "Draft revision discarded.")}>Discard draft revision</Button> : null}</>}
+      actions={<><RecordLink projectId={projectId} kind="sale" id={detail.sale_id}>Open Sale</RecordLink><RecordLink projectId={projectId} kind="unit" id={detail.unit_id}>Open Unit</RecordLink></>}
+      more={<>{canDeletePlan ? <Button variant="danger" onClick={() => setAsk({ title: `Delete payment plan ${detail.plan.plan_number}?`, label: "Reason", hint: "This plan is still a draft and has no collection history. Deleting it removes the draft schedule and its installments. The sale itself will not be deleted.", confirmLabel: "Delete payment plan", destructive: true, run: deleteUnusedPlan })}>Delete payment plan</Button> : null}{canDiscardRevision && current ? <Button variant="danger" onClick={() => askThen({ title: `Discard Version ${current.version.version_number}?`, label: "Reason", hint: `Version ${current.version.version_number} is still a draft. The active schedule will remain unchanged.`, confirmLabel: "Discard draft", destructive: true }, (reason) => paymentPlans.discardVersion(projectId, planId, current.version.id, reason), "Draft revision discarded.")}>Discard draft revision</Button> : null}</>}
       headline={version ? { value: money(version.contract_value_covered, code), label: section === "overview" && active ? "Governing contract principal" : "Selected version · contract principal" } : undefined}
       meta={
         <>
@@ -528,6 +529,13 @@ export function PaymentPlanWorkspace({
         </>
       }
       facts={facts.slice(1)}
+      strip={version ? { lead: { label: section === "overview" && active ? "Governing contract principal" : "Selected version · contract principal", value: money(version.contract_value_covered, code) }, items: facts.slice(1) } : undefined}
+      next={shownDetail ? {
+        text: shownDetail.next_scheduled_date
+          ? `Next instalment scheduled for ${businessDate(shownDetail.next_scheduled_date)}${shownDetail.next_forecast_date && shownDetail.next_forecast_date !== shownDetail.next_scheduled_date ? ` · forecast ${businessDate(shownDetail.next_forecast_date)}` : ""}.`
+          : revisionOpen ? `Version ${current?.version.version_number} is being prepared; the active schedule still governs.` : "No future scheduled instalment on this version.",
+        action: <Button small onClick={() => setSection("schedule")}>Schedule</Button>,
+      } : undefined}
       tabs={sections}
       activeTab={section}
       onSelectTab={setSection}

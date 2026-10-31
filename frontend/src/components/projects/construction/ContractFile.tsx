@@ -148,17 +148,24 @@ export function ContractFile({
           {contractLabel(contract.status)}
         </Badge>
       }
-      facts={[
-        {
-          label: ["draft", "submitted", "cancelled"].includes(contract.status) ? "Proposed value" : "Revised commitment",
+      strip={{
+        lead: {
+          label: uncommitted ? "Proposed value" : "Revised commitment",
           value: money(contract.revised_commitment, code),
+          note: uncommitted ? "Not yet committed" : "Original plus approved variations",
         },
-        {
-          label: "Certified to date",
-          value: money(contract.certified_to_date, code),
-        },
-        { label: "Paid", value: money(contract.confirmed_paid, code) },
-      ]}
+        items: [
+          { label: "Certified to date", value: money(contract.certified_to_date, code) },
+          { label: "Paid", value: money(contract.confirmed_paid, code), note: "Confirmed payments" },
+          { label: "Invoices outstanding", value: money(contract.invoice_outstanding, code) },
+        ],
+      }}
+      next={{
+        text: uncommitted
+          ? `This contract is ${contractLabel(contract.status).toLowerCase()}: complete its details before any work is certified against it.`
+          : `Certified ${money(contract.certified_to_date, code)} to date; ${money(contract.invoice_outstanding, code)} of invoices outstanding.`,
+        action: <Button small onClick={() => setTab(uncommitted ? "manage" : "cash")}>{uncommitted ? "Contract details" : "Invoices & payments"}</Button>,
+      }}
       tabs={TABS}
       activeTab={tab}
       onSelectTab={setTab}
