@@ -71,6 +71,17 @@ export function businessDate(value: string | null | undefined): string {
   return `${day.startsWith("0") ? day.slice(1) : day} ${name} ${year}`;
 }
 
+/**
+ * A stored decimal without its padding zeros: `"4.000000"` is `"4"`,
+ * `"5.250"` is `"5.25"`. String work only, so no digit the record holds is
+ * rounded away; only zeros that carry no value are dropped.
+ */
+export function decimalText(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (!/^-?\d+\.\d+$/.test(value)) return value;
+  return value.replace(/0+$/, "").replace(/\.$/, "");
+}
+
 /** An attributed event timestamp, explicitly UTC; never used for business dates. */
 export function eventTime(value: string): string {
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value)) + " UTC";

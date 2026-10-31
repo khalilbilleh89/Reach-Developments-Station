@@ -20,6 +20,12 @@ function harness(file, mocks = {}) {
     if (key.includes("DeleteRecordButton")) return { DeleteRecordButton: "DeleteRecordButton" };
     if (key.includes("TeamJobDescription")) return { TeamJobDescription: "TeamJobDescription" };
     if (key === "@/lib/api") return { ApiError: class ApiError extends Error {} };
+    if (key === "@/lib/format") {
+      const formatExports = {};
+      const formatCode = ts.transpileModule(readFileSync(new URL("../src/lib/format.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+      runInNewContext(`(function(exports){${formatCode}\n})`, { Intl })(formatExports);
+      return formatExports;
+    }
     if (key.includes("TeamMemberForm")) return { TeamMemberForm: "TeamMemberForm" };
     if (key.includes("TeamSection")) return { TeamSection: "TeamSection" };
     return require(key);
@@ -42,9 +48,9 @@ test("register shows exact saved percentage and custom status; deletion retains 
   });
   const tree = render("PriceEscalationTab", { projectId: "project" });
   const text = nodes(tree).filter(node => node.type === "dd").map(node => node.props.children).flat().join(" ");
-  assert.match(text, /5.1256/); assert.match(text, /Custom foundation stage/);
+  assert.match(text, /5.1256/); assert.match(text, /Custom foundation stage/); assert.match(text, /18 Oct 2026/);
   const deletion = find(tree, "DeleteRecordButton")[0];
-  assert.match(deletion.props.recordName, /2026-10-18/);
+  assert.match(deletion.props.recordName, /18 Oct 2026/);
   await deletion.props.onDelete("Entered twice"); await deletion.props.onDeleted();
   assert.equal(removed[0], "project"); assert.equal(removed[1].version, 7); assert.equal(removed[2], "Entered twice"); assert.equal(retries, 1);
 });

@@ -10,6 +10,19 @@ import { COMMISSION_PREPARERS, COMMISSION_RELEASERS, hasAnyRole } from "@/lib/ro
 import type { Roles } from "@/lib/roles";
 import { sectionDescription } from "@/components/shell/navigation";
 import { Badge, Button, ButtonRow, Card, RecordPage, EmptyState, Field, FieldRow, ConfirmDialog, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, SectionHeader, TableScroll } from "@/components/ui";
+import type { Tone } from "@/components/ui";
+
+const COMMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {
+  draft: { label: "Draft", tone: "neutral" },
+  released: { label: "Released", tone: "success" },
+  reversed: { label: "Reversed", tone: "muted" },
+};
+
+/** An unknown status still shows, as written, rather than disappearing. */
+function CommissionStatus({ status }: { status: string }) {
+  const known = COMMISSION_STATUS[status];
+  return <Badge tone={known?.tone ?? "neutral"}>{known?.label ?? status}</Badge>;
+}
 
 export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
   const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const params = useSearchParams(); const router = useRouter();
@@ -44,7 +57,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
             <td className="num">{money(x.commissionable_base_amount, currencyCodes[x.currency_id])}</td>
             <td className="num">{percent(x.granted_rate_fraction)}</td>
             <td className="num">{money(x.commission_total, currencyCodes[x.currency_id])}</td>
-            <td><Badge>{x.status}</Badge></td>
+            <td><CommissionStatus status={x.status} /></td>
           </tr>)}</tbody>
         </TableScroll>
       ) : <div className="card-body"><EmptyState title="No commission grants" hint="Commission grants are prepared against active sold contracts." /></div>}
@@ -56,7 +69,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
       icon="money"
       title={`${selected.unit_reference} commission`}
       subtitle={`${selected.sale_reference} · ${selected.buyer_display}`}
-      meta={<Badge>{selected.status}</Badge>}
+      meta={<CommissionStatus status={selected.status} />}
       headline={{ value: money(selected.commission_total, currencyCodes[selected.currency_id]), label: "Granted commission" }}
       facts={[
         { label: "Commissionable base", value: money(selected.commissionable_base_amount, currencyCodes[selected.currency_id]) },

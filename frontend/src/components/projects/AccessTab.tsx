@@ -18,6 +18,7 @@ import {
   TableScroll,
 } from "@/components/ui";
 import { PhaseAccessEditor } from "@/components/projects/inventory/PhaseAccessEditor";
+import { eventTime } from "@/lib/format";
 
 /**
  * Project membership. System Administrator only.
@@ -178,7 +179,7 @@ export function AccessTab({ projectId }: { projectId: string }) {
                         <span className="subtle">All phases</span>
                       )}
                     </td>
-                    <td className="figure">{row.granted_at.slice(0, 10)}</td>
+                    <td className="figure">{eventTime(row.granted_at)}</td>
                     <td>
                       <div className="row-actions">
                         <Button

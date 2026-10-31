@@ -244,6 +244,8 @@ class CollectionRegisterRow(BaseModel):
     spa_number: str | None
     unit_id: uuid.UUID
     unit_number: str
+    #: The project-wide unit reference ("A-203"); ``unit_number`` repeats per building.
+    unit_reference: str
     client_display_name: str
     currency_id: uuid.UUID
     summary: CollectionSaleSummary
@@ -255,6 +257,7 @@ class AgingRowRead(BaseModel):
     sale_id: uuid.UUID
     sale_number: str
     unit_number: str
+    unit_reference: str
     client_display_name: str
     currency_id: uuid.UUID
     installment: CollectionInstallmentRow

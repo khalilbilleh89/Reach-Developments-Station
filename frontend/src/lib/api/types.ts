@@ -1775,6 +1775,8 @@ export interface CollectionRegisterRow {
   spa_number: string | null;
   unit_id: string;
   unit_number: string;
+  /** Project-wide reference ("A-203"); the unit number repeats per building. */
+  unit_reference: string;
   client_display_name: string;
   currency_id: string;
   summary: CollectionSaleSummary;
@@ -1784,6 +1786,7 @@ export interface AgingRow {
   sale_id: string;
   sale_number: string;
   unit_number: string;
+  unit_reference: string;
   client_display_name: string;
   currency_id: string;
   installment: CollectionInstallmentRow;

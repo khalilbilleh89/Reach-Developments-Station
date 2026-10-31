@@ -88,7 +88,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
     return rows.filter((row) => {
       if (
         needle &&
-        ![row.sale_number, row.unit_number, row.client_display_name, row.spa_number ?? ""].some((value) =>
+        ![row.sale_number, row.unit_reference, row.unit_number, row.client_display_name, row.spa_number ?? ""].some((value) =>
           value.toLowerCase().includes(needle),
         )
       ) {
@@ -247,7 +247,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                       <tr key={row.sale_id} aria-selected={open?.sale_id === row.sale_id}>
                         <th scope="row">
                           <button className="button-link" type="button" onClick={() => setOpen(row)}>
-                            <IdentityCell icon="inventory" name={row.unit_number} meta={row.client_display_name} />
+                            <IdentityCell icon="inventory" name={row.unit_reference} meta={row.client_display_name} />
                           </button>
                         </th>
                         <td className="mono">{hasAnyRole(roles, SALES_READERS) ? <RecordLink projectId={projectId} kind="sale" id={row.sale_id} tab="collections">{row.spa_number ?? row.sale_number}</RecordLink> : row.spa_number ?? row.sale_number}</td>
@@ -322,7 +322,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
                   return (
                     <tr key={`${row.sale_id}-${line.installment_id}`}>
                       <th scope="row">
-                        <span className="mono">{row.unit_number}</span>
+                        <span className="mono">{row.unit_reference}</span>
                         <span className="cell-secondary cell-prose">{row.client_display_name}</span>
                       </th>
                       <td>
@@ -357,7 +357,7 @@ export function CollectionsTab({ projectId, roles }: { projectId: string; roles:
           projectId={projectId}
           saleId={fields.account}
           saleNumber={open?.sale_number ?? "Collection account"}
-          unitNumber={open?.unit_number ?? ""}
+          unitReference={open?.unit_reference ?? ""}
           clientName={open?.client_display_name ?? ""}
           currencyCode={open ? currencyFor(open) : ""}
           roles={roles}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { escalations, type EscalationEntry } from "@/lib/api/escalations";
 import { useAnswer } from "@/lib/answer";
+import { businessDate, decimalText } from "@/lib/format";
 import { Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, FormSection, Loading, Notice, PageHeader, RecordPage, ValidationSummary } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
@@ -26,12 +27,12 @@ export function PriceEscalationTab({ projectId }: { projectId: string }) {
       {rows.length === 0 ? <Card><EmptyState title="No price escalations yet" hint="Add an effective date, percentage and project status to start your strategy history." /></Card> : null}
       {rows.map(row => <Card key={row.id}><div className="stack">
         <dl className="workspace-facts">
-          <div><dt>Effective date</dt><dd>{row.effective_date}</dd></div>
-          <div><dt>Price escalation %</dt><dd>{row.escalation_percent}%</dd></div>
+          <div><dt>Effective date</dt><dd>{businessDate(row.effective_date)}</dd></div>
+          <div><dt>Price escalation %</dt><dd>{decimalText(row.escalation_percent)}%</dd></div>
           <div><dt>Project status</dt><dd>{row.project_status}</dd></div>
         </dl>
         {canManage ? <div className="form-actions"><Button variant="default" onClick={() => setEditor({ entry: row })}>Edit price escalation</Button>
-          <DeleteRecordButton label="price escalation" recordName={row.effective_date + " / " + row.project_status}
+          <DeleteRecordButton label="price escalation" recordName={businessDate(row.effective_date) + " / " + row.project_status}
             description="Remove this entry from the register. Its values and audit history are retained. Unit prices are unchanged."
             confirmLabel="Delete entry" onDelete={reason => escalations.remove(projectId, row, reason)}
             onDeleted={async () => { setNotice("Price escalation deleted."); answer.retry(); }} />

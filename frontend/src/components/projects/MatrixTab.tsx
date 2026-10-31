@@ -5,6 +5,7 @@ import { useAnswer } from "@/lib/answer";
 import { Button, DataToolbar, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
 import { MatrixEditor } from "./matrix/MatrixEditor";
 import { frameworkKeys, templates } from "./matrix/templates";
+import { businessDate } from "@/lib/format";
 
 export function MatrixTab({ projectId }: { projectId: string }) {
  const answer = useAnswer(true, () => matrices.list(projectId), [projectId]);
@@ -27,7 +28,7 @@ export function MatrixTab({ projectId }: { projectId: string }) {
    </button>)}</section>
    <h2>Your analyses</h2>
    <DataToolbar search={{value:query,onChange:setQuery,label:"Search analyses",placeholder:"Search title or framework…"}} count={{shown:filtered.length,total:rows.length,noun:"diagram"}} actions={<Button variant="quiet" onClick={answer.retry}>Refresh</Button>}/>
-   {filtered.length ? <div className="matrix-saved-grid">{filtered.map(row => <button type="button" className="matrix-saved" key={row.id} onClick={() => setEditor({framework:row.framework,record:row})}><span className="eyebrow">{templates[row.framework].name}</span><strong>{row.title}</strong><span>As at {row.as_of}</span><span>Open diagram →</span></button>)}</div> : <EmptyState title={rows.length ? "No matching analyses" : "A fresh perspective starts here"} hint={rows.length ? "Try a different title or framework." : "Choose a framework above to create your first visual analysis."}/>}
+   {filtered.length ? <div className="matrix-saved-grid">{filtered.map(row => <button type="button" className="matrix-saved" key={row.id} onClick={() => setEditor({framework:row.framework,record:row})}><span className="eyebrow">{templates[row.framework].name}</span><strong>{row.title}</strong><span>As at {businessDate(row.as_of)}</span><span>Open diagram →</span></button>)}</div> : <EmptyState title={rows.length ? "No matching analyses" : "A fresh perspective starts here"} hint={rows.length ? "Try a different title or framework." : "Choose a framework above to create your first visual analysis."}/>}
   </> : null}
   {editor ? <MatrixEditor key={editor.record?.id ?? editor.framework} projectId={projectId} framework={editor.framework} record={editor.record} canManage={canManage} onClose={() => setEditor(null)} onSaved={() => {setEditor(null);setNotice("Matrix updated.");answer.retry();}}/> : null}
  </div>;

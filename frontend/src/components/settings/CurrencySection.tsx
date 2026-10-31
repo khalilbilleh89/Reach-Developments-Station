@@ -118,7 +118,7 @@ export function CurrencySection() {
       <DataToolbar
         framed
         search={{ value: search, onChange: setSearch, placeholder: "Code or name", label: "Search currencies" }}
-        count={answer.status === "ready" ? { shown: shown.length, total: rows.length, noun: "currency" } : undefined}
+        count={answer.status === "ready" ? { shown: shown.length, total: rows.length, noun: "currency", plural: "currencies" } : undefined}
         actions={<Button variant="primary" onClick={() => { setError(null); setAdding(true); }}>Add currency</Button>}
       />
 
