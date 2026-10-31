@@ -255,13 +255,13 @@ def test_report_explains_risk_domains_migration_and_full_decision() -> None:
 
 def test_github_outputs_are_machine_readable(tmp_path: Path) -> None:
     output = tmp_path / "github-output.txt"
-    selector.write_github_output(str(output), chosen("app/modules/pricing/service.py"))
+    selector.write_github_output(str(output), chosen("app/modules/marketing/service.py"))
     values = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
     assert values["risk"] == "module"
     assert values["backend_required"] == "true"
     assert values["full_required"] == "false"
     assert values["targeted_shards"] == "[1]"
-    assert values["domains"] == '["marketing","pricing","sales"]'
+    assert values["domains"] == '["marketing"]'
 
 
 def test_unusually_large_targeted_plan_uses_eight_shards_without_becoming_full() -> None:
@@ -282,6 +282,15 @@ def test_construction_plan_is_parallel_without_losing_selected_coverage() -> Non
     assert selector.targeted_shard_count(result) == 8
     assert result.paths == before
     assert result.domains == ["cashflow", "construction", "unit_economics"]
+    assert not result.full
+
+
+def test_collections_plan_is_parallel_without_losing_selected_coverage() -> None:
+    """The collections plan timed out as one 20-minute runner; it is broad enough to split."""
+    result = chosen("app/modules/collections/service.py")
+    before = list(result.paths)
+    assert selector.targeted_shard_count(result) == 8
+    assert result.paths == before
     assert not result.full
 
 
