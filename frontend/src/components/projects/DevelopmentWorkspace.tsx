@@ -8,12 +8,12 @@ import { Icon } from "@/components/ui";
 
 const DEVELOPMENT = new Set<ProjectSection>(["overview", "company", "land", "permits", "prelaunch", "consultant", "inventory"]);
 
-/** Development has a property-focused treatment; other project modules share the platform theme. */
+/** Development pages add a section rail; every module uses the same base primitives. */
 export function DevelopmentWorkspace({projectId, section, roles, children}: {
   projectId: string; section: ProjectSection; roles: Set<string>; children: ReactNode;
 }) {
   const params = useSearchParams();
-  if (!DEVELOPMENT.has(section)) return <div className="platform-workspace">{children}</div>;
+  if (!DEVELOPMENT.has(section)) return <div className="module-workspace">{children}</div>;
   const items = PROJECT_NAVIGATION.flatMap(group => group.items)
     .filter(item => DEVELOPMENT.has(item.key) && (!item.visible || item.visible(roles)));
   return <div className="development-workspace">

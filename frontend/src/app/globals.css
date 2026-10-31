@@ -39,8 +39,6 @@
   --brand-gold-text: #8a6d14;
   --brand-gold-strong: #a8872a;
   --brand-grey: #818286;
-  --workspace-blue-wash: #faf5e2;
-  --workspace-blue-line: #ecdfae;
   /* The stock bar's middle steps: one hue, stepped so the bands read in
    * lifecycle order without inventing a second colour family. */
   --stock-reserved: #dcc263;
@@ -1187,7 +1185,7 @@ textarea {
   justify-content: space-between;
   margin-bottom: var(--content-gap);
   padding-bottom: var(--space-4);
-  border-bottom: 0;
+  border-bottom: 1px solid var(--line-default);
 }
 
 .page-head-identity {
@@ -1611,7 +1609,10 @@ section + section {
 
 .tab {
   position: relative;
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border: 0;
   /* Sits on the strip's own rule rather than beneath it. */
@@ -1628,6 +1629,12 @@ section + section {
     color var(--motion-fast) var(--ease),
     background-color var(--motion-fast) var(--ease),
     border-color var(--motion-fast) var(--ease);
+}
+
+.tab > .icon {
+  flex: none;
+  width: 1.0625rem;
+  height: 1.0625rem;
 }
 
 .tab:not(.tab-active):hover {
@@ -5508,7 +5515,7 @@ a:not([class]):hover { color: var(--accent-hover); }
   .workspace-tabs { position: static; }
   .sale-overview { grid-template-columns: minmax(0,1fr); gap: 1.5rem; }
 }
-.table-scroll-register { max-height: min(66vh, 44rem); overflow-y: auto; scrollbar-gutter: stable; }
+.table-scroll-register { max-height: min(66vh, 44rem); overflow-y: auto; }
 .table-scroll-register thead th { position: sticky; top: 0; z-index: 3; box-shadow: inset 0 -1px var(--line-default); }
 .table-scroll-register .table-fixed-first thead th:first-child { z-index: 4; }
 
@@ -6173,7 +6180,7 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .matrix-tone-2 { --matrix-tone: var(--success); --matrix-wash: var(--success-soft); }
 .matrix-tone-3 { --matrix-tone: var(--danger); --matrix-wash: var(--danger-soft); }
 .matrix-tone-4 { --matrix-tone: var(--text-secondary); --matrix-wash: var(--surface-command); }
-.matrix-tone-5 { --matrix-tone: var(--accent-hover); --matrix-wash: var(--workspace-blue-wash); }
+.matrix-tone-5 { --matrix-tone: var(--accent-hover); --matrix-wash: var(--accent-soft); }
 .matrix-template { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; text-align: left; background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--radius-card); color: var(--text-primary); cursor: pointer; }
 .matrix-template:hover { border-color: var(--matrix-tone); background: var(--matrix-wash); }
 .matrix-template:disabled { cursor: default; }
@@ -6332,4 +6339,11 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .operations-import-steps span { display: block; margin-top: var(--space-2); color: var(--text-secondary); }
 @media (max-width: 768px) {
   .operations-position, .operations-import-steps { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Module workspaces outside Development share the base primitives; this wrapper only lets wide registers shrink. */
+.module-workspace { min-width: 0; }
+.workspace-filter-grid { display: grid; grid-template-columns: minmax(0,2fr) minmax(180px,1fr); gap: var(--space-4); padding: var(--space-4) var(--space-5); background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--radius-card); }
+@media (max-width: 760px) {
+  .workspace-filter-grid { grid-template-columns: 1fr; padding: var(--space-4); }
 }
