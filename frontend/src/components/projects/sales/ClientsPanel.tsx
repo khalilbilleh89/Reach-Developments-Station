@@ -84,7 +84,12 @@ export function ClientsPanel({
   onConnect?: (buyer: SalesClient) => void;
 }) {
   const [clients, setClients] = useState<SalesClient[] | null>(null);
-  const [search, setSearch] = useState("");
+  // A link may land on a buyer: the command palette opens the register with
+  // `?buyer=<client number>`, which seeds the search once on arrival.
+  const [search, setSearch] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("buyer") ?? "";
+  });
   const [importing, setImporting] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [parties, setParties] = useState<ClientParty[]>([]);

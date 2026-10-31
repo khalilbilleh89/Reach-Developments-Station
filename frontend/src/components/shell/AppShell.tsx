@@ -11,7 +11,9 @@ import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { DensityProvider, Loading, Notice } from "@/components/ui";
 import { RecordPageHost } from "@/components/ui/RecordPage";
 import { AppSidebar, MobileNavigation } from "./AppSidebar";
+import { CommandPalette } from "./CommandPalette";
 import { ContextBar } from "./ContextBar";
+import { PhoneTabs } from "./PhoneTabs";
 import type { Crumb } from "./ContextBar";
 import {
   PROJECT_NAVIGATION,
@@ -72,6 +74,19 @@ export function AppShell({
   const [rail, setRail] = useState<RailState>("auto");
   const [narrow, setNarrow] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // ⌘K on a Mac, Ctrl+K elsewhere, from anywhere on the page (design system F2).
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((value) => !value);
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
 
   // The stored preference and the viewport are read after mount: the page is
   // a static export, and reading either during the first render would make
@@ -159,15 +174,20 @@ export function AppShell({
             crumbs={crumbs}
             utilities={utilities}
             collapsed={collapsed}
+            user={user}
             onToggleRail={toggleRail}
             onOpenNav={() => setNavOpen(true)}
+            onSearch={() => setPaletteOpen(true)}
+            onSignOut={onSignOut}
           />
           <main ref={content} id="main" tabIndex={-1} className="app-content">
             <div className="workspace-register">{children}</div>
             <div className="record-pages" ref={setPageHost} />
           </main>
+          <PhoneTabs user={user} area={area} projectId={projectId} section={section} onMore={() => setNavOpen(true)} />
         </div>
       </div>
+      {paletteOpen ? <CommandPalette user={user} projectId={projectId} onClose={() => setPaletteOpen(false)} onSignOut={onSignOut} /> : null}
       </DensityProvider>
     </RecordPageHost.Provider>
   );

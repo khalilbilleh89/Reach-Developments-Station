@@ -19,6 +19,7 @@ from app.modules.workspace.schemas import (
     SavedViewCreate,
     SavedViewRead,
     SavedViewUpdate,
+    SearchRead,
 )
 
 router = APIRouter(prefix="/me", tags=["workspace"])
@@ -74,3 +75,12 @@ def update_preferences(
     payload: PreferencesUpdate, session: DbSession, actor: ActiveActor
 ) -> PreferencesRead:
     return PreferencesRead.model_validate(service.update_preferences(session, actor, payload))
+
+
+@router.get("/search", response_model=SearchRead, summary="Find a project, unit or buyer")
+def search(
+    session: DbSession,
+    actor: ActiveActor,
+    q: Annotated[str, Query(min_length=0, max_length=120)] = "",
+) -> SearchRead:
+    return service.search(session, actor, q)
