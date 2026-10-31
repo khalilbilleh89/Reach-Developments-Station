@@ -6399,10 +6399,6 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 
 /* Module workspaces outside Development share the base primitives; this wrapper only lets wide registers shrink. */
 .module-workspace { min-width: 0; }
-.workspace-filter-grid { display: grid; grid-template-columns: minmax(0,2fr) minmax(180px,1fr); gap: var(--space-4); padding: var(--space-4) var(--space-5); background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--radius-card); }
-@media (max-width: 760px) {
-  .workspace-filter-grid { grid-template-columns: 1fr; padding: var(--space-4); }
-}
 
 /* A missing figure is a statement about the records, not a number. Declared
  * last so no composition (stage, split, register) can size it as a hero. */
@@ -6555,4 +6551,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 /* The overview's closing panels keep the page's rhythm below the command centre. */
 .overview-tail {
   margin-top: var(--content-gap);
+}
+
+/* A transaction reference is one token; it never breaks across lines. */
+.sales-reference {
+  white-space: nowrap;
 }
