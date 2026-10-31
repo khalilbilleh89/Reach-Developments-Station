@@ -240,7 +240,7 @@
 .land-register-toolbar > :first-child { flex: 1; min-width: 0; }
 .land-register-toolbar .land-layout-controls { flex-shrink: 0; }
 .parcel-architectural { grid-template-columns: minmax(0,2fr) minmax(240px,1fr); border-radius: 6px; }
-.parcel-architectural .parcel-estate-identity { background: var(--surface); border-top: 3px solid var(--accent); padding: 26px 28px 22px; }
+.parcel-architectural .parcel-estate-identity { background: var(--surface); border-top: 2px solid var(--brand-gold); padding: 26px 28px 22px; }
 .parcel-architectural .parcel-estate-title { margin: 18px 0; }
 .parcel-architectural .parcel-estate-title h2 { font-size: clamp(3rem,5vw,5rem); }
 .parcel-architectural .parcel-estate-area strong { font-size: clamp(2rem,3vw,3rem); }
@@ -318,29 +318,20 @@
   .stage-deliverables li > button { justify-self: start; }
   .permit-journey ol { gap: 6px; }
 }
-/* Blue is a secondary surface, while records and primary reading areas stay white. */
-.development-workspace { --dev-radius: 12px; --dev-shadow: none; min-width: 0; --dev-blue-wash: var(--workspace-blue-wash); --dev-blue-line: var(--workspace-blue-line); }
+/* Secondary surfaces are a quiet neutral ground; records and primary reading areas stay white.
+ * Shared primitives (buttons, tabs, page glyphs, rail icons) are styled once, in globals.css. */
+.development-workspace { --dev-radius: 12px; --dev-shadow: none; min-width: 0; --dev-blue-wash: var(--surface-secondary); --dev-blue-line: var(--line-default); }
 
-.development-workspace .page-glyph { display: grid; place-items: center; width: 48px; height: 48px; flex: none; border: 1px solid var(--dev-blue-line); border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
-.development-workspace .page-glyph .icon { width: 25px; height: 25px; }
 .development-workspace .workspace-facts,
-.development-workspace .atlas-building > header,
-.development-workspace .parcel-architectural .parcel-estate-identity { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
-.development-workspace .briefing-dates { border-top: 3px solid var(--accent); }
+.development-workspace .atlas-building > header { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); }
+.development-workspace .briefing-dates { border-top: 2px solid var(--brand-gold); }
 .development-workspace .briefing-dates > header { background: var(--dev-blue-wash); margin: -24px -24px 20px; padding: 20px 24px 10px; }
-.development-workspace .button:not(.button-primary):not(.button-danger):not(.button-link):not(.button-quiet) { background: var(--dev-blue-wash); border-color: var(--dev-blue-line); color: var(--accent); }
-.development-workspace .button:not(.button-primary):not(.button-danger):not(.button-link):not(.button-quiet):hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
 .development-workspace .tab { display: inline-flex; align-items: center; gap: 8px; }
-.development-workspace .tab > .icon { width: 17px; height: 17px; flex: none; color: var(--accent); }
+.development-workspace .tab > .icon { width: 17px; height: 17px; flex: none; color: currentcolor; }
 
-.development-workspace .tab-active { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
 
 .development-nav-links a[aria-current="page"] { color: var(--accent); box-shadow: var(--dev-shadow); background: var(--accent-soft); border-color: var(--dev-blue-line); }
-.sidebar .nav-icon, .nav-page .nav-icon { width: 26px; height: 26px; padding: 4px; box-sizing: border-box; border-radius: 7px; background: var(--accent-soft); color: var(--accent); }
-.sidebar .nav-item[aria-current="page"] .nav-icon, .nav-page .nav-item[aria-current="page"] .nav-icon { color: var(--accent-contrast); background: var(--accent); }
 @media (max-width: 600px) {
-  .development-workspace .page-glyph { width: 38px; height: 38px; border-radius: 11px; }
-  .development-workspace .page-glyph .icon { width: 21px; height: 21px; }
   .development-workspace .briefing-dates > header { margin: -18px -18px 16px; padding: 16px 18px 8px; flex-wrap: wrap; gap: 4px; }
 }
 
