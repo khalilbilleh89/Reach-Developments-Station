@@ -3042,12 +3042,27 @@ input[type="file"].input {
   color: var(--danger);
 }
 
-.metric-tone-success .metric-value {
-  color: var(--success);
+.metric-tone-success .metric-label::before,
+.metric-tone-warning .metric-label::before,
+.position-value-success + .position-label::before,
+.position-value-warning + .position-label::before,
+.stat-strip-item-warning .stat-strip-label::before,
+.attention-item:has(.attention-count-warning) .attention-title::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background-color: var(--warning);
+  vertical-align: 0.05em;
 }
 
-.metric-tone-warning .metric-value {
-  color: var(--warning);
+/* Colour on a figure is reserved for danger (UX_SYSTEM §2): a warning or a
+ * good outcome is a mark beside the label, and the number stays ink. */
+.metric-tone-success .metric-label::before,
+.position-value-success + .position-label::before {
+  background-color: var(--success);
 }
 
 .metric-tone-muted .metric-value {
@@ -3147,13 +3162,6 @@ input[type="file"].input {
   color: var(--danger);
 }
 
-.position-value-warning {
-  color: var(--warning);
-}
-
-.position-value-success {
-  color: var(--success);
-}
 
 .position-support {
   display: flex;
@@ -3231,9 +3239,6 @@ input[type="file"].input {
   color: var(--danger);
 }
 
-.stat-strip-item-warning .stat-strip-value {
-  color: var(--warning);
-}
 
 .stat-strip-note {
   display: flex;
@@ -4935,9 +4940,6 @@ input[type="file"].input {
   color: var(--danger);
 }
 
-.attention-count-warning {
-  color: var(--warning);
-}
 
 .attention-text {
   min-width: 0;
@@ -6384,4 +6386,14 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .workspace-filter-grid { display: grid; grid-template-columns: minmax(0,2fr) minmax(180px,1fr); gap: var(--space-4); padding: var(--space-4) var(--space-5); background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--radius-card); }
 @media (max-width: 760px) {
   .workspace-filter-grid { grid-template-columns: 1fr; padding: var(--space-4); }
+}
+
+/* A missing figure is a statement about the records, not a number. Declared
+ * last so no composition (stage, split, register) can size it as a hero. */
+.position-figure > .position-value.position-value-absent {
+  color: var(--text-muted);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  letter-spacing: 0;
+  white-space: normal;
 }

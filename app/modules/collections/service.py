@@ -3294,6 +3294,7 @@ class RegisterRow:
     spa_number: str | None
     unit_id: uuid.UUID
     unit_number: str
+    unit_reference: str
     client_display_name: str
     currency_id: uuid.UUID
     summary: SaleSummary
@@ -3362,6 +3363,7 @@ def collection_register(
             spa_number=sale.spa_number,
             unit_id=unit.id,
             unit_number=unit.unit_number,
+            unit_reference=unit.unit_reference,
             client_display_name=client.display_name,
             currency_id=sale.currency_id,
             summary=summarise(
@@ -3557,6 +3559,7 @@ class AgingRow:
     sale_id: uuid.UUID
     sale_number: str
     unit_number: str
+    unit_reference: str
     client_display_name: str
     currency_id: uuid.UUID
     installment: ledger.InstallmentView
@@ -3594,6 +3597,7 @@ def aging_report(
                     sale_id=entry.sale_id,
                     sale_number=entry.sale_number,
                     unit_number=entry.unit_number,
+                    unit_reference=entry.unit_reference,
                     client_display_name=entry.client_display_name,
                     currency_id=entry.currency_id,
                     installment=view,

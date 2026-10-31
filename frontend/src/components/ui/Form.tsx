@@ -176,7 +176,8 @@ export function DataToolbar({
     label?: string;
   };
   children?: ReactNode;
-  count?: { shown: number; total?: number; noun: string };
+  /** `plural` is for nouns that do not take an "s" ("currency" → "currencies"). */
+  count?: { shown: number; total?: number; noun: string; plural?: string };
   onReset?: () => void;
   actions?: ReactNode;
   /**
@@ -191,7 +192,7 @@ export function DataToolbar({
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
-  const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+  const plural = (n: number, noun: string) => `${n} ${n === 1 ? noun : count?.plural ?? `${noun}s`}`;
   return (
     <div className={framed ? "toolbar toolbar-framed" : "toolbar"} role="search">
       {search ? (

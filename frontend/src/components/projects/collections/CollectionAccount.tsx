@@ -94,7 +94,7 @@ export function CollectionAccount({
   projectId,
   saleId,
   saleNumber,
-  unitNumber,
+  unitReference,
   clientName,
   currencyCode,
   roles,
@@ -105,7 +105,7 @@ export function CollectionAccount({
   projectId: string;
   saleId: string;
   saleNumber: string;
-  unitNumber: string;
+  unitReference: string;
   clientName: string;
   currencyCode: string | null;
   roles: Set<string>;
@@ -202,7 +202,7 @@ export function CollectionAccount({
     <RecordPage
       eyebrow="Collections account" icon="collections"
       title={clientName}
-      subtitle={`Unit ${unitNumber} · ${saleNumber}`}
+      subtitle={`Unit ${unitReference} · ${saleNumber}`}
       meta={
         summary ? (
           <>

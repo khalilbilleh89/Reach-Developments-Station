@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, users as usersApi } from "@/lib/api";
 import type { AdminUser, Role } from "@/lib/api";
+import { eventTime } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -318,7 +319,7 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
                       {row.must_change_password ? <Badge tone="warning">Password due</Badge> : null}
                     </div>
                   </td>
-                  <td className="figure">{row.last_login_at ? row.last_login_at.slice(0, 10) : "Never"}</td>
+                  <td className="figure">{row.last_login_at ? eventTime(row.last_login_at) : "Never"}</td>
                   <td>
                     <div className="row-actions">
                       <Button

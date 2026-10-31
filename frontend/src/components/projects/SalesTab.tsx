@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { statusLabel } from "@/components/projects/inventory/statusLabels";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesTransaction } from "@/lib/api";
@@ -60,7 +61,7 @@ export function SalesTab({projectId, projectStatus, roles}: {
           <th scope="row" className="sales-primary-cell"><RecordLink projectId={projectId} kind={row.kind} id={row.id}>Open {row.kind === "sale" ? "Sale" : "Reservation"} {row.reference}</RecordLink><span className="cell-secondary">{row.client_display_name}</span></th>
           <td>{row.unit_reference}</td><td>{money(row.reference_price_ex_tax,codeOf(row.currency_id))}</td><td>{money(row.sales_price_ex_tax,codeOf(row.currency_id))}</td>
           <td>{money(row.price_variance_amount,codeOf(row.currency_id))}<span className="cell-secondary">{row.price_variance_fraction === null ? "Percentage unavailable" : row.price_variance_percentage} · {varianceDirection(row.price_variance_amount)}</span></td>
-          <td><Badge tone={row.kind === "sale" ? saleTone(row.status) : reservationTone(row.status)}>{row.kind === "sale" ? saleLabel(row.status) : reservationLabel(row.status)}</Badge></td><td>{row.spa_number ?? "Not prepared"}</td><td>{row.legal_status.replaceAll("_"," ")}</td><td><Badge tone={unitCollectionTone(row.collection_status)}>{unitCollectionLabel(row.collection_status)}</Badge></td>
+          <td><Badge tone={row.kind === "sale" ? saleTone(row.status) : reservationTone(row.status)}>{row.kind === "sale" ? saleLabel(row.status) : reservationLabel(row.status)}</Badge></td><td>{row.spa_number ?? "Not prepared"}</td><td>{statusLabel(row.legal_status)}</td><td><Badge tone={unitCollectionTone(row.collection_status)}>{unitCollectionLabel(row.collection_status)}</Badge></td>
         </tr>)}</tbody></TableScroll>}
         <RegisterPagination offset={offset} total={rows.total} pageSize={50} onChange={value => setState({offset:String(value)})} />
       </Card>}

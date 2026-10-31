@@ -193,6 +193,9 @@ export function Position({ children, compact, layout = "inline" }: {
   return <div className={["position", compact ? "position-compact" : "", layout === "split" ? "position-split" : ""].filter(Boolean).join(" ")}>{children}</div>;
 }
 
+/** Words that say a figure is missing. They are statements, so they never take a figure's size. */
+const ABSENT_FIGURES = new Set(["Unavailable", "Indeterminate", "Not recorded", "Not registered"]);
+
 export function PositionFigure({
   label,
   value,
@@ -207,7 +210,8 @@ export function PositionFigure({
   lead?: boolean;
   tone?: "neutral" | "danger" | "warning" | "success";
 }) {
-  const valueClass = tone === "neutral" ? "position-value" : `position-value position-value-${tone}`;
+  const absent = typeof value === "string" && ABSENT_FIGURES.has(value);
+  const valueClass = absent ? "position-value position-value-absent" : tone === "neutral" ? "position-value" : `position-value position-value-${tone}`;
   return (
     <div className={lead ? "position-figure position-figure-lead" : "position-figure"}>
       <p className={valueClass}>{value === null || value === undefined || value === "" ? "—" : value}</p>

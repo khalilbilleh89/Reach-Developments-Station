@@ -390,8 +390,10 @@ SELECTOR_TESTS = "tests/test_ci_selector.py"
 # cross-domain plans still keep their exact selected coverage, but distribute
 # it across a bounded matrix rather than timing out serially. A 73-file construction plan
 # collected 1,394 tests and timed out after 20 minutes at about 25% complete.
+# A 58-file collections plan (collections, cashflow and the invariant pack) then
+# timed out the same way just under the old threshold of 60.
 # Keep coverage and the timeout unchanged; distribute broad plans earlier.
-TARGETED_SHARD_THRESHOLD = 60
+TARGETED_SHARD_THRESHOLD = 50
 TARGETED_SHARD_COUNT = 8
 
 

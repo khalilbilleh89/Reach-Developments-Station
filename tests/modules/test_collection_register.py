@@ -281,6 +281,32 @@ class TestRegisterContent:
         assert row["sale_number"]
         assert row["summary"]["derived_collection_status"]
 
+    def test_a_row_names_the_unit_by_its_project_wide_reference(
+        self,
+        collections_client: TestClient,
+        admin_client: TestClient,
+        project_id: str,
+        two_accounts: tuple[str, str],
+    ) -> None:
+        """A unit number repeats in every building; the reference is what tells them apart."""
+        from tests.modules.conftest import inventory_url
+
+        sale_id, _ = two_accounts
+        url = collections_url(project_id)
+        row = next(
+            r
+            for r in collections_client.get(f"{url}/receivables").json()
+            if r["sale_id"] == sale_id
+        )
+        unit = admin_client.get(f"{inventory_url(project_id)}/units/{row['unit_id']}")
+        assert unit.status_code == 200, unit.text
+        assert row["unit_reference"] == unit.json()["unit_reference"]
+        aging = [
+            r for r in collections_client.get(f"{url}/aging").json() if r["sale_id"] == sale_id
+        ]
+        assert aging
+        assert {r["unit_reference"] for r in aging} == {row["unit_reference"]}
+
     def test_a_project_with_no_sales_answers_with_an_empty_register(
         self,
         collections_client: TestClient,
