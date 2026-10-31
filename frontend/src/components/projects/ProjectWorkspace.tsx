@@ -236,10 +236,12 @@ export function ProjectWorkspace({
             onNavigate={navigate}
             refreshKey={refreshKey}
           />
-          <ProjectImages projectId={projectId} canEdit={false} managementHref={canWriteProject ? projectHref(projectId, "marketing-shots") : undefined} />
-          <Disclosure title={<> Project construction stage configuration </>}>
-            <ProjectStages projectId={projectId} roles={roles} />
-          </Disclosure>
+          <div className="stack overview-tail">
+            <ProjectImages projectId={projectId} canEdit={false} managementHref={canWriteProject ? projectHref(projectId, "marketing-shots") : undefined} />
+            <Disclosure title={<> Project construction stage configuration </>}>
+              <ProjectStages projectId={projectId} roles={roles} />
+            </Disclosure>
+          </div>
         </>
       );
     }

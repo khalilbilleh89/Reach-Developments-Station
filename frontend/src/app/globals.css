@@ -4574,22 +4574,39 @@ input[type="file"].input {
 
 
 /* Where the project is: four facts, each already stated by a module. */
+/* Four facts in one row: a strip the page reads across, not a half-empty box. */
 .project-standing {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .project-standing-cell {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-1);
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--line-soft);
   border-left: 1px solid var(--line-soft);
+  text-align: left;
 }
 
-.project-standing-cell:nth-child(odd) {
+.project-standing-cell:nth-child(4n + 1) {
   border-left: 0;
+}
+
+@media (max-width: 900px) {
+  .project-standing {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-standing-cell:nth-child(n) {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .project-standing-cell:nth-child(odd) {
+    border-left: 0;
+  }
 }
 
 .project-standing-label {
@@ -4624,8 +4641,7 @@ input[type="file"].input {
  * person would say it out loud. No figure appears here. */
 .overview-position {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
 }
 
@@ -4634,7 +4650,7 @@ input[type="file"].input {
 .overview-money {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 1fr);
-  align-items: start;
+  align-items: stretch;
   gap: var(--space-5);
 }
 
@@ -4687,7 +4703,7 @@ input[type="file"].input {
  * inside the digits is refused: "325,000.0 / 0" reads as two numbers. Only an
  * amount too long for any size may break, rather than escape the tint. */
 .position-stage .position-value {
-  font-size: min(var(--metric-hero), 13cqi);
+  font-size: min(var(--metric-hero), 8.5cqi);
   white-space: normal;
   overflow-wrap: break-word;
 }
@@ -6534,4 +6550,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
   .table-scroll .table.table-stack tbody tr > .row-menu-cell::before {
     content: none;
   }
+}
+
+/* The overview's closing panels keep the page's rhythm below the command centre. */
+.overview-tail {
+  margin-top: var(--content-gap);
 }
