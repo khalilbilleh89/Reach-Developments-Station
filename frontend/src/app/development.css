@@ -208,7 +208,7 @@
 .atlas-unit[data-tone="accent"],.atlas-legend > span[data-tone="accent"] { --unit-colour: var(--accent); --unit-wash: var(--surface-secondary); }
 .atlas-unit[data-tone="info"],.atlas-legend > span[data-tone="info"] { --unit-colour: var(--info); --unit-wash: var(--info-soft); }
 .atlas-unit[data-tone="danger"],.atlas-legend > span[data-tone="danger"] { --unit-colour: var(--danger); --unit-wash: var(--danger-soft); }
-.atlas-legend i,.atlas-unit-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--unit-colour); flex-shrink: 0; }
+.atlas-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--unit-colour); flex-shrink: 0; }
 .atlas-buildings { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,28rem),1fr)); align-items: start; gap: 24px; }
 .atlas-building { min-width: 0; margin: 0; border: 1px solid var(--line-default); border-radius: 10px; overflow: hidden; }
 .atlas-building > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--line-default); }
@@ -403,4 +403,15 @@
  .development-workspace .expense-entry > header { padding: 18px; }
  .development-workspace .expense-entry > dl { padding: 18px; grid-template-columns: 1fr; }
  .development-workspace .consultant-record-card > header { flex-wrap: wrap; }
+}
+
+/* A tile states its status once, in its badge and top rule. On a phone the
+ * floor label sits above its tiles so two tiles fit side by side. */
+@media (max-width: 600px) {
+  .atlas-floors { padding: 8px 12px; }
+  .atlas-floor { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .atlas-floor-label { display: flex; align-items: baseline; gap: 8px; }
+  .atlas-units { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .atlas-building > header { padding: 12px 16px; }
+  .atlas-building h3 { font-size: 1.3rem; }
 }
