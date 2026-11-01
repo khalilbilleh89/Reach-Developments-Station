@@ -9,7 +9,6 @@ import {
   DistributionBand,
   DistributionTrack,
   PositionFigure,
-  SectionHeader,
   StatStrip,
   StatStripItem,
   StatStripNote,
@@ -21,7 +20,11 @@ import {
 } from "@/components/projects/collections/labels";
 
 /**
- * The project's receivables: one figure, its ledger, and how old the money is.
+ * The project's receivables: one figure and its ledger. How old the money is
+ * lives in its own section beneath (`CollectionsAgeing`): stacked under the
+ * ledger it made this column three times the height of the attention queue
+ * beside it, with the eye passing a bar, six bands and four counts before
+ * reaching the next card.
  *
  * Outstanding is the figure a director opens the card for, so it stands alone
  * on the card's one stage surface. What follows — due, overdue, unapplied,
@@ -90,7 +93,6 @@ function CurrencyPosition({
 }) {
   const overdue = isPositive(totals.overdue_total);
   const unapplied = isPositive(totals.unapplied_cash);
-  const bands = AGING_BUCKETS.filter((bucket) => totals.buckets[bucket] !== undefined);
   return (
     <div className="currency-block">
       {titled ? (
@@ -131,27 +133,54 @@ function CurrencyPosition({
           />
         </Breakdown>
       </div>
-      <SectionHeader title="Ageing" actions={<span className="muted">Share of outstanding, as reported</span>} />
-      <DistributionTrack
-        label="Share of outstanding"
-        segments={bands.map((bucket) => ({
-          key: bucket,
-          label: bucketLabel(bucket),
-          share: totals.bucket_shares[bucket],
-          heat: bucketHeatForAmount(bucket, totals.buckets[bucket]),
-        }))}
-      />
-      <Distribution>
-        {bands.map((bucket) => (
-          <DistributionBand
-            key={bucket}
-            label={bucketLabel(bucket)}
-            value={money(totals.buckets[bucket], code)}
-            heat={bucketHeatForAmount(bucket, totals.buckets[bucket])}
-            empty={!isPositive(totals.buckets[bucket])}
-          />
-        ))}
-      </Distribution>
+    </div>
+  );
+}
+
+/**
+ * How old the money owed is, per denomination: the track from the shares the
+ * server computed, then every band's own amount. A balance the server gave no
+ * shares for is aged in bands alone; nothing here divides one amount by another.
+ */
+export function CollectionsAgeing({
+  summary,
+  currencyCodeOf,
+}: {
+  summary: CollectionProjectSummary;
+  currencyCodeOf: (id: string | null | undefined) => string | null;
+}) {
+  const titled = summary.currencies.length > 1;
+  return (
+    <div className="stack stack-tight">
+      {summary.currencies.map((totals) => {
+        const code = currencyCodeOf(totals.currency_id);
+        const bands = AGING_BUCKETS.filter((bucket) => totals.buckets[bucket] !== undefined);
+        return (
+          <div className="currency-block" key={totals.currency_id}>
+            {titled ? <p className="currency-block-title">{code ?? "Unknown currency"}</p> : null}
+            <DistributionTrack
+              label="Share of outstanding"
+              segments={bands.map((bucket) => ({
+                key: bucket,
+                label: bucketLabel(bucket),
+                share: totals.bucket_shares[bucket],
+                heat: bucketHeatForAmount(bucket, totals.buckets[bucket]),
+              }))}
+            />
+            <Distribution>
+              {bands.map((bucket) => (
+                <DistributionBand
+                  key={bucket}
+                  label={bucketLabel(bucket)}
+                  value={money(totals.buckets[bucket], code)}
+                  heat={bucketHeatForAmount(bucket, totals.buckets[bucket])}
+                  empty={!isPositive(totals.buckets[bucket])}
+                />
+              ))}
+            </Distribution>
+          </div>
+        );
+      })}
     </div>
   );
 }

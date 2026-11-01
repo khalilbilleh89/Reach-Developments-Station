@@ -253,8 +253,21 @@ test("the ledger marks overdue and unapplied only when there is money in them", 
   assert.equal(quiet["Unapplied cash"].mark, undefined);
 });
 
+function ageing(data) {
+  return mount("CollectionsPosition", "CollectionsAgeing", {
+    "@/lib/format": collectionsFormat,
+    "@/components/projects/collections/labels": labels,
+  }, { summary: data, currencyCodeOf: (id) => (id ? (REGISTER[id] ?? null) : null) });
+}
+
+test("ageing is its own section, not stacked inside the collections card", () => {
+  const card = collections(summary([purse(CYP_ID)]));
+  assert.equal(ofType(card, "DistributionTrack").length, 0, "the card holds the position and the ledger");
+  assert.equal(ofType(ageing(summary([purse(CYP_ID)])), "DistributionTrack").length, 1);
+});
+
 test("the ageing track is drawn from the server's shares and the bands print every amount", () => {
-  const tree = collections(summary([purse(CYP_ID)]));
+  const tree = ageing(summary([purse(CYP_ID)]));
 
   const track = ofType(tree, "DistributionTrack")[0];
   assert.deepEqual(track.props.segments.map((segment) => [segment.key, segment.share, segment.heat]), [
@@ -267,7 +280,7 @@ test("the ageing track is drawn from the server's shares and the bands print eve
 });
 
 test("a balance the server gave no shares for is still aged in bands", () => {
-  const tree = collections(summary([purse(CYP_ID, { bucket_shares: {} })]));
+  const tree = ageing(summary([purse(CYP_ID, { bucket_shares: {} })]));
   const track = ofType(tree, "DistributionTrack")[0];
   assert.ok(track.props.segments.every((segment) => segment.share === undefined), "no share is invented from the amounts");
   assert.equal(ofType(tree, "DistributionBand").length, 6);

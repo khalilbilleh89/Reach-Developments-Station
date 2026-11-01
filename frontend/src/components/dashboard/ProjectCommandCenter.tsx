@@ -65,7 +65,7 @@ import {
 import type { IconName } from "@/components/ui";
 import { varianceNote, varianceTone } from "@/components/projects/construction/labels";
 import { AttentionPanel } from "./AttentionPanel";
-import { CollectionsPosition } from "./CollectionsPosition";
+import { CollectionsAgeing, CollectionsPosition } from "./CollectionsPosition";
 import { ManagementSummary } from "@/components/portfolio/Actions";
 import type { AttentionItem } from "./AttentionPanel";
 import { ProjectAnalysis } from "./ProjectAnalysis";
@@ -417,6 +417,14 @@ export function ProjectCommandCenter({
           ) : null}
           <AttentionPanel items={attention} loading={loading} problems={problems} onNavigate={onNavigate} />
         </div>
+
+        {/* How old the money owed is, at full width beneath: inside the
+            Collections card it tripled that column's height. */}
+        {operational && seesCollections && cash.status === "ready" && cash.data.currencies.length > 0 ? (
+          <Card title="Ageing" description="Outstanding by how far past due it is, with each band's share as the server reported it.">
+            <CollectionsAgeing summary={cash.data} currencyCodeOf={currencyCodeOf} />
+          </Card>
+        ) : null}
 
         {/* Where the project is, and what it is worth: two columns that stack
             on their own rather than a twelve-column grid. */}
