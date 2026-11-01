@@ -117,3 +117,13 @@ test("Fishbone traces a chosen cause into the effect",()=>{
  assert.equal(byClass(tree,"matrix-funnel-line-on").length,1);assert.equal(byClass(tree,"matrix-funnel-line-dim").length,5);
  assert.ok(JSON.stringify(byClass(tree,"matrix-effect")[0]).includes("Reservations stalled"));
 });
+test("the landing tiles preview each framework's shape and saved cards carry a badge",()=>{
+ const data={can_manage:true,analyses:[{...record,framework:"bcg",title:"Unit mix",items:[{...item("","Studios"),growth_pct:"18",relative_share:"0.6"}]}]};
+ const render=harness("MatrixTab",{"@/lib/answer":{useAnswer:()=>({status:"ready",data,retry(){}})},"@/lib/format":{businessDate:v=>v},"@/lib/api/matrix":{matrices:{}},"./matrix/MatrixEditor":{MatrixEditor:"MatrixEditor"},"./matrix/templates":templatesModule});
+ const tree=render("MatrixTab",{projectId:"project"});
+ assert.deepEqual(byClass(tree,"matrix-mini").map(n=>n.props.className),["swot","pestel","porter","bcg","ansoff","fishbone"].map(f=>`matrix-mini matrix-mini-${f}`));
+ assert.ok(byClass(tree,"matrix-mini").every(n=>n.props.children));
+ assert.equal(byClass(tree,"matrix-template-action")[0].props.children,"Start SWOT →");
+ assert.equal(byClass(tree,"matrix-saved-badge")[0].props.children,"BCG");
+ assert.ok(JSON.stringify(byClass(tree,"matrix-saved")[0]).includes("1 item"));
+});
