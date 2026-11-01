@@ -137,13 +137,13 @@ function bcgBoard(values: MatrixFields, points: MatrixPoint[], state: Focus): Re
  const placed = values.items.map((item, i) => ({ item, n: i + 1, point: points[i] }));
  const unplaced = placed.filter(row => !row.point);
  return <div className="matrix-board-layout">
-  {points.length ? <div className="matrix-board-map" role="img" aria-label={`Positions from the server: market growth upwards, relative share to the left, centred on 1× share and ${values.growth_threshold_pct}% growth.`}>
+  {points.length ? <div className="matrix-board-map" role="img" aria-label={`BCG positions from the server: market growth increases upwards; relative market share increases to the left; centred on 1× share and ${values.growth_threshold_pct}% growth. Bounded axes show position around the thresholds, not a linear scale. Exact values are on the cards.`}>
    <svg viewBox="0 0 1000 600" aria-hidden="true">
     <rect className="matrix-plot-bg" x="0" y="0" width="1000" height="600" rx="24" />
     <path className="matrix-axis" d="M500 0V600 M0 300H1000" />
     {points.map((point, i) => <g key={i}><circle className="matrix-dot" cx={point.x} cy={point.y} r="44" /><text className="matrix-dot-number" x={point.x} y={point.y + 14} textAnchor="middle">{i + 1}</text><title>{point.label}: {point.category}</title></g>)}
    </svg>
-   <span className="muted">← Higher share · {values.growth_threshold_pct}% growth line · Higher growth ↑</span>
+   <p className="muted">← Higher relative market share · Centre: 1× share / {values.growth_threshold_pct}% growth · Higher growth ↑<br />Bounded axes show position around the thresholds, not a linear scale. Markers have equal size; numbers match the cards.</p>
   </div> : null}
   <div className="matrix-board">
    {columns.map(([quadrant, move, rule]) => {

@@ -6638,14 +6638,17 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .matrix-item-number { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 650; }
 /* The canvas: each framework drawn in its own shape. Selection is the only
    state; every word on it comes from the saved analysis. */
-.matrix-canvas { display: grid; gap: 24px; padding: 32px; border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); overflow-wrap: anywhere; }
+.matrix-canvas { container-type: inline-size; display: grid; gap: 24px; padding: 32px; border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); overflow-wrap: anywhere; }
 .matrix-canvas-pestel, .matrix-canvas-porter, .matrix-canvas-ansoff { background: var(--canvas); }
 .matrix-canvas-heading { padding-bottom: 16px; border-bottom: 2px solid var(--text-primary); }
 .matrix-canvas-heading .eyebrow { color: var(--brand-gold-text); margin-bottom: 4px; }
 .matrix-canvas-heading h2 { font-size: var(--title-page); margin: 0; letter-spacing: -0.02em; }
 .matrix-context { white-space: pre-wrap; color: var(--text-secondary); margin: 8px 0 0; max-width: var(--prose-max); }
 .matrix-placeholder { margin: 0; padding: 8px 0; color: var(--text-muted); font-size: var(--text-sm); font-style: italic; }
-.matrix-dim { opacity: 0.4; }
+/* De-emphasis without fading: colour drains and text drops to the muted ink,
+   which keeps AA contrast on every surface the canvas uses. */
+.matrix-dim { filter: grayscale(1); box-shadow: none; }
+.matrix-dim .matrix-ledger-head, .matrix-dim .matrix-entry, .matrix-force.matrix-dim, .matrix-dim .matrix-board-head, .matrix-dim .matrix-card, .matrix-dim .matrix-family-head, .matrix-dim .matrix-cause { color: var(--text-muted); }
 .matrix-entries { display: grid; gap: 8px; align-content: start; }
 .matrix-entries-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .matrix-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; width: 100%; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }
@@ -6738,11 +6741,12 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .matrix-area-as::after { bottom: 100%; left: 50%; transform: translateX(-50%); border-bottom-color: currentColor; border-top-width: 0; }
 .matrix-area-aw::after { left: 100%; top: 50%; transform: translateY(-50%); border-left-color: currentColor; border-right-width: 0; }
 .matrix-area-ae::after { right: 100%; top: 50%; transform: translateY(-50%); border-right-color: currentColor; border-left-width: 0; }
-.matrix-field:has([aria-pressed="true"]) .matrix-arrow { opacity: 0.35; }
-.matrix-field .matrix-arrow-on { opacity: 1; color: var(--brand-gold-fill); }
+.matrix-field:has([aria-pressed="true"]) .matrix-arrow:not(.matrix-arrow-on) { opacity: 0.35; }
+.matrix-arrow-on { color: var(--brand-gold-fill); }
 /* BCG — the server's quadrant names the move; the map keeps its positions. */
 .matrix-board-layout { display: grid; gap: 16px; }
 .matrix-board-map { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.matrix-board-map p { margin: 0; max-width: 34rem; }
 .matrix-board-map svg { display: block; width: 15rem; max-width: 100%; }
 .matrix-plot-bg { fill: var(--surface-secondary); }
 .matrix-axis { stroke: var(--line-strong); stroke-width: 3; stroke-dasharray: 10 10; }
@@ -6820,17 +6824,26 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 @media (max-width: 64rem) {
  .matrix-template-gallery, .matrix-saved-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
  .matrix-canvas { padding: 16px; }
+}
+@media (max-width: 48rem) {
+ .matrix-template-gallery, .matrix-saved-grid { grid-template-columns: minmax(0, 1fr); }
+ .matrix-canvas-heading h2 { font-size: var(--title-section); }
+}
+/* The diagrams answer to the canvas's own width, not the window's: the
+   navigation rail and record padding change the room they have. */
+@container (max-width: 60rem) {
  .matrix-wheel-layout { grid-template-columns: minmax(0, 1fr); }
  .matrix-wheel { max-width: 40rem; justify-self: center; }
+}
+@container (max-width: 52rem) {
  .matrix-field { grid-template-columns: minmax(0, 1fr) 2.5rem minmax(0, 1.15fr) 2.5rem minmax(0, 1fr); }
  .matrix-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
  .matrix-families { grid-template-columns: repeat(3, minmax(0, 1fr)); }
  .matrix-funnel-lines { display: none; }
  .matrix-effect { margin-top: 16px; }
 }
-@media (max-width: 48rem) {
- .matrix-template-gallery, .matrix-saved-grid, .matrix-entries-grid, .matrix-board, .matrix-stairs-detail { grid-template-columns: minmax(0, 1fr); }
- .matrix-canvas-heading h2 { font-size: var(--title-section); }
+@container (max-width: 34rem) {
+ .matrix-entries-grid, .matrix-board, .matrix-stairs-detail { grid-template-columns: minmax(0, 1fr); }
  .matrix-ledger { grid-template-columns: minmax(0, 1fr); gap: 16px; }
  .matrix-ledger-spine { display: none; }
  .matrix-wheel { aspect-ratio: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

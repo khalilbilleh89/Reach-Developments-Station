@@ -63,7 +63,7 @@ test("deletion retains failed confirmation and submits the version and reason",a
 });
 test("BCG renders server positions with exact source values",()=>{
  const render=harness("matrix/MatrixCanvas");const tree=render("MatrixCanvas",{values:{...record,framework:"bcg",items:[{label:"A",growth_pct:"12.125",relative_share:"1.250",notes:"",category:""}]},points:[{label:"A",category:"Stars",x:410,y:220}]});
- assert.equal(find(tree,"circle")[0].props.cx,410);assert.equal(find(tree,"circle")[0].props.cy,220);const text=JSON.stringify(tree);assert.ok(text.includes("12.125"));assert.ok(text.includes("1.250"));assert.ok(text.includes("Stars"));
+ assert.equal(find(tree,"circle")[0].props.cx,410);assert.equal(find(tree,"circle")[0].props.cy,220);const text=JSON.stringify(tree);assert.ok(text.includes("12.125"));assert.ok(text.includes("1.250"));assert.ok(text.includes("Stars"));assert.ok(text.includes("not a linear scale"));assert.ok(find(tree,"div").find(n=>n.props.role==="img").props["aria-label"].includes("not a linear scale"));
 });
 const byClass = (tree, name) => nodes(tree).filter(node => typeof node.props?.className === "string" && node.props.className.split(" ").includes(name));
 const item = (category, label, notes = "") => ({ category, label, notes, growth_pct: null, relative_share: null });
