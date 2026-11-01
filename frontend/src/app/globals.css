@@ -1520,7 +1520,10 @@ section + section {
 .overview-money > section + section,
 .sale-overview > section + section,
 .marketing-nearby > section + section,
-.marketing-comparison > section + section {
+.marketing-comparison > section + section,
+.matrix-ledger-side > section + section,
+.matrix-board > section + section,
+.matrix-families > section + section {
   margin-top: 0;
 }
 
@@ -6628,72 +6631,237 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .matrix-saved { display: flex; flex-direction: column; gap: 12px; text-align: left; padding: 24px; border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); color: var(--text-primary); cursor: pointer; overflow-wrap: anywhere; }
 .matrix-saved:hover { border-color: var(--accent); }
 .matrix-saved strong { font-size: var(--title-section); }
-.matrix-canvas { padding: 32px; border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); overflow-wrap: anywhere; }
-.matrix-canvas-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--line-default); }
-.matrix-canvas-heading h2 { font-size: var(--title-page); margin: 12px 0 0; }
-.matrix-watermark { font-size: 4rem; font-weight: 800; color: var(--accent); line-height: 1; }
-.matrix-context { white-space: pre-wrap; color: var(--text-secondary); margin: 24px 0; }
-.matrix-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
-.matrix-cell { margin: 0; padding: 24px; background: var(--matrix-wash); border-radius: var(--radius-card); border-top: 4px solid var(--matrix-tone); min-width: 0; }
-.matrix-cell-heading { display: flex; gap: 16px; align-items: flex-start; }
-.matrix-cell-heading h3 { margin: 0; font-size: var(--title-section); }
-.matrix-cell-heading p { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
-.matrix-letter { font-size: 2rem; font-weight: 750; color: var(--matrix-tone); line-height: 1; }
-.matrix-ideas { padding-left: 20px; margin: 24px 0 0; }
-.matrix-ideas li { margin: 12px 0; }
-.matrix-ideas p { white-space: pre-wrap; margin: 4px 0 0; color: var(--text-secondary); }
-.matrix-placeholder { color: var(--text-secondary); padding: 24px 0; font-style: italic; }
-.matrix-grid-pestel { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.matrix-grid-porter { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; background: linear-gradient(var(--line-strong),var(--line-strong)) center / 2px 70% no-repeat, linear-gradient(var(--line-strong),var(--line-strong)) center / 70% 2px no-repeat; }
-.matrix-grid-porter .matrix-cell:nth-child(1) { grid-column: 2; }
-.matrix-grid-porter .matrix-cell:nth-child(2) { grid-column: 1; grid-row: 2; }
-.matrix-grid-porter .matrix-cell:nth-child(3) { grid-column: 2; grid-row: 2; border: 2px solid var(--matrix-tone); }
-.matrix-grid-porter .matrix-cell:nth-child(4) { grid-column: 3; grid-row: 2; }
-.matrix-grid-porter .matrix-cell:nth-child(5) { grid-column: 2; grid-row: 3; }
-.matrix-axis-caption { margin: 24px 0 16px; font-weight: 600; color: var(--text-secondary); }
-.matrix-bcg { margin-top: 24px; }
-.matrix-bcg svg { display: block; width: 100%; }
-.matrix-plot-bg { fill: var(--surface-secondary); }
-.matrix-axis { stroke: var(--line-strong); stroke-width: 2; stroke-dasharray: 6 6; }
-.matrix-plot-label { fill: var(--text-secondary); font-size: 18px; font-weight: 650; letter-spacing: 2px; }
-.matrix-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 3; }
-.matrix-dot-number { fill: var(--text-inverse); font-size: 16px; font-weight: 700; }
-.matrix-point-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-left: 24px; }
-.matrix-point-legend p { white-space: pre-wrap; margin: 4px 0; }
-.matrix-fishbone { display: grid; grid-template-columns: minmax(0, 1fr) 180px; align-items: center; gap: 24px; margin-top: 32px; }
-.matrix-bones { display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 64px 16px; position: relative; }
-.matrix-bones::before { content: ""; position: absolute; top: 50%; left: 0; right: -24px; height: 3px; background: var(--accent); }
-.matrix-bones .matrix-cell { position: relative; }
-.matrix-bones .matrix-cell::after { content: ""; position: absolute; width: 3px; height: 32px; background: var(--matrix-tone); bottom: -32px; left: 50%; transform: skewX(25deg); }
-.matrix-bones .matrix-cell:nth-child(n+4)::after { top: -32px; bottom: auto; transform: skewX(-25deg); }
-.matrix-effect { padding: 24px 16px; background: var(--accent-soft); border: 2px solid var(--accent); border-radius: var(--radius-card); }
 .matrix-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .matrix-mode-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .matrix-input-list { display: grid; gap: 16px; }
 .matrix-input-item { background: var(--surface-secondary); padding: 24px; border-radius: var(--radius-card); display: grid; gap: 16px; }
 .matrix-item-number { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 650; }
+/* The canvas: each framework drawn in its own shape. Selection is the only
+   state; every word on it comes from the saved analysis. */
+.matrix-canvas { container-type: inline-size; display: grid; gap: 24px; padding: 32px; border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); overflow-wrap: anywhere; }
+.matrix-canvas-pestel, .matrix-canvas-porter, .matrix-canvas-ansoff { background: var(--canvas); }
+.matrix-canvas-heading { padding-bottom: 16px; border-bottom: 2px solid var(--text-primary); }
+.matrix-canvas-heading .eyebrow { color: var(--brand-gold-text); margin-bottom: 4px; }
+.matrix-canvas-heading h2 { font-size: var(--title-page); margin: 0; letter-spacing: -0.02em; }
+.matrix-context { white-space: pre-wrap; color: var(--text-secondary); margin: 8px 0 0; max-width: var(--prose-max); }
+.matrix-placeholder { margin: 0; padding: 8px 0; color: var(--text-muted); font-size: var(--text-sm); font-style: italic; }
+/* De-emphasis without fading: colour drains and text drops to the muted ink,
+   which keeps AA contrast on every surface the canvas uses. */
+.matrix-dim { filter: grayscale(1); box-shadow: none; }
+.matrix-dim .matrix-ledger-head, .matrix-dim .matrix-entry, .matrix-force.matrix-dim, .matrix-dim .matrix-board-head, .matrix-dim .matrix-card, .matrix-dim .matrix-family-head, .matrix-dim .matrix-cause { color: var(--text-muted); }
+.matrix-entries { display: grid; gap: 8px; align-content: start; }
+.matrix-entries-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.matrix-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; width: 100%; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }
+.matrix-entry::after { content: "+"; color: var(--brand-gold-text); font-size: var(--text-lg); line-height: 1; }
+.matrix-entry:hover { background: var(--surface-hover); }
+.matrix-entry-open { background: var(--accent-soft); border-color: var(--brand-gold-fill); }
+.matrix-entry-open::after { content: "−"; }
+.matrix-entry-ref { padding-top: 2px; color: var(--brand-gold-text); font-family: var(--font-mono); font-size: var(--text-xs); }
+.matrix-entry-text { display: grid; gap: 4px; min-width: 0; }
+.matrix-entry-text strong { font-size: var(--text-base); font-weight: 600; }
+.matrix-entry-note { color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); white-space: pre-wrap; }
+.matrix-chip { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--radius-control); font-size: var(--text-base); font-weight: 700; }
+.matrix-chip-s { background: var(--brand-gold-fill); color: var(--text-primary); }
+.matrix-chip-o { background: var(--accent-soft); color: var(--brand-gold-text); }
+.matrix-chip-w { background: var(--surface-secondary); color: var(--text-secondary); }
+.matrix-chip-t { background: var(--petrol); color: var(--text-inverse); }
+/* SWOT — a balance ledger: what works for the project against what works against it. */
+.matrix-ledger { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem minmax(0, 1fr); }
+.matrix-ledger-side { display: flex; flex-direction: column; min-width: 0; }
+.matrix-ledger-title { margin: 0; padding-bottom: 10px; border-bottom: 1px solid var(--line-default); color: var(--brand-gold-text); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.matrix-ledger-against .matrix-ledger-title { color: var(--petrol); }
+.matrix-ledger-group { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); transition: opacity var(--motion-base) var(--ease); }
+.matrix-ledger-head { display: flex; align-items: center; gap: 10px; padding: 4px 0 8px; border: 0; background: none; color: var(--text-primary); font: inherit; font-size: var(--text-lg); font-weight: 600; text-align: left; cursor: pointer; }
+.matrix-ledger-head[aria-pressed="true"] .matrix-chip { box-shadow: 0 0 0 3px var(--text-primary); }
+.matrix-ledger-scope { color: var(--text-muted); font-size: var(--text-xs); font-weight: 500; }
+.matrix-ledger .matrix-entry { grid-template-columns: 2.25rem minmax(0, 1fr) auto; width: calc(100% + 16px); margin: 0 -8px; padding: 9px 8px; border: 0; border-top: 1px dashed var(--line-default); border-radius: var(--radius-tag); background: transparent; }
+.matrix-ledger .matrix-entry-open { background: var(--accent-soft); }
+.matrix-ledger-spine { position: relative; display: flex; align-items: center; justify-content: center; }
+.matrix-ledger-spine::before { content: ""; position: absolute; top: 0; bottom: 0; left: calc(50% - 1px); width: 2px; background: var(--text-primary); }
+.matrix-ledger-spine span { position: relative; width: 6rem; height: 6rem; display: grid; place-content: center; border-radius: var(--radius-pill); background: var(--ink); color: var(--brand-gold); font-size: var(--text-2xs); font-weight: 700; letter-spacing: 0.08em; line-height: 1.4; text-align: center; text-transform: uppercase; }
+/* PESTEL — six lenses round the project; the gold arc turns to the lens being read. */
+.matrix-wheel-layout { display: grid; grid-template-columns: minmax(0, 40rem) minmax(18rem, 1fr); gap: 28px; align-items: stretch; }
+.matrix-wheel { position: relative; width: 100%; aspect-ratio: 1; }
+.matrix-wheel::before, .matrix-wheel::after, .matrix-wheel-arc { content: ""; position: absolute; left: 50%; top: 51.5%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%); }
+.matrix-wheel::before { width: 72.5%; border: 1px solid var(--line-default); }
+.matrix-wheel::after { width: 52.5%; border: 1px dashed var(--line-default); }
+.matrix-wheel-arc { width: 72.5%; transform: translate(-50%, -50%) rotate(var(--matrix-turn)); background: conic-gradient(from -27deg, var(--brand-gold-fill) 0 54deg, transparent 54deg); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 10px), var(--ink) calc(100% - 9px)); mask: radial-gradient(farthest-side, transparent calc(100% - 10px), var(--ink) calc(100% - 9px)); transition: transform var(--motion-base) var(--ease); }
+.matrix-wheel-hub { position: absolute; left: 50%; top: 51.5%; z-index: 1; width: 28%; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: var(--radius-pill); background: var(--ink); color: var(--text-inverse); text-align: center; transform: translate(-50%, -50%); }
+.matrix-wheel-hub span { color: var(--brand-gold); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.matrix-wheel-hub strong { font-size: var(--text-md); font-weight: 600; }
+.matrix-lens { position: absolute; z-index: 1; width: 11.5rem; min-height: 5.5rem; display: grid; grid-template-columns: 2.5rem minmax(0, 1fr); align-items: center; gap: 10px; padding: 0 12px; overflow-wrap: normal; border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-xs); transform: translate(-50%, -50%); transition: transform var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease); }
+.matrix-lens:hover { transform: translate(-50%, -50%) scale(1.04); }
+.matrix-lens[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--text-inverse); box-shadow: var(--shadow-lg); }
+.matrix-lens-0 { left: 50%; top: 15%; }
+.matrix-lens-1 { left: 81.9%; top: 33.4%; }
+.matrix-lens-2 { left: 81.9%; top: 69.7%; }
+.matrix-lens-3 { left: 50%; top: 87.8%; }
+.matrix-lens-4 { left: 18.1%; top: 69.7%; }
+.matrix-lens-5 { left: 18.1%; top: 33.4%; }
+.matrix-lens-letter { width: 2.5rem; height: 2.5rem; display: grid; place-items: center; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--brand-gold-text); font-size: var(--text-lg); font-weight: 700; }
+.matrix-lens-1 .matrix-lens-letter, .matrix-lens-3 .matrix-lens-letter, .matrix-lens-5 .matrix-lens-letter { background: var(--petrol-soft); color: var(--petrol); }
+.matrix-lens[aria-pressed="true"] .matrix-lens-letter { background: var(--brand-gold-fill); color: var(--text-primary); }
+.matrix-lens-text { display: grid; gap: 2px; min-width: 0; }
+.matrix-lens-text strong { font-size: var(--text-base); font-weight: 600; }
+.matrix-lens-text span { color: var(--text-muted); font-size: var(--text-xs); }
+.matrix-lens[aria-pressed="true"] .matrix-lens-text span { color: var(--command-muted); }
+.matrix-wheel-panel { display: flex; flex-direction: column; gap: 16px; padding: 28px; border: 1px solid var(--line-soft); border-radius: var(--radius-card); background: var(--surface); }
+.matrix-wheel-panel > p { margin: 0; }
+.matrix-wheel-panel-head { display: flex; align-items: center; gap: 14px; }
+.matrix-wheel-panel-head .matrix-chip { width: 3.5rem; height: 3.5rem; border-radius: var(--radius-card); font-size: var(--text-2xl); }
+.matrix-wheel-panel-head .eyebrow { color: var(--brand-gold-text); margin: 0; }
+.matrix-wheel-panel-head h3 { margin: 0; font-size: var(--text-xl); }
+.matrix-wheel-steps { margin-top: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+/* Porter — rivalry at the centre, four outside forces pressing in on it. */
+.matrix-field { display: grid; grid-template-columns: minmax(0, 1fr) 3rem minmax(0, 1.15fr) 3rem minmax(0, 1fr); grid-template-rows: auto 3rem auto 3rem auto; grid-template-areas: ". n n n ." ". . an . ." "w aw c ae e" ". . as . ." ". s s s ."; align-items: stretch; }
+.matrix-area-n { grid-area: n; }
+.matrix-area-w { grid-area: w; }
+.matrix-area-e { grid-area: e; }
+.matrix-area-s { grid-area: s; }
+.matrix-area-c { grid-area: c; }
+.matrix-area-an { grid-area: an; width: 8px; height: 2rem; }
+.matrix-area-as { grid-area: as; width: 8px; height: 2rem; }
+.matrix-area-aw { grid-area: aw; width: 2rem; height: 8px; }
+.matrix-area-ae { grid-area: ae; width: 2rem; height: 8px; }
+.matrix-force { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border: 2px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-xs); transition: box-shadow var(--motion-base) var(--ease), border-color var(--motion-base) var(--ease), opacity var(--motion-base) var(--ease); }
+.matrix-force > strong { font-size: var(--text-md); font-weight: 600; }
+.matrix-force-hint { color: var(--text-muted); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.matrix-force-on { border-color: var(--brand-gold-fill); box-shadow: var(--shadow-lg); }
+.matrix-force ul, .matrix-centre ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); line-height: 1.45; }
+.matrix-force li span, .matrix-centre li span { display: block; color: var(--text-secondary); font-size: var(--text-xs); }
+.matrix-centre { display: flex; flex-direction: column; gap: 10px; min-height: 14rem; padding: 22px; border: 3px solid var(--ink); border-radius: 20px; background: var(--ink); color: var(--text-inverse); font: inherit; text-align: left; cursor: pointer; box-shadow: 0 0 0 8px var(--canvas), var(--shadow-lg); }
+.matrix-centre .eyebrow { margin: 0; color: var(--brand-gold); }
+.matrix-centre > strong { font-size: var(--text-xl); font-weight: 600; }
+.matrix-centre li span, .matrix-centre .matrix-placeholder { color: var(--command-muted); }
+.matrix-centre.matrix-force-on { border-color: var(--brand-gold-fill); }
+.matrix-centre-hint { margin-top: auto; color: var(--command-muted); font-size: var(--text-xs); }
+.matrix-arrow { position: relative; justify-self: center; align-self: center; border-radius: var(--radius-pill); color: var(--brand-gold-strong); background: currentColor; transition: color var(--motion-base) var(--ease), opacity var(--motion-base) var(--ease); }
+.matrix-arrow::after { content: ""; position: absolute; border: 9px solid transparent; }
+.matrix-area-an::after { top: 100%; left: 50%; transform: translateX(-50%); border-top-color: currentColor; border-bottom-width: 0; }
+.matrix-area-as::after { bottom: 100%; left: 50%; transform: translateX(-50%); border-bottom-color: currentColor; border-top-width: 0; }
+.matrix-area-aw::after { left: 100%; top: 50%; transform: translateY(-50%); border-left-color: currentColor; border-right-width: 0; }
+.matrix-area-ae::after { right: 100%; top: 50%; transform: translateY(-50%); border-right-color: currentColor; border-left-width: 0; }
+.matrix-field:has([aria-pressed="true"]) .matrix-arrow:not(.matrix-arrow-on) { opacity: 0.35; }
+.matrix-arrow-on { color: var(--brand-gold-fill); }
+/* BCG — the server's quadrant names the move; the map keeps its positions. */
+.matrix-board-layout { display: grid; gap: 16px; }
+.matrix-board-map { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.matrix-board-map p { margin: 0; max-width: 34rem; }
+.matrix-board-map svg { display: block; width: 15rem; max-width: 100%; }
+.matrix-plot-bg { fill: var(--surface-secondary); }
+.matrix-axis { stroke: var(--line-strong); stroke-width: 3; stroke-dasharray: 10 10; }
+.matrix-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 4; }
+.matrix-dot-number { fill: var(--text-inverse); font-size: 40px; font-weight: 700; }
+.matrix-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.matrix-board-column { display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--line-default); border-radius: var(--radius-card); transition: opacity var(--motion-base) var(--ease); }
+.matrix-board-invest { background: var(--accent-soft); }
+.matrix-board-decide { background: var(--petrol-soft); }
+.matrix-board-harvest { background: var(--surface-secondary); }
+.matrix-board-review { background: var(--surface); border-color: var(--line-soft); }
+.matrix-board-head { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 0; border: 0; background: none; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.matrix-board-name { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; }
+.matrix-board-name strong { font-size: var(--text-lg); font-weight: 600; }
+.matrix-board-name span { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--text-sm); }
+.matrix-move { padding: 4px 10px; border-radius: var(--radius-pill); background: var(--brand-gold-fill); color: var(--text-primary); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.matrix-board-decide .matrix-move { background: var(--petrol); color: var(--text-inverse); }
+.matrix-board-harvest .matrix-move { background: var(--ink); color: var(--text-inverse); }
+.matrix-board-review .matrix-move { background: var(--line-soft); color: var(--text-secondary); }
+.matrix-board-head[aria-pressed="true"] .matrix-move { outline: 2px solid var(--ink); outline-offset: 2px; }
+.matrix-board-rule { color: var(--text-muted); font-size: var(--text-xs); }
+.matrix-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 2px solid var(--line-soft); border-radius: var(--radius-card); background: var(--surface); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-xs); transition: box-shadow var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); }
+.matrix-card:hover { transform: translateY(-2px); }
+.matrix-card-open { border-color: var(--brand-gold-fill); box-shadow: var(--shadow-md); }
+.matrix-card-title { display: flex; align-items: center; gap: 8px; font-size: var(--text-md); font-weight: 600; }
+.matrix-card-number { flex: none; width: 1.5rem; height: 1.5rem; display: grid; place-items: center; border-radius: var(--radius-pill); background: var(--ink); color: var(--text-inverse); font-size: var(--text-2xs); font-weight: 700; }
+.matrix-card-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.matrix-card-figures > span { padding: 8px 10px; border-radius: var(--radius-control); background: var(--surface-secondary); font-family: var(--font-mono); font-size: var(--text-md); }
+.matrix-card-figures em { display: block; color: var(--text-muted); font-family: var(--font-sans); font-size: var(--text-2xs); font-style: normal; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+/* Ansoff — four steps, each a further move from what the business knows. */
+.matrix-stairs-layout { display: grid; gap: 16px; }
+.matrix-stairs-detail { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 20px; align-items: start; padding: 18px 22px; border: 1px solid var(--line-soft); border-radius: var(--radius-card); background: var(--surface); }
+.matrix-stairs-detail .eyebrow { margin: 0; color: var(--brand-gold-text); }
+.matrix-stairs-detail h3 { margin: 4px 0 0; font-size: var(--text-xl); }
+.matrix-stairs { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 16px; min-height: 25rem; padding-left: 3.5rem; }
+.matrix-risk { position: absolute; left: 0; top: 0; bottom: 0; width: 2.25rem; display: flex; flex-direction: column; align-items: center; justify-content: space-between; }
+.matrix-risk span { color: var(--brand-gold-text); font-size: var(--text-2xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; writing-mode: vertical-rl; transform: rotate(180deg); }
+.matrix-risk span:first-child { color: var(--petrol); }
+.matrix-risk i { flex: 1; width: 2px; margin: 8px 0; background: linear-gradient(var(--petrol), var(--brand-gold-fill)); }
+.matrix-step { flex: 0 1 11.5rem; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 3px solid transparent; border-radius: 18px 18px 6px 6px; background: var(--accent-soft); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease); }
+.matrix-step:hover { transform: translateY(-4px); }
+.matrix-step[aria-pressed="true"] { border-color: var(--ink); box-shadow: var(--shadow-lg); }
+.matrix-step > span { font-size: var(--text-xs); }
+.matrix-step > strong { font-size: var(--text-md); font-weight: 600; }
+.matrix-step .matrix-step-number { font-size: var(--metric-hero-lg); font-weight: 700; line-height: 1; letter-spacing: -0.03em; }
+.matrix-step .matrix-step-count { margin-top: auto; font-weight: 600; }
+.matrix-step-0 { height: 12rem; }
+.matrix-step-1 { height: 16rem; background: var(--brand-gold-fill); }
+.matrix-step-2 { height: 20rem; background: var(--brand-gold-text); color: var(--text-inverse); }
+.matrix-step-3 { height: 24rem; background: var(--petrol); color: var(--text-inverse); }
+/* Fishbone — six families of cause narrowing toward the one effect. */
+.matrix-funnel { display: grid; }
+.matrix-families { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.matrix-family { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 2px solid var(--surface-selected); border-radius: var(--radius-card); background: var(--accent-soft); transition: opacity var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease); }
+.matrix-family-alt { border-color: var(--petrol-soft); background: var(--petrol-soft); }
+.matrix-family-on { border-color: var(--ink); box-shadow: var(--shadow-lg); }
+.matrix-family-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; border: 0; background: none; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.matrix-family-head strong { font-size: var(--text-md); font-weight: 600; }
+.matrix-family-head > span:last-child { color: var(--text-muted); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.matrix-family-number { width: 2.125rem; height: 2.125rem; display: grid; place-items: center; border-radius: var(--radius-control); background: var(--brand-gold-fill); color: var(--text-primary); font-size: var(--text-base); font-weight: 700; }
+.matrix-family-alt .matrix-family-number { background: var(--petrol); color: var(--text-inverse); }
+.matrix-family-on .matrix-family-number { background: var(--ink); color: var(--brand-gold); }
+.matrix-cause { display: block; width: 100%; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); font: inherit; font-size: var(--text-xs); font-weight: 500; line-height: 1.4; text-align: left; cursor: pointer; transition: border-color var(--motion-fast) var(--ease), background-color var(--motion-fast) var(--ease); }
+.matrix-cause:hover { border-color: var(--brand-gold-strong); }
+.matrix-cause-on { border-color: var(--ink); background: var(--ink); color: var(--text-inverse); }
+.matrix-funnel-lines { display: block; width: 100%; height: 8rem; }
+.matrix-funnel-line { fill: none; stroke: var(--brand-gold-strong); stroke-width: 2.5; stroke-linecap: round; vector-effect: non-scaling-stroke; transition: opacity var(--motion-base) var(--ease); }
+.matrix-funnel-line-alt { stroke: var(--petrol); }
+.matrix-funnel-line-on { stroke: var(--ink); stroke-width: 6; }
+.matrix-funnel-line-dim { opacity: 0.2; }
+.matrix-effect { justify-self: center; width: min(100%, 31rem); display: flex; flex-direction: column; gap: 4px; padding: 18px 24px; border-radius: var(--radius-card); background: var(--brand-gold-fill); text-align: center; box-shadow: var(--shadow-md); }
+.matrix-effect .eyebrow { justify-content: center; margin: 0; color: var(--text-primary); }
+.matrix-effect strong { font-size: var(--text-xl); font-weight: 600; }
+.matrix-trace { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--brand-gold-strong); font-size: var(--text-sm); }
 @media (max-width: 64rem) {
  .matrix-template-gallery, .matrix-saved-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
  .matrix-canvas { padding: 16px; }
- .matrix-grid-porter { gap: 12px; }
- .matrix-grid-porter .matrix-cell { padding: 12px; }
- .matrix-cell-heading { flex-wrap: wrap; }
- .matrix-fishbone { grid-template-columns: minmax(0, 1fr); }
- .matrix-bones::before { right: 0; }
 }
 @media (max-width: 48rem) {
- .matrix-template-gallery, .matrix-saved-grid, .matrix-grid, .matrix-point-legend { grid-template-columns: minmax(0, 1fr); }
+ .matrix-template-gallery, .matrix-saved-grid { grid-template-columns: minmax(0, 1fr); }
  .matrix-canvas-heading h2 { font-size: var(--title-section); }
- .matrix-watermark { display: none; }
- .matrix-grid-porter { background: none; }
- .matrix-grid-porter .matrix-cell:nth-child(n) { grid-column: auto; grid-row: auto; }
- .matrix-grid-porter .matrix-cell:nth-child(3) { order: -1; }
- .matrix-bones { grid-template-rows: none; grid-template-columns: minmax(0, 1fr); gap: 16px; border-left: 3px solid var(--accent); padding-left: 16px; }
- .matrix-bones::before { display: none; }
- .matrix-bones .matrix-cell:nth-child(n)::after { top: 50%; bottom: auto; left: -16px; width: 16px; height: 3px; transform: none; }
- .matrix-plot-label { font-size: 36px; }
- .matrix-dot { r: 28px; }
- .matrix-dot-number { font-size: 30px; }
+}
+/* The diagrams answer to the canvas's own width, not the window's: the
+   navigation rail and record padding change the room they have. */
+@container (max-width: 60rem) {
+ .matrix-wheel-layout { grid-template-columns: minmax(0, 1fr); }
+ .matrix-wheel { max-width: 40rem; justify-self: center; }
+}
+@container (max-width: 52rem) {
+ .matrix-field { grid-template-columns: minmax(0, 1fr) 2.5rem minmax(0, 1.15fr) 2.5rem minmax(0, 1fr); }
+ .matrix-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .matrix-families { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+ .matrix-funnel-lines { display: none; }
+ .matrix-effect { margin-top: 16px; }
+}
+@container (max-width: 34rem) {
+ .matrix-entries-grid, .matrix-board, .matrix-stairs-detail { grid-template-columns: minmax(0, 1fr); }
+ .matrix-ledger { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+ .matrix-ledger-spine { display: none; }
+ .matrix-wheel { aspect-ratio: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+ .matrix-wheel::before, .matrix-wheel::after, .matrix-wheel-arc { display: none; }
+ .matrix-wheel-hub { position: static; grid-column: 1 / -1; width: auto; aspect-ratio: auto; flex-direction: row; justify-content: space-between; padding: 12px 16px; border-radius: var(--radius-card); transform: none; }
+ .matrix-lens { position: static; width: auto; min-height: 0; padding: 10px 12px; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 6px; transform: none; }
+ .matrix-lens:hover { transform: none; }
+ .matrix-lens-letter { width: 2rem; height: 2rem; font-size: var(--text-base); }
+ .matrix-wheel-panel { padding: 16px; }
+ .matrix-field { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "c" "n" "w" "e" "s"; gap: 12px; }
+ .matrix-arrow { display: none; }
+ .matrix-centre { min-height: 0; box-shadow: var(--shadow-md); }
+ .matrix-stairs { flex-direction: column; align-items: stretch; gap: 8px; min-height: 0; padding-left: 0; }
+ .matrix-risk { display: none; }
+ .matrix-step { flex: none; height: auto; }
+ .matrix-step .matrix-step-number { font-size: var(--metric); }
+ .matrix-families { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .matrix-family-head > span:last-child { font-size: var(--text-xs); font-weight: 500; letter-spacing: 0; text-transform: none; }
 }
 /* Masterplan: image-aligned geometry, one full-width sales and authoring surface. */
 .masterplan-controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-4); }
