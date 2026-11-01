@@ -7,7 +7,7 @@ import type { SalesClient, SalesUnitOption, SalesPricePreview } from "@/lib/api"
 import { SalesPriceInput } from "./SalesPriceInput";
 import { ValidationSummary } from "@/components/ui/ValidationSummary";
 
-import { Button, DraftBoundary, Field, FieldRow, FormActions, Loading, Notice } from "@/components/ui";
+import { Banner, Button, DraftBoundary, Field, FieldRow, FormActions, Loading, Notice } from "@/components/ui";
 
 export function RegisterBuyerSaleForm({ projectId, unitId, clientId, unitOption, onSaved, onCancel }: {
   projectId: string; unitId: string; clientId?: string | null; unitOption: SalesUnitOption;
@@ -66,7 +66,7 @@ export function RegisterBuyerSaleForm({ projectId, unitId, clientId, unitOption,
       finally { saving.current = false; setBusy(false); }
     }}>
       <ValidationSummary error={error} />
-      {eligibility ? <Notice tone="info">{eligibility}<Button onClick={() => void refreshEligibility()}>Refresh selected unit</Button>{freshOption ? <Button onClick={() => {setVersion(freshOption.unit_price_version_id); setEligibility(null); setPreview(null);}}>Use current list reference {freshOption.reference_price_ex_tax}</Button> : null}</Notice> : null}
+      {eligibility ? <Banner tone="warning" action={<><Button onClick={() => void refreshEligibility()}>Refresh selected unit</Button>{freshOption ? <Button onClick={() => {setVersion(freshOption.unit_price_version_id); setEligibility(null); setPreview(null);}}>Use current list reference {freshOption.reference_price_ex_tax}</Button> : null}</>}>{eligibility}</Banner> : null}
       <p>This commits the unit to its buyer and marks it <strong>Sold</strong>. SPA signatures, title registration and payments remain separate records. No receipt or signature is created.</p>
       <SalesPriceInput projectId={projectId} unitId={unitId} versionId={version} currencyId={unitOption.currency_id} value={price} onChange={v => {setPrice(v); setPreview(null);}} onPreview={setPreview} disabled={busy || !!eligibility} />
       <Field label="Buyer"><select className="input" value={form.client} disabled={busy || !!clientId} onChange={e => setForm({ ...form, client: e.target.value })}>

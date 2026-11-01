@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { team, type TeamFields, type TeamKind, type TeamMember } from "@/lib/api/team";
-import { Button, DraftBoundary, Field, FieldRow, FormActions, FormSection, RecordPage, ValidationSummary } from "@/components/ui";
+import { Button, DraftBoundary, Field, FieldRow, FormActions, FormSection, RecordPage, Segmented, ValidationSummary } from "@/components/ui";
 
 export function TeamMemberForm({ projectId, initialTeam, member, onSaved, onClose }: {
   projectId: string; initialTeam: TeamKind; member?: TeamMember;
@@ -34,9 +34,8 @@ export function TeamMemberForm({ projectId, initialTeam, member, onSaved, onClos
         <ValidationSummary error={error} />
         <fieldset disabled={busy} className="team-fields">
           <FormSection title="Person & team" description="Choose a team and enter a name. You can complete the other details now or later.">
-            <Field label="Team"><select className="input" name="team" value={values.team} onChange={event => change("team", event.target.value)}>
-              <option value="operations">Operations Team</option><option value="engineering">Engineering Team</option>
-            </select></Field>
+            <Field label="Team"><Segmented<TeamKind> label="Team" value={values.team} onChange={value => change("team", value)}
+              options={[{ value: "operations", label: "Operations Team" }, { value: "engineering", label: "Engineering Team" }]} /></Field>
             <FieldRow>
               <Field label="Name"><input className="input" name="name" autoComplete="name" required value={values.name} onChange={event => change("name", event.target.value)} /></Field>
               <Field label="Title" optional><input className="input" name="title" autoComplete="organization-title" value={values.title} onChange={event => change("title", event.target.value)} /></Field>

@@ -90,7 +90,7 @@ test("drawing viewer keeps page bounds and zoom inside a full record page", () =
   button("Next page").props.onClick();
   tree = h.render("DrawingViewer", props);
   assert.equal(button("Next page").props.disabled, true);
-  find(tree, "select")[0].props.onChange({target:{value:"200"}});
+  find(tree, "Segmented").find(node => node.props.label === "Zoom").props.onChange("200");
   tree = h.render("DrawingViewer", props);
   assert.equal(find(tree, "img")[0].props.style.width, "200%");
   h.setAnswer({status:"failed", message:"Encrypted PDF"});

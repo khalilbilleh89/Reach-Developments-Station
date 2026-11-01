@@ -61,17 +61,19 @@ test("Agent uses a selected UUID and no editable beneficiary name", () => {
   assert.equal("beneficiary_name" in view.submitted[0], false);
 });
 
+// Beneficiary type is a segmented choice (design system J2): it reports the
+// chosen value itself rather than a change event.
 test("Branch is read-only Sale attribution, while Other submits null when unnamed", () => {
   const view = dialog();
   let tree = view.render();
-  nodes(tree).find(node => node.props?.label === "Beneficiary type").props.children.props.onChange({ target: { value: "branch" } });
+  nodes(tree).find(node => node.props?.label === "Beneficiary type").props.children.props.onChange("branch");
   tree = view.render();
   assert.equal(nodes(tree).some(node => node.props?.children?.includes?.("Sale branch: ")), true);
   assert.equal(nodes(tree).some(node => node.props?.label === "Beneficiary name"), false);
   tree.props.onSubmit();
   assert.equal(view.submitted[0].beneficiary_type, "branch");
   assert.equal("beneficiary_name" in view.submitted[0], false);
-  nodes(tree).find(node => node.props?.label === "Beneficiary type").props.children.props.onChange({ target: { value: "other" } });
+  nodes(tree).find(node => node.props?.label === "Beneficiary type").props.children.props.onChange("other");
   tree = view.render();
   assert.equal(nodes(tree).find(node => node.props?.label === "Beneficiary name").props.optional, true);
   tree.props.onSubmit();

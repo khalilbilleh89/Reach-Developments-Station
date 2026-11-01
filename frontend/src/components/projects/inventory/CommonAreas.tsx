@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { commonAreas } from "@/lib/api/commonAreas";
 import type { CommonArea } from "@/lib/api/commonAreas";
 import { inventory } from "@/lib/api";
-import { Button, Disclosure, EmptyState, Loading, Notice, RecordPage, RowMenu, SectionHeader, TableScroll } from "@/components/ui";
+import { Button, Disclosure, EmptyState, Loading, Notice, RecordPage, RowMenu, SectionHeader, SortHeader, TableScroll, useSort } from "@/components/ui";
 import { EditForm } from "../EditForm";
 import type { EditField } from "../EditForm";
 import { DeleteRecordButton } from "../DeleteRecordButton";
@@ -38,6 +38,10 @@ export function CommonAreas({ projectId, canWrite }: { projectId: string; canWri
       .catch(caught=>{if(current){setRows(null);setError(caught instanceof Error ? caught.message : "Could not load common areas or apartment choices.");}});
     return()=>{current=false;};
   },[fetchSources]);
+  const allocationOf=(area:CommonArea)=>area.apartment_id ? apartments.find(item=>item.value===area.apartment_id)?.label ?? "Apartment allocation" : "Project";
+  // Ordering the areas already on screen; every value compared is the server's.
+  const readArea=(area:CommonArea,column:string):string|null=>column==="area" ? area.label : column==="category" ? categories.find(item=>item.value===area.category)?.label ?? area.category : column==="sqm" ? area.area_sqm : column==="allocation" ? allocationOf(area) : column==="source" ? area.source_reference : null;
+  const {sort,toggle,sorted}=useSort(rows ?? [],readArea);
   const row=editing && editing!=="new" ? editing : null;
   const initial={label:row?.label ?? "",category:row?.category ?? "common",area_sqm:row?.area_sqm ?? "",
     apartment_id:row?.apartment_id ?? "",source_reference:row?.source_reference ?? ""};
@@ -51,8 +55,8 @@ export function CommonAreas({ projectId, canWrite }: { projectId: string; canWri
     <SectionHeader title="Shared area register" description="Measured shared and site areas feeding Overview → Feasibility." actions={canWrite ? <Button disabled={!!error || rows===null} onClick={()=>setEditing("new")}>Add area</Button> : undefined} />
     <div className="inventory-measurement-guide"><Disclosure title="How to record shared measurements"><p>Record each physical area once. Garage includes the full measured garage area, not another sum of parking attachments. Community areas exclude common building areas and roads/pavements. Enter separate apartment allocation rows instead of repeating a project common-area total.</p></Disclosure></div>
     {error ? <Notice tone="error">{error}<Button onClick={()=>void load()}>Retry</Button></Notice> : rows===null ? <Loading label="Loading common areas" /> : rows.length ?
-      <TableScroll label="Common Areas register"><thead><tr><th scope="col">Area</th><th scope="col">Category</th><th scope="col" className="num">Area m²</th><th scope="col">Allocation</th><th scope="col">Source</th><th scope="col">Actions</th></tr></thead><tbody>{rows.map(area=><tr key={area.id}>
-        <th scope="row">{area.label}</th><td>{categories.find(item=>item.value===area.category)?.label}</td><td className="num">{area.area_sqm}</td><td>{area.apartment_id ? apartments.find(item=>item.value===area.apartment_id)?.label ?? "Apartment allocation" : "Project"}</td><td>{area.source_reference}</td><td className="row-menu-cell">{canWrite ? <RowMenu label="More actions"><Button onClick={()=>setEditing(area)}>Edit</Button><DeleteRecordButton label={area.label} description="Removes this measurement from current Feasibility totals. Its source values and deletion reason remain in the audit trail." onDelete={reason=>commonAreas.remove(projectId,area.id,reason)} onDeleted={load} /></RowMenu> : "Read only"}</td>
+      <TableScroll label="Common Areas register"><thead><tr><SortHeader column="area" sort={sort} onToggle={toggle}>Area</SortHeader><SortHeader column="category" sort={sort} onToggle={toggle}>Category</SortHeader><SortHeader column="sqm" sort={sort} onToggle={toggle} className="num">Area m²</SortHeader><SortHeader column="allocation" sort={sort} onToggle={toggle}>Allocation</SortHeader><SortHeader column="source" sort={sort} onToggle={toggle}>Source</SortHeader><th scope="col">Actions</th></tr></thead><tbody>{sorted.map(area=><tr key={area.id}>
+        <th scope="row">{area.label}</th><td>{categories.find(item=>item.value===area.category)?.label}</td><td className="num">{area.area_sqm}</td><td>{allocationOf(area)}</td><td>{area.source_reference}</td><td className="row-menu-cell">{canWrite ? <RowMenu label="More actions"><Button onClick={()=>setEditing(area)}>Edit</Button><DeleteRecordButton label={area.label} description="Removes this measurement from current Feasibility totals. Its source values and deletion reason remain in the audit trail." onDelete={reason=>commonAreas.remove(projectId,area.id,reason)} onDeleted={load} /></RowMenu> : "Read only"}</td>
       </tr>)}</tbody></TableScroll> : <EmptyState icon="inventory" title="No shared measurements yet" hint="Add measured common areas, garages and site areas to complete Feasibility inputs." actions={canWrite ? <Button variant="primary" onClick={() => setEditing("new")}>Add area</Button> : undefined} />}
     {editing ? <RecordPage title={row ? `Edit ${row.label}` : "Add common area"} onClose={()=>setEditing(null)}><EditForm fields={fields} initial={initial} submitLabel="Save area" onCancel={()=>setEditing(null)} onSave={async changes=>{
       const values:Record<string,unknown>={...initial,...changes};values.apartment_id=values.apartment_id || null;

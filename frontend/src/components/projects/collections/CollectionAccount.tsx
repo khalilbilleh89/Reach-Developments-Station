@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   Badge,
+  Banner,
   Button,
   ButtonRow,
   RecordPage,
@@ -21,6 +22,7 @@ import {
   MoneyInput,
   Notice,
   PromptDialog,
+  Segmented,
   SubPanel,
   TableScroll,
   RowMenu,
@@ -261,6 +263,7 @@ export function CollectionAccount({
               canCollect={canCollect}
               busy={busy}
               onAct={act}
+              onOpenReceipts={() => setTab("receipts")}
             />
           ) : null}
 
@@ -344,6 +347,7 @@ function PositionTab({
   canCollect,
   busy,
   onAct,
+  onOpenReceipts,
 }: {
   projectId: string;
   saleId: string;
@@ -352,6 +356,8 @@ function PositionTab({
   canCollect: boolean;
   busy: boolean;
   onAct: Act;
+  /** Where unapplied cash is applied: the account's Receipts tab. */
+  onOpenReceipts?: () => void;
 }) {
   const [clearing, setClearing] = useState(false);
   const eligible = summary.clearance_blockers.length === 0;
@@ -378,11 +384,11 @@ function PositionTab({
       </MetricGroup>
 
       {isPositive(summary.unapplied_cash) ? (
-        <Notice tone="warning">
+        <Banner tone="warning" action={onOpenReceipts ? <Button small onClick={onOpenReceipts}>Apply in Receipts</Button> : undefined}>
           {money(summary.unapplied_cash, currencyCode)} of confirmed cash has not been applied to
           any instalment. It is the buyer&rsquo;s money and it is not reducing their balance until
           somebody decides what it settles.
-        </Notice>
+        </Banner>
       ) : null}
 
       <SubPanel title="Instalments">
@@ -464,9 +470,9 @@ function PositionTab({
             account off for handover.
           </p>
         ) : (
-          <Notice tone="warning">
+          <Banner tone="warning">
             Collection clearance cannot be granted: {summary.clearance_blockers.join("; ")}.
-          </Notice>
+          </Banner>
         )}
       </SubPanel>
 
@@ -919,19 +925,12 @@ export function ExceptionsTab({
               </select>
             </Field>
             <Field label="Type">
-              <select
-                className="input"
+              <Segmented
+                label="Type"
                 value={waiverForm.waiver_type}
-                onChange={(event) =>
-                  setWaiverForm({ ...waiverForm, waiver_type: event.target.value })
-                }
-              >
-                {WAIVER_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {waiverTypeLabel(type)}
-                  </option>
-                ))}
-              </select>
+                onChange={(waiver_type) => setWaiverForm({ ...waiverForm, waiver_type })}
+                options={WAIVER_TYPES.map((type) => ({ value: type, label: waiverTypeLabel(type) }))}
+              />
             </Field>
             <Field
               label="Paused until"

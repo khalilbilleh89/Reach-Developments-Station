@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRegisterFields } from "@/components/shell/registerState";
 import { ApiError, commissions, sales } from "@/lib/api";
 import type { CommissionEligibleSale, CommissionGrant, CommissionAllocation, SalesAgent } from "@/lib/api";
 import { money, percent, percentInput, fractionFromPercent } from "@/lib/format";
 import { COMMISSION_PREPARERS, COMMISSION_RELEASERS, hasAnyRole } from "@/lib/roles";
 import type { Roles } from "@/lib/roles";
 import { sectionDescription } from "@/components/shell/navigation";
-import { Badge, Button, ButtonRow, Card, ConfirmDialog, EmptyState, Field, FieldRow, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, RecordPage, RowMenu, SectionHeader, SortHeader, TableScroll, useSort } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, ConfirmDialog, DataToolbar, DensitySwitch, EmptyState, Field, FieldRow, FilterChips, FormDialog, IdentityCell, Loading, MoneyInput, Notice, PageHeader, PromptDialog, RateInput, RecordPage, RowMenu, SavedViews, SectionHeader, Segmented, SortHeader, TableScroll, ToolbarFilter, useSort } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 
 const COMMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {
@@ -42,7 +43,14 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
   const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const params = useSearchParams(); const router = useRouter();
   const selectedId = params.get("commission");
   const selected = rows.find(row => row.id === selectedId) ?? null;
-  const { sort, toggle, sorted } = useSort(rows, readCommissionColumn);
+  const [filters, setFilters] = useRegisterFields({ search: "", status: "" });
+  const { search, status } = filters;
+  // Narrowing the rows already on screen; the register is read in full.
+  const shown = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return rows.filter(row => (!status || row.status === status) && (!needle || [row.unit_reference, row.sale_reference, row.buyer_display].some(value => value.toLowerCase().includes(needle))));
+  }, [rows, search, status]);
+  const { sort, setSort, toggle, sorted } = useSort(shown, readCommissionColumn);
   const commissionHref = (id: string | null) => { const next = new URLSearchParams(params); if (id) next.set("commission", id); else next.delete("commission"); return `/projects/?${next}`; }; const [dialog, setDialog] = useState<"grant" | "edit" | "allocation" | "remove-allocation" | "reverse" | null>(null); const [allocation, setAllocation] = useState<CommissionAllocation | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const canPrepare = hasAnyRole(roles, COMMISSION_PREPARERS); const canRelease = hasAnyRole(roles, COMMISSION_RELEASERS);
@@ -61,8 +69,23 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
   return <div className="stack">
     <PageHeader icon="money" title="Commissions" subtitle={sectionDescription("commissions")} actions={canPrepare && eligible.length ? <Button variant="primary" onClick={() => setDialog("grant")}>Prepare commission</Button> : undefined} />
     {error && !dialog && !selected ? <Notice tone="error">{error}</Notice> : null}
+    {loaded && rows.length ? <>
+      <DataToolbar framed search={{ value: search, onChange: value => setFilters({ search: value }), placeholder: "Unit, sale or buyer", label: "Search commissions" }}
+        count={{ shown: shown.length, total: rows.length, noun: "commission" }}
+        onReset={search || status ? () => setFilters({ search: "", status: "" }) : undefined}
+        actions={<DensitySwitch />}>
+        <ToolbarFilter label="Status" active={status !== ""}>
+          <Segmented label="Status" value={status} onChange={value => setFilters({ status: value })} options={[{ value: "", label: "All" }, ...Object.entries(COMMISSION_STATUS).map(([value, known]) => ({ value, label: known.label }))]} />
+        </ToolbarFilter>
+      </DataToolbar>
+      <FilterChips chips={[
+        status ? { key: "status", label: `Status: ${COMMISSION_STATUS[status]?.label ?? status}`, onRemove: () => setFilters({ status: "" }) } : null,
+        search ? { key: "search", label: `“${search}”`, onRemove: () => setFilters({ search: "" }) } : null,
+      ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)} onClearAll={() => setFilters({ search: "", status: "" })} />
+      <SavedViews screen="commissions" filters={{ status }} sort={sort} onApply={(saved, savedSort) => { setFilters({ status: String(saved.status ?? "") }); setSort(savedSort); }} />
+    </> : null}
     <Card title="Commission register" description="Open a sale's commission to review its grant and beneficiary distribution." flush>
-      {!loaded ? !error ? <Loading label="Loading commissions" shape="rows" /> : null : rows.length ? (
+      {!loaded ? !error ? <Loading label="Loading commissions" shape="rows" /> : null : rows.length && !shown.length ? <div className="card-body"><EmptyState title="No commission matches" hint="Widen the filters to see the rest." /></div> : rows.length ? (
         <TableScroll label="Commission register" fixedFirst>
           <thead><tr><SortHeader column="unit" sort={sort} onToggle={toggle}>Unit / sale</SortHeader><SortHeader column="buyer" sort={sort} onToggle={toggle}>Buyer</SortHeader><SortHeader column="sold" sort={sort} onToggle={toggle} className="num">Sold price</SortHeader><SortHeader column="base" sort={sort} onToggle={toggle} className="num">Commission base</SortHeader><SortHeader column="granted" sort={sort} onToggle={toggle} className="num">Granted</SortHeader><SortHeader column="total" sort={sort} onToggle={toggle} className="num">Commission total</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader></tr></thead>
           <tbody>{sorted.map((x) => <tr key={x.id} aria-selected={selected?.id === x.id}>
@@ -85,13 +108,20 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
       title={`${selected.unit_reference} commission`}
       subtitle={`${selected.sale_reference} · ${selected.buyer_display}`}
       meta={<CommissionStatus status={selected.status} />}
-      headline={{ value: money(selected.commission_total, currencyCodes[selected.currency_id]), label: "Granted commission" }}
-      facts={[
-        { label: "Commissionable base", value: money(selected.commissionable_base_amount, currencyCodes[selected.currency_id]) },
-        { label: "Granted rate", value: percent(selected.granted_rate_fraction) },
-        { label: "Distributed rate", value: percent(selected.allocation_rate_total) },
-        { label: "Distributed amount", value: money(selected.allocation_amount_total, currencyCodes[selected.currency_id]) },
-      ]}
+      strip={{
+        lead: { label: "Granted commission", value: money(selected.commission_total, currencyCodes[selected.currency_id]) },
+        items: [
+          { label: "Commissionable base", value: money(selected.commissionable_base_amount, currencyCodes[selected.currency_id]) },
+          { label: "Granted rate", value: percent(selected.granted_rate_fraction) },
+          { label: "Distributed rate", value: percent(selected.allocation_rate_total), tone: selected.status === "draft" && !selected.is_reconciled ? "danger" : undefined },
+          { label: "Distributed amount", value: money(selected.allocation_amount_total, currencyCodes[selected.currency_id]) },
+        ],
+      }}
+      next={commissionNext(selected, {
+        addBeneficiary: canPrepare ? () => { setAllocation(null); setDialog("allocation"); } : undefined,
+        release: canRelease && selected.prepared_by_user_id !== userId ? () => void run(() => commissions.release(projectId, selected.id)) : undefined,
+        busy,
+      })}
       onClose={() => { if (!busy) router.push(commissionHref(null), {scroll: false}); }}
       actions={<ButtonRow>
         {canPrepare && selected.status === "draft" ? <Button disabled={busy} onClick={() => setDialog("edit")}>Edit Commission</Button> : null}
@@ -140,6 +170,23 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
     {dialog === "reverse" && selected ? <PromptDialog busy={busy} error={error} title="Reverse commission" label="Reason" hint="This preserves the released record and does not change the sale price, Unit Economics or confirmed project cash." confirmLabel="Reverse" onCancel={() => { if (!busy) setDialog(null); }} onSubmit={(reason) => void run(() => commissions.reverse(projectId, selected.id, reason))} /> : null}
   </div>;
 }
+/**
+ * What a commission file says comes next (design system K4), from its own
+ * status and the server's reconciliation flag. Released and reversed files
+ * have nothing pending, so they carry no line.
+ */
+function commissionNext(grant: CommissionGrant, act: { addBeneficiary?: () => void; release?: () => void; busy: boolean }) {
+  if (grant.status !== "draft") return undefined;
+  if (!grant.is_reconciled) return {
+    text: "The beneficiary distribution does not reconcile to the grant yet. Add or correct beneficiaries before release.",
+    action: act.addBeneficiary ? <Button small disabled={act.busy} onClick={act.addBeneficiary}>Add beneficiary</Button> : undefined,
+  };
+  return {
+    text: act.release ? "The distribution reconciles. It is ready for release." : "The distribution reconciles. Release is made by a releaser other than the preparer.",
+    action: act.release ? <Button small variant="primary" disabled={act.busy} onClick={act.release}>Release</Button> : undefined,
+  };
+}
+
 function GrantDialog({ busy, error, sales, codes, onCancel, onSubmit }: { busy: boolean; error: string | null; sales: CommissionEligibleSale[]; codes: Record<string, string>; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) { const [sale, setSale] = useState(sales[0]?.id ?? ""); const chosen = sales.find((x) => x.id === sale); const [base, setBase] = useState(""); const [rate, setRate] = useState(""); return <FormDialog busy={busy} title="Prepare commission" confirmLabel="Save draft" disabled={!sale || !base || !rate} onCancel={onCancel} onSubmit={() => onSubmit({ sale_contract_id: sale, commissionable_base_amount: base, granted_rate_fraction: fractionFromPercent(rate) })}>{error ? <Notice tone="error">{error}</Notice> : null}<Field label="Sold contract"><select className="input" value={sale} onChange={(e) => setSale(e.target.value)}>{sales.map((x) => <option key={x.id} value={x.id}>{x.unit_reference} · {x.buyer_display} · {money(x.sold_price, codes[x.currency_id])}</option>)}</select></Field>{chosen ? <p>Sale agent: {chosen.sale_agent_name ?? "Not recorded"}{chosen.sale_agent_name && !chosen.sale_agent_id ? " (legacy attribution)" : ""}<br />Sale branch: {chosen.sale_agent_branch ?? "Not recorded"}</p> : null}<FieldRow><Field label="Commissionable base"><MoneyInput code={chosen ? codes[chosen.currency_id] : null} value={base} onChange={setBase} /></Field><Field label="Granted commission percentage"><RateInput value={rate} onChange={setRate} /></Field></FieldRow></FormDialog>; }
 function AllocationDialog({ allocation, sale, agents, agentError, busy, error, onCancel, onSubmit }: { allocation: CommissionAllocation | null; sale: CommissionGrant; agents: SalesAgent[]; agentError: string | null; busy: boolean; error: string | null; onCancel: () => void; onSubmit: (body: Record<string, unknown>) => void }) {
   const [beneficiaryType, setBeneficiaryType] = useState<"agent" | "branch" | "other">(allocation?.beneficiary_type === "legacy" ? "other" : allocation?.beneficiary_type ?? "agent");
@@ -153,7 +200,7 @@ function AllocationDialog({ allocation, sale, agents, agentError, busy, error, o
   const disabled = !rate || (beneficiaryType === "agent" && (!agentId || Boolean(agentError))) || (beneficiaryType === "branch" && !sale.sale_agent_branch);
   return <FormDialog title={allocation ? "Edit Beneficiary" : "Add beneficiary"} busy={busy} description="The percentage applies directly to the commissionable base." confirmLabel="Save beneficiary" disabled={disabled} onCancel={onCancel} onSubmit={() => onSubmit({ beneficiary_type: beneficiaryType, ...(beneficiaryType === "agent" ? { sales_agent_id: agentId } : beneficiaryType === "other" ? { beneficiary_name: name.trim() || null } : {}), rate_fraction: fractionFromPercent(rate), notes: notes || null })}>
     {error ? <Notice tone="error">{error}</Notice> : null}
-    <Field label="Beneficiary type"><select className="input" value={beneficiaryType} onChange={(event) => setBeneficiaryType(event.target.value as "agent" | "branch" | "other")}><option value="agent">Agent</option><option value="branch">Branch</option><option value="other">Other</option></select></Field>
+    <Field label="Beneficiary type"><Segmented label="Beneficiary type" value={beneficiaryType} onChange={setBeneficiaryType} options={[{ value: "agent", label: "Agent" }, { value: "branch", label: "Branch" }, { value: "other", label: "Other" }]} /></Field>
     {beneficiaryType === "agent" ? <Field label="Agent"><select className="input" value={agentId} onChange={(event) => setAgentId(event.target.value)}><option value="">Select registered Agent</option>{options.map((agent) => <option key={agent.id} value={agent.id}>{agent.display_name}{agent.branch ? ` — ${agent.branch}` : ""}{!agent.is_active ? " (inactive; existing allocation only)" : ""}</option>)}</select></Field> : null}
     {beneficiaryType === "branch" ? <p>Sale branch: {sale.sale_agent_branch ?? "No branch is recorded on this Sale. Correct the Sale attribution first."}</p> : null}
     {beneficiaryType === "other" ? <Field label="Beneficiary name" optional><input className="input" value={name} onChange={(event) => setName(event.target.value)} /></Field> : null}

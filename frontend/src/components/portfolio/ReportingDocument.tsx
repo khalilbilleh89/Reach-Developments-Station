@@ -1,6 +1,6 @@
 "use client";
 
-import { Disclosure, KeyValue, KeyValueGrid, Notice, Position, PositionFigure, SectionHeader, TableScroll } from "@/components/ui";
+import { Badge, Disclosure, KeyValue, KeyValueGrid, Notice, Position, PositionFigure, SectionHeader, TableScroll } from "@/components/ui";
 import type { MoneyMetric, ProjectSummary } from "@/lib/api/portfolio";
 import type { BoardPack, Comparison, Movement, Snapshot } from "@/lib/api/reporting";
 import { businessDate, eventTime, money } from "@/lib/format";
@@ -16,7 +16,7 @@ function DevelopmentFacts({ snapshot }: { snapshot: Snapshot }) {
       <thead><tr><th scope="col">Project / record</th><th scope="col">Captured status</th><th scope="col">Dates</th></tr></thead>
       <tbody>{snapshot.payload.development.map(f => <tr key={`${f.kind}:${f.source_id}`}>
         <th scope="row" className="cell-prose">{snapshot.payload.projects.find(p => p.project_id === f.project_id)?.code} · {f.label}<p>{label(f.kind)}</p></th>
-        <td className="cell-prose">{label(f.status)}{f.blocking !== null ? <p>{f.blocking ? "Blocking permit" : "Non-blocking permit"}</p> : null}</td>
+        <td className="cell-prose"><Badge>{label(f.status)}</Badge>{f.blocking !== null ? <p>{f.blocking ? "Blocking permit" : "Non-blocking permit"}</p> : null}</td>
         <td className="cell-prose">Due {businessDate(f.due_date)}<p>Planned {businessDate(f.planned_date)}</p><p>Forecast {businessDate(f.forecast_date)}</p><p>Actual {businessDate(f.actual_date)}</p></td>
       </tr>)}</tbody>
     </TableScroll>
@@ -30,7 +30,7 @@ function FrozenMoney({ rows, title }: { rows: MoneyMetric[]; title: string }) {
 
 function Executive({ snapshot }: { snapshot: Snapshot }) {
   const p=snapshot.payload.overview, a=snapshot.payload.action_counts;
-  return <section className="reporting-executive"><SectionHeader level={2} title="Executive position" /><Position compact><PositionFigure lead label="Projects" value={snapshot.project_count} /><PositionFigure label="Committed / eligible" value={`${p.committed_units} / ${p.eligible_units}`} /><PositionFigure label="Active sold" value={p.active_sold_units} />{p.cancelled_sales !== null && p.cancelled_sales !== undefined ? <PositionFigure label="Cancelled sales" value={p.cancelled_sales} /> : null}<PositionFigure label="Source risks" value={p.risk_count} /><PositionFigure label="Overdue actions" value={a.overdue} /></Position><p>Sales penetration: {p.sales_penetration.percentage === null ? "Unavailable" : `${p.sales_penetration.percentage}%`} · {p.sales_penetration.availability}</p><p>{snapshot.incomplete_project_count} {snapshot.incomplete_project_count === 1 ? "project has" : "projects have"} incomplete source coverage. Missing information needs review.</p></section>;
+  return <section className="reporting-executive"><SectionHeader level={2} title="Executive position" /><Position compact><PositionFigure lead label="Projects" value={snapshot.project_count} /><PositionFigure label="Committed / eligible" value={`${p.committed_units} / ${p.eligible_units}`} /><PositionFigure label="Active sold" value={p.active_sold_units} />{p.cancelled_sales !== null && p.cancelled_sales !== undefined ? <PositionFigure label="Cancelled sales" value={p.cancelled_sales} /> : null}<PositionFigure label="Source risks" value={p.risk_count} /><PositionFigure label="Overdue actions" value={a.overdue} /><PositionFigure label="Sales penetration" value={p.sales_penetration.percentage === null ? "Unavailable" : `${p.sales_penetration.percentage}%`} note={p.sales_penetration.availability} /></Position><p>{snapshot.incomplete_project_count} {snapshot.incomplete_project_count === 1 ? "project has" : "projects have"} incomplete source coverage. Missing information needs review.</p></section>;
 }
 
 function Projects({ snapshot }: { snapshot: Snapshot }) {
@@ -50,7 +50,7 @@ function Forward({ snapshot }: { snapshot: Snapshot }) {
 
 function Actions({ snapshot }: { snapshot: Snapshot }) {
   const counts=snapshot.payload.action_counts;
-  return <section className="reporting-section"><SectionHeader level={2} title="Management actions" /><p>{counts.open} open · {counts.in_progress} in progress · {counts.overdue} overdue · {counts.completed} completed at capture</p><p className="muted">Action completion and source-risk resolution are independent facts.</p><TableScroll label="Captured management action position"><thead><tr><th scope="col">Action / project</th><th scope="col">Owner</th><th scope="col">Due / state</th><th scope="col">Origin</th></tr></thead><tbody>{snapshot.payload.actions.filter(a=>a.status==="open"||a.status==="in_progress").map(a=><tr key={a.id}><th scope="row" className="cell-prose">{a.title}<p>{snapshot.payload.projects.find(p=>p.project_id===a.project_id)?.code}</p></th><td>{a.owner.display_name}</td><td>{businessDate(a.due_date)}<p>{label(a.status)}</p></td><td>{label(a.source_type)}<p>{a.source_code}</p></td></tr>)}</tbody></TableScroll></section>;
+  return <section className="reporting-section"><SectionHeader level={2} title="Management actions" /><p>{counts.open} open · {counts.in_progress} in progress · {counts.overdue} overdue · {counts.completed} completed at capture</p><p className="muted">Action completion and source-risk resolution are independent facts.</p><TableScroll label="Captured management action position"><thead><tr><th scope="col">Action / project</th><th scope="col">Owner</th><th scope="col">Due / state</th><th scope="col">Origin</th></tr></thead><tbody>{snapshot.payload.actions.filter(a=>a.status==="open"||a.status==="in_progress").map(a=><tr key={a.id}><th scope="row" className="cell-prose">{a.title}<p>{snapshot.payload.projects.find(p=>p.project_id===a.project_id)?.code}</p></th><td>{a.owner.display_name}</td><td>{businessDate(a.due_date)}<p><Badge>{label(a.status)}</Badge></p></td><td>{label(a.source_type)}<p>{a.source_code}</p></td></tr>)}</tbody></TableScroll></section>;
 }
 
 function Coverage({ snapshot }: { snapshot: Snapshot }) {

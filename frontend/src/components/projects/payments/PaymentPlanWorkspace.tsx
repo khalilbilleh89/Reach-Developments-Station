@@ -13,6 +13,7 @@ import type {
 } from "@/lib/api";
 import {
   Badge,
+  Banner,
   Button,
   ButtonRow,
   DraftBoundary,
@@ -30,6 +31,7 @@ import {
   Notice,
   PromptDialog,
   SectionHeader,
+  Segmented,
   Steps,
   SubPanel,
   TableScroll,
@@ -591,18 +593,18 @@ export function PaymentPlanWorkspace({
           ) : null}
 
           {isHistory ? (
-            <Notice tone="info">
+            <Banner
+              tone="info"
+              action={
+                <Button small data-leaves-editor onClick={() => setShowing(null)}>
+                  Back to the current version
+                </Button>
+              }
+            >
               Reading version {version.version_number} as it stands. Nothing
               here can be changed — a superseded schedule is the record of what
-              governed, and it is kept exactly as it was.{" "}
-              <button
-                className="button-link"
-                type="button"
-                data-leaves-editor onClick={() => setShowing(null)}
-              >
-                Back to the current version
-              </button>
-            </Notice>
+              governed, and it is kept exactly as it was.
+            </Banner>
           ) : null}
 
           <section>
@@ -687,16 +689,15 @@ export function PaymentPlanWorkspace({
                 </p>
                 <FieldRow columns={4}>
                   <Field label="Frequency">
-                    <select
-                      className="input"
+                    <Segmented
+                      label="Frequency"
                       value={series.frequency}
-                      onChange={(event) =>
-                        setSeries({ ...series, frequency: event.target.value })
-                      }
-                    >
-                      <option value="recurring_monthly">Monthly</option>
-                      <option value="recurring_quarterly">Quarterly</option>
-                    </select>
+                      onChange={(frequency) => setSeries({ ...series, frequency })}
+                      options={[
+                        { value: "recurring_monthly", label: "Monthly" },
+                        { value: "recurring_quarterly", label: "Quarterly" },
+                      ]}
+                    />
                   </Field>
                   <Field label="First due date">
                     <input
@@ -753,33 +754,27 @@ export function PaymentPlanWorkspace({
                     label="Enter instalments as"
                     hint="Choose percentages or principal amounts from the SPA."
                   >
-                    <select
-                      className="input"
+                    <Segmented
+                      label="Enter instalments as"
                       value={allocationMode}
-                      onChange={(event) =>
-                        setAllocationMode(event.target.value)
-                      }
-                    >
-                      <option value="percentage">
-                        {allocationLabel("percentage")}
-                      </option>
-                      <option value="amount">
-                        {allocationLabel("amount")}
-                      </option>
-                    </select>
+                      onChange={setAllocationMode}
+                      options={[
+                        { value: "percentage", label: allocationLabel("percentage") },
+                        { value: "amount", label: allocationLabel("amount") },
+                      ]}
+                    />
                   </Field>
                   <Field label="Tax and buyer fees" hint="Choose VAT / Tax % per instalment to apply different rates. Enter 0 explicitly for zero VAT. Save to recalculate each row and the plan total.">
-                    <select
-                      className="input"
+                    <Segmented
+                      label="Tax and buyer fees"
                       value={chargeMode}
-                      onChange={(event) => setChargeMode(event.target.value)}
-                    >
-                      <option value="per_installment">VAT / Tax % per instalment</option>
-                      <option value="pro_rata">
-                        {chargeLabel("pro_rata")}
-                      </option>
-                      <option value="manual">{chargeLabel("manual")}</option>
-                    </select>
+                      onChange={setChargeMode}
+                      options={[
+                        { value: "per_installment", label: "VAT / Tax % per instalment" },
+                        { value: "pro_rata", label: chargeLabel("pro_rata") },
+                        { value: "manual", label: chargeLabel("manual") },
+                      ]}
+                    />
                   </Field>
                 </FieldRow>
                 {rows.length === 0 ? (
@@ -829,7 +824,7 @@ export function PaymentPlanWorkspace({
 
           <section>
             <SectionHeader level={2} title="What happens next" />
-            {scheduleDirty ? <Notice tone="info">Save schedule changes before submitting for approval.</Notice> : null}
+            {scheduleDirty ? <Banner tone="warning">Save schedule changes before submitting for approval.</Banner> : null}
             <ButtonRow>
               {canPrepare && isCurrent && isDraft ? (
                 <Button

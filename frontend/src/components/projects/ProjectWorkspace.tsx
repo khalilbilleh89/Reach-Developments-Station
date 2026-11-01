@@ -4,6 +4,7 @@ import { AgreementsTab } from "./AgreementsTab";
 
 import { DevelopmentWorkspace } from "./DevelopmentWorkspace";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
@@ -27,7 +28,7 @@ import {
   visibleNavigation,
 } from "@/components/shell/navigation";
 import type { ProjectSection } from "@/components/shell/navigation";
-import { Disclosure, Badge, Card, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
+import { Disclosure, Badge, Banner, Card, EmptyState, Loading, Notice, PageHeader } from "@/components/ui";
 import { ProjectCommandCenter } from "@/components/dashboard/ProjectCommandCenter";
 import { AccessTab } from "@/components/projects/AccessTab";
 import { CashflowTab } from "@/components/projects/CashflowTab";
@@ -209,7 +210,7 @@ export function ProjectWorkspace({
     }
     if (record) {
       if (record.invalid) return <><PageHeader title="Record not found" /><Notice tone="error">This record address is invalid.</Notice><a href={projectHref(projectId, section)}>Return to register</a></>;
-      if (project.status === "setup") return <><PageHeader title="Finalize project setup first" /><Notice tone="info">Complete project setup before opening records.</Notice></>;
+      if (project.status === "setup") return <><PageHeader title="Finalize project setup first" /><Banner tone="warning" action={<Link className="button button-small" href={projectHref(projectId)}>Open project overview</Link>}>Complete project setup before opening records. Setup is finished from the project overview.</Banner></>;
       if (record.kind === "payment-plan") return <PaymentPlanWorkspace key={record.id} projectId={projectId} roles={roles} planId={record.id} onChanged={changed} />;
       if (record.kind === "sale" || record.kind === "reservation") return <SaleWorkspace key={`${record.kind}:${record.id}`} projectId={projectId} roles={roles} saleId={record.kind === "sale" ? record.id : null} reservationId={record.kind === "reservation" ? record.id : null} onChanged={changed} />;
       if (record.kind === "unit") return <UnitWorkspace key={record.id} projectId={projectId} roles={roles} unitId={record.id} canWriteStructure={canWriteTechnical} canConfigure={canWriteProject} onChanged={changed} />;

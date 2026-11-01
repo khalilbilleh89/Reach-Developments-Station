@@ -5,13 +5,13 @@ import { useState } from "react";
 import type { Unit } from "@/lib/api";
 import {
   Badge,
+  Banner,
   Button,
   Field,
   FieldRow,
   FormActions,
   KeyValue,
   KeyValueGrid,
-  Notice,
   SectionHeader,
   SubPanel,
 } from "@/components/ui";
@@ -135,10 +135,10 @@ export function CommercialUnitControls({
           <KeyValue label="Legally saleable" value={unit.legal_sale_eligible ? "Yes" : "No"} />
         </KeyValueGrid>
         {unit.block_reason ? (
-          <Notice tone="warning">Held: {unit.block_reason}</Notice>
+          <Banner tone="warning">Held: {unit.block_reason}</Banner>
         ) : null}
         {unit.release_blockers.length > 0 ? (
-          <Notice tone="info">Not releasable yet: {unit.release_blockers.join("; ")}.</Notice>
+          <Banner tone="info">Not releasable yet: {unit.release_blockers.join("; ")}.</Banner>
         ) : null}
         {unit.missing_requirements.length > 0 ? (
           <p className="footnote">Outstanding: {unit.missing_requirements.join(", ")}.</p>

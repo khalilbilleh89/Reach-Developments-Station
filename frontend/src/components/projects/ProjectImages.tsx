@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Button, Card, ConfirmDialog, EmptyState, Field, Loading, Notice } from "@/components/ui";
+import { Button, Card, ConfirmDialog, EmptyState, Field, Loading, Notice, Segmented } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
 import { ApiError, projects } from "@/lib/api";
 import type { ProjectImage } from "@/lib/api";
@@ -96,16 +96,14 @@ export function ProjectImages({ projectId, canEdit, managementHref }: {
       {canEdit ? (
         <div className="project-images-controls">
           <Field label="Image category">
-            <select
-              className="input"
-              value={category}
-              disabled={busy}
-              onChange={event => setCategory(event.target.value as ProjectImage["category"])}
-            >
-              {CATEGORIES.map(option => (
-                <option value={option.value} key={option.value}>{option.label}</option>
-              ))}
-            </select>
+            <fieldset className="draft-fields" disabled={busy}>
+              <Segmented<ProjectImage["category"]>
+                label="Image category"
+                value={category}
+                onChange={setCategory}
+                options={CATEGORIES.map(option => ({ value: option.value, label: option.label }))}
+              />
+            </fieldset>
           </Field>
           <Field label="Images" hint="JPEG, PNG or WebP; up to 10 MB each.">
             <input

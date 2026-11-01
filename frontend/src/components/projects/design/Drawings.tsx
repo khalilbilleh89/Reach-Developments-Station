@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAnswer } from "@/lib/answer";
 import { drawings, drawingCategories, drawingStatuses, filterDrawings } from "@/lib/api/drawings";
 import type { Drawing, DrawingFields } from "@/lib/api/drawings";
-import { Badge, Button, ButtonRow, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, Loading, Notice, RecordPage, SectionHeader } from "@/components/ui";
+import { Badge, Button, ButtonRow, Card, DataToolbar, DraftBoundary, EmptyState, Field, FieldRow, FilterChips, FormActions, Loading, Notice, RecordPage, SectionHeader, Segmented, ToolbarFilter } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 const blank: DrawingFields = { name: "", category: "general", drawing_number: "", location: "", revision: "", status: "reference", notes: "" };
@@ -61,7 +61,7 @@ export function DrawingViewer({ projectId, row, onClose }: { projectId: string; 
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className="drawing-view-controls">
         <ButtonRow><Button disabled={page <= 1 || preview.status === "loading"} onClick={() => setPage(page - 1)}>Previous page</Button><span aria-live="polite">Page {page}{preview.status === "ready" ? ` of ${preview.data.page_count}` : ""}</span><Button disabled={preview.status !== "ready" || page >= preview.data.page_count} onClick={() => setPage(page + 1)}>Next page</Button></ButtonRow>
-        <Field label="Zoom"><select className="input" value={zoom} onChange={e => setZoom(Number(e.target.value))}><option value={100}>Fit width</option><option value={150}>150%</option><option value={200}>200%</option><option value={300}>300%</option></select></Field>
+        <Field label="Zoom"><Segmented label="Zoom" value={String(zoom)} onChange={value => setZoom(Number(value))} options={[{ value: "100", label: "Fit width" }, { value: "150", label: "150%" }, { value: "200", label: "200%" }, { value: "300", label: "300%" }]} /></Field>
       </div>
       {preview.status === "loading" ? <Loading label="Opening drawing page…" /> : null}
       {preview.status === "denied" ? <Notice tone="warning">This drawing is no longer available to your account.</Notice> : null}
@@ -89,11 +89,17 @@ export function Drawings({ projectId, canWrite }: { projectId: string; canWrite:
   const rows = answer.status === "ready" ? filterDrawings(answer.data, search, category, status) : [];
   return <div className="stack">
     <SectionHeader title="Drawings" description="Project drawings and floor plans, organized for quick review." actions={canWrite ? <Button variant="primary" onClick={() => setEditor({})}>Add drawing</Button> : undefined} />
-    <Card><FieldRow columns={3}>
-      <Field label="Find a drawing"><input className="input" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, number, floor or revision…" /></Field>
-      <Field label="Category"><select className="input" value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{Object.entries(drawingCategories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-      <Field label="Status"><select className="input" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option>{Object.entries(drawingStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-    </FieldRow>{search || category || status ? <Button variant="quiet" onClick={() => { setSearch(""); setCategory(""); setStatus(""); }}>Clear filters</Button> : null}</Card>
+    <DataToolbar framed search={{ value: search, onChange: setSearch, placeholder: "Name, number, floor or revision…", label: "Find a drawing" }}
+      count={answer.status === "ready" ? { shown: rows.length, total: answer.data.length, noun: "drawing" } : undefined}
+      onReset={search || category || status ? () => { setSearch(""); setCategory(""); setStatus(""); } : undefined}>
+      <ToolbarFilter label="Category" active={category !== ""}><select className="input" value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{Object.entries(drawingCategories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></ToolbarFilter>
+      <ToolbarFilter label="Status" active={status !== ""}><select className="input" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option>{Object.entries(drawingStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></ToolbarFilter>
+    </DataToolbar>
+    <FilterChips onClearAll={() => { setSearch(""); setCategory(""); setStatus(""); }} chips={[
+      ...(category ? [{ key: "category", label: `Category: ${drawingCategories[category as keyof typeof drawingCategories] ?? category}`, onRemove: () => setCategory("") }] : []),
+      ...(status ? [{ key: "status", label: `Status: ${drawingStatuses[status as keyof typeof drawingStatuses] ?? status}`, onRemove: () => setStatus("") }] : []),
+      ...(search ? [{ key: "search", label: `“${search}”`, onRemove: () => setSearch("") }] : []),
+    ]} />
     {answer.status === "loading" ? <Loading label="Loading drawings…" shape="rows" /> : null}
     {answer.status === "failed" ? <><Notice tone="error">{answer.message}</Notice><Button onClick={answer.retry}>Retry drawings</Button></> : null}
     {answer.status === "denied" ? <Notice tone="warning">Drawings require whole-project Design access.</Notice> : null}

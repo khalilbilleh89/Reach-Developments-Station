@@ -11,10 +11,12 @@ import {
   Button,
   Card,
   DataToolbar,
+  DensitySwitch,
   RecordPage,
   EmptyState,
   Field,
   FieldRow,
+  FilterChips,
   FormDialog,
   Icon,
   IdentityCell,
@@ -22,8 +24,11 @@ import {
   KeyValueGrid,
   Notice,
   PlaceCell,
+  SortHeader,
+  StatusDot,
   TableScroll,
   ToolbarFilter,
+  useSort,
 } from "@/components/ui";
 
 /**
@@ -62,6 +67,23 @@ function matches(haystack: string, needle: string): boolean {
   return haystack.toLowerCase().includes(needle.trim().toLowerCase());
 }
 
+/** Whether a hierarchy record is in use, as a status rather than a bare Yes or No. */
+function Activity({ active }: { active: boolean }) {
+  return <StatusDot tone={active ? "success" : "muted"}>{active ? "Active" : "Inactive"}</StatusDot>;
+}
+
+/** Orders the phases already on screen; every value compared is the server's. */
+function readPhaseColumn(phase: Phase, column: string): string | number | null {
+  switch (column) {
+    case "phase": return phase.code;
+    case "status": return statusLabel(phase.status);
+    case "start": return phase.planned_start;
+    case "completion": return phase.planned_completion;
+    case "active": return phase.is_active ? "Active" : "Inactive";
+    default: return null;
+  }
+}
+
 // --------------------------------------------------------------------------- //
 // Phases
 // --------------------------------------------------------------------------- //
@@ -86,6 +108,7 @@ export function PhasesView({
   const [search, setSearch] = useState("");
 
   const shown = phases.filter((phase) => matches(`${phase.code} ${phase.name}`, search));
+  const { sort, toggle, sorted } = useSort(shown, readPhaseColumn);
 
   return (
     <>
@@ -100,13 +123,17 @@ export function PhasesView({
         count={{ shown: shown.length, total: phases.length, noun: "phase" }}
         onReset={search ? () => setSearch("") : undefined}
         actions={
-          canConfigure ? (
-            <Button variant="primary" onClick={() => setEditing("new")}>
-              Add phase
-            </Button>
-          ) : undefined
+          <>
+            <DensitySwitch />
+            {canConfigure ? (
+              <Button variant="primary" onClick={() => setEditing("new")}>
+                Add phase
+              </Button>
+            ) : null}
+          </>
         }
       />
+      <FilterChips chips={search ? [{ key: "search", label: `“${search}”`, onRemove: () => setSearch("") }] : []} />
 
       <Card flush>
         {shown.length === 0 ? (
@@ -124,18 +151,18 @@ export function PhasesView({
           <TableScroll label="Phase register" fixedFirst>
             <thead>
               <tr>
-                <th scope="col">Phase</th>
-                <th scope="col">Status</th>
-                <th scope="col">Planned start</th>
-                <th scope="col">Planned completion</th>
-                <th scope="col">Active</th>
+                <SortHeader column="phase" sort={sort} onToggle={toggle}>Phase</SortHeader>
+                <SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>
+                <SortHeader column="start" sort={sort} onToggle={toggle}>Planned start</SortHeader>
+                <SortHeader column="completion" sort={sort} onToggle={toggle}>Planned completion</SortHeader>
+                <SortHeader column="active" sort={sort} onToggle={toggle}>Active</SortHeader>
                 <th scope="col">
                   <span className="visually-hidden">Open</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((phase) => (
+              {sorted.map((phase) => (
                 <tr key={phase.id} aria-selected={selected?.id === phase.id}>
                   <th scope="row">
                     <button className="button-link" type="button" onClick={() => setSelected(phase)}>
@@ -147,7 +174,7 @@ export function PhasesView({
                   </td>
                   <td>{businessDate(phase.planned_start)}</td>
                   <td>{businessDate(phase.planned_completion)}</td>
-                  <td>{phase.is_active ? "Yes" : "No"}</td>
+                  <td><Activity active={phase.is_active} /></td>
                   <td className="row-go" aria-hidden="true">
                     <Icon name="chevron" />
                   </td>
@@ -163,11 +190,16 @@ export function PhasesView({
           eyebrow={selected.code}
           title={selected.name}
           onClose={() => setSelected(null)}
-          facts={[
-            { label: "Status", value: statusLabel(selected.status) },
-            { label: "Sequence", value: String(selected.sequence) },
-            { label: "Active", value: selected.is_active ? "Yes" : "No" },
-          ]}
+          strip={{
+            lead: { label: "Status", value: statusLabel(selected.status) },
+            items: [
+              { label: "Planned start", value: businessDate(selected.planned_start) },
+              { label: "Planned completion", value: businessDate(selected.planned_completion) },
+              { label: "Sequence", value: String(selected.sequence) },
+              { label: "Active", value: selected.is_active ? "Yes" : "No" },
+            ],
+          }}
+          more={canAdmin ? <DeleteRecordButton label="phase" recordName={selected.code} description="This permanently removes this phase. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "phases", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : undefined}
           actions={
             <>
               <Button
@@ -187,12 +219,6 @@ export function PhasesView({
           }
         >
           <KeyValueGrid>
-            <KeyValue label="Planned start" value={businessDate(selected.planned_start)} />
-            {canAdmin ? <DeleteRecordButton label="phase" recordName={selected.code} description="This permanently removes this phase. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "phases", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
-            <KeyValue
-              label="Planned completion"
-              value={businessDate(selected.planned_completion)}
-            />
             <KeyValue label="Notes" value={selected.notes ?? "None"} />
           </KeyValueGrid>
         </RecordPage>
@@ -377,6 +403,19 @@ export function BuildingsView({
   const phaseOf = (building: Building) => phases.find((phase) => phase.id === building.phase_id);
   const inPhase = phaseId ? buildings.filter((b) => b.phase_id === phaseId) : buildings;
   const shown = inPhase.filter((building) => matches(`${building.code} ${building.name}`, search));
+  const readBuilding = (building: Building, column: string): string | number | null => {
+    switch (column) {
+      case "building": return building.code;
+      case "phase": return phaseOf(building)?.code ?? null;
+      case "zone": return building.zone;
+      case "block": return building.block;
+      case "sequence": return building.sequence;
+      case "active": return building.is_active ? "Active" : "Inactive";
+      default: return null;
+    }
+  };
+  const { sort, toggle, sorted } = useSort(shown, readBuilding);
+  const filteredPhase = phases.find((phase) => phase.id === phaseId);
 
   return (
     <>
@@ -398,11 +437,14 @@ export function BuildingsView({
             : undefined
         }
         actions={
-          canWriteStructure && phases.length > 0 ? (
-            <Button variant="primary" onClick={() => setEditing("new")}>
-              Add building
-            </Button>
-          ) : undefined
+          <>
+            <DensitySwitch />
+            {canWriteStructure && phases.length > 0 ? (
+              <Button variant="primary" onClick={() => setEditing("new")}>
+                Add building
+              </Button>
+            ) : null}
+          </>
         }
       >
         <ToolbarFilter label="Phase" active={phaseId !== ""}>
@@ -416,6 +458,16 @@ export function BuildingsView({
           </select>
         </ToolbarFilter>
       </DataToolbar>
+      <FilterChips
+        chips={[
+          filteredPhase ? { key: "phase", label: `Phase: ${filteredPhase.code}`, onRemove: () => onPhase("") } : null,
+          search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+        ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)}
+        onClearAll={() => {
+          setSearch("");
+          onPhase("");
+        }}
+      />
 
       <Card flush>
         {shown.length === 0 ? (
@@ -435,21 +487,19 @@ export function BuildingsView({
           <TableScroll label="Building register" fixedFirst>
             <thead>
               <tr>
-                <th scope="col">Building</th>
-                <th scope="col">Phase</th>
-                <th scope="col">Zone</th>
-                <th scope="col">Block</th>
-                <th scope="col" className="num">
-                  Sequence
-                </th>
-                <th scope="col">Active</th>
+                <SortHeader column="building" sort={sort} onToggle={toggle}>Building</SortHeader>
+                <SortHeader column="phase" sort={sort} onToggle={toggle}>Phase</SortHeader>
+                <SortHeader column="zone" sort={sort} onToggle={toggle}>Zone</SortHeader>
+                <SortHeader column="block" sort={sort} onToggle={toggle}>Block</SortHeader>
+                <SortHeader column="sequence" sort={sort} onToggle={toggle} className="num">Sequence</SortHeader>
+                <SortHeader column="active" sort={sort} onToggle={toggle}>Active</SortHeader>
                 <th scope="col">
                   <span className="visually-hidden">Open</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((building) => {
+              {sorted.map((building) => {
                 const phase = phaseOf(building);
                 return (
                   <tr key={building.id} aria-selected={selected?.id === building.id}>
@@ -468,7 +518,7 @@ export function BuildingsView({
                     <td>{building.zone ?? "—"}</td>
                     <td>{building.block ?? "—"}</td>
                     <td className="num">{building.sequence}</td>
-                    <td>{building.is_active ? "Yes" : "No"}</td>
+                    <td><Activity active={building.is_active} /></td>
                     <td className="row-go" aria-hidden="true">
                       <Icon name="chevron" />
                     </td>
@@ -486,11 +536,16 @@ export function BuildingsView({
           title={selected.name}
           subtitle={phaseOf(selected)?.name ?? undefined}
           onClose={() => setSelected(null)}
-          facts={[
-            { label: "Phase", value: phaseOf(selected)?.code ?? "—" },
-            { label: "Sequence", value: String(selected.sequence) },
-            { label: "Active", value: selected.is_active ? "Yes" : "No" },
-          ]}
+          strip={{
+            lead: { label: "Phase", value: phaseOf(selected)?.code ?? "—" },
+            items: [
+              { label: "Zone", value: selected.zone ?? "Not stated", tone: selected.zone ? undefined : "muted" },
+              { label: "Block", value: selected.block ?? "Not stated", tone: selected.block ? undefined : "muted" },
+              { label: "Sequence", value: String(selected.sequence) },
+              { label: "Active", value: selected.is_active ? "Yes" : "No" },
+            ],
+          }}
+          more={canAdmin ? <DeleteRecordButton label="building" recordName={selected.code} description="This permanently removes this building. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "buildings", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : undefined}
           actions={
             <>
               <Button
@@ -510,9 +565,6 @@ export function BuildingsView({
           }
         >
           <KeyValueGrid>
-            <KeyValue label="Zone" value={selected.zone ?? "Not stated"} />
-            {canAdmin ? <DeleteRecordButton label="building" recordName={selected.code} description="This permanently removes this building. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "buildings", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
-            <KeyValue label="Block" value={selected.block ?? "Not stated"} />
             <KeyValue label="Entrance / wing" value={selected.entrance_wing ?? "Not stated"} />
           </KeyValueGrid>
         </RecordPage>
@@ -725,6 +777,20 @@ export function FloorsView({
     return true;
   });
   const shown = scoped.filter((floor) => matches(`${floor.code} ${floor.label}`, search));
+  const readFloor = (floor: Floor, column: string): string | number | null => {
+    switch (column) {
+      case "floor": return floor.code;
+      case "building": return buildingOf(floor)?.code ?? null;
+      case "phase": return phaseOfBuilding(buildingOf(floor))?.code ?? null;
+      case "level": return floor.level_number;
+      case "sequence": return floor.sequence;
+      case "active": return floor.is_active ? "Active" : "Inactive";
+      default: return null;
+    }
+  };
+  const { sort, toggle, sorted } = useSort(shown, readFloor);
+  const filteredPhase = phases.find((phase) => phase.id === phaseId);
+  const filteredBuilding = buildings.find((building) => building.id === buildingId);
 
   return (
     <>
@@ -747,11 +813,14 @@ export function FloorsView({
             : undefined
         }
         actions={
-          canWriteStructure && buildings.length > 0 ? (
-            <Button variant="primary" onClick={() => setEditing("new")}>
-              Add floor
-            </Button>
-          ) : undefined
+          <>
+            <DensitySwitch />
+            {canWriteStructure && buildings.length > 0 ? (
+              <Button variant="primary" onClick={() => setEditing("new")}>
+                Add floor
+              </Button>
+            ) : null}
+          </>
         }
       >
         <ToolbarFilter label="Phase" active={phaseId !== ""}>
@@ -779,6 +848,18 @@ export function FloorsView({
           </select>
         </ToolbarFilter>
       </DataToolbar>
+      <FilterChips
+        chips={[
+          filteredPhase ? { key: "phase", label: `Phase: ${filteredPhase.code}`, onRemove: () => onPhase("") } : null,
+          filteredBuilding ? { key: "building", label: `Building: ${filteredBuilding.code}`, onRemove: () => onBuilding("") } : null,
+          search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+        ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)}
+        onClearAll={() => {
+          setSearch("");
+          onPhase("");
+          onBuilding("");
+        }}
+      />
 
       <Card flush>
         {shown.length === 0 ? (
@@ -798,23 +879,19 @@ export function FloorsView({
           <TableScroll label="Floor register" fixedFirst>
             <thead>
               <tr>
-                <th scope="col">Floor</th>
-                <th scope="col">Building</th>
-                <th scope="col">Phase</th>
-                <th scope="col" className="num">
-                  Level
-                </th>
-                <th scope="col" className="num">
-                  Sequence
-                </th>
-                <th scope="col">Active</th>
+                <SortHeader column="floor" sort={sort} onToggle={toggle}>Floor</SortHeader>
+                <SortHeader column="building" sort={sort} onToggle={toggle}>Building</SortHeader>
+                <SortHeader column="phase" sort={sort} onToggle={toggle}>Phase</SortHeader>
+                <SortHeader column="level" sort={sort} onToggle={toggle} className="num">Level</SortHeader>
+                <SortHeader column="sequence" sort={sort} onToggle={toggle} className="num">Sequence</SortHeader>
+                <SortHeader column="active" sort={sort} onToggle={toggle}>Active</SortHeader>
                 <th scope="col">
                   <span className="visually-hidden">Open</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((floor) => {
+              {sorted.map((floor) => {
                 const building = buildingOf(floor);
                 const phase = phaseOfBuilding(building);
                 return (
@@ -830,7 +907,7 @@ export function FloorsView({
                     <td>{phase ? phase.code : "—"}</td>
                     <td className="num">{floor.level_number ?? "—"}</td>
                     <td className="num">{floor.sequence}</td>
-                    <td>{floor.is_active ? "Yes" : "No"}</td>
+                    <td><Activity active={floor.is_active} /></td>
                     <td className="row-go" aria-hidden="true">
                       <Icon name="chevron" />
                     </td>
@@ -852,14 +929,15 @@ export function FloorsView({
             return [building?.name, phase?.name].filter(Boolean).join(" · ") || undefined;
           })()}
           onClose={() => setSelected(null)}
-          facts={[
-            { label: "Building", value: buildingOf(selected)?.code ?? "—" },
-            {
-              label: "Level",
-              value: selected.level_number === null ? "Not stated" : String(selected.level_number),
-            },
-            { label: "Active", value: selected.is_active ? "Yes" : "No" },
-          ]}
+          strip={{
+            lead: { label: "Building", value: buildingOf(selected)?.code ?? "—" },
+            items: [
+              { label: "Level", value: selected.level_number === null ? "Not stated" : String(selected.level_number), tone: selected.level_number === null ? "muted" : undefined },
+              { label: "Sequence", value: String(selected.sequence) },
+              { label: "Active", value: selected.is_active ? "Yes" : "No" },
+            ],
+          }}
+          more={canAdmin ? <DeleteRecordButton label="floor" recordName={selected.code} description="This permanently removes this floor. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "floors", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : undefined}
           actions={
             <>
               <Button
@@ -878,14 +956,7 @@ export function FloorsView({
             </>
           }
         >
-          <KeyValueGrid>
-            <KeyValue label="Sequence" value={String(selected.sequence)} />
-            {canAdmin ? <DeleteRecordButton label="floor" recordName={selected.code} description="This permanently removes this floor. It must be empty first. Linked financial and legal history is protected. The audit trail is retained." onDelete={reason => inventory.deleteRecord(projectId, "floors", selected.id, reason)} onDeleted={async () => { setSelected(null); await onChanged(); }} /> : null}
-            <KeyValue
-              label="Level number"
-              value={selected.level_number === null ? "Not stated" : String(selected.level_number)}
-            />
-          </KeyValueGrid>
+          <p className="footnote">The units on this floor open from View units, with this floor selected in the register.</p>
         </RecordPage>
       ) : null}
 

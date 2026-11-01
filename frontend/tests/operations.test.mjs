@@ -13,11 +13,13 @@ function mount(path, name, dependencies, props) {
   runInNewContext(ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS, jsx:ts.JsxEmit.ReactJSX}}).outputText, {exports, Error, URLSearchParams, require: key => key === "react" ? react : key === "react/jsx-runtime" ? jsx : dependencies[key] ?? new Proxy({}, {get:(_, name) => name})});
   return () => {cursor = 0; return exports[name](props);};
 }
+// The register's sort hook keeps the server's order in this harness.
+const ui = new Proxy({useSort: rows => ({sort:null, toggle(){}, sorted: rows})}, {get:(target, name) => target[name] ?? name});
 const nodes = tree => !tree || typeof tree !== "object" ? [] : Array.isArray(tree) ? tree.flatMap(nodes) : [tree, ...nodes(tree.props?.children)];
 const text = tree => tree == null ? "" : Array.isArray(tree) ? tree.map(text).join(" ") : typeof tree === "object" ? text(tree.props?.children) : String(tree);
 const stage = (id, section="property_purchase") => ({id, label:id, section, position:0, source:"manual", is_active:true});
 const data = {pipeline_version:2, stages:[stage("EOI"), stage("Visa", "golden_visa")], buyers:[], summaries:[], buyer_count:0, golden_visa_count:0, investment_count:0, purpose_unknown_count:0, can_configure:true, can_edit:true};
-const buyer = {id:"buyer", number:"B001", name:"Synthetic Buyer", version:1, purpose:null, milestones:data.stages.map(s => ({stage_id:s.id, completed:null, completed_date:null, applicable:s.section === "property_purchase" ? true : null, source:"Operations", editable:true, total_sales:0, signed_sales:0}))};
+const buyer = {id:"buyer", number:"B001", name:"Synthetic Buyer", active:true, version:1, purpose:null, purchases:[], completed_count:0, applicable_count:1, completion_percent:0, next_stage:"EOI", milestones:data.stages.map(s => ({stage_id:s.id, completed:null, completed_date:null, applicable:s.section === "property_purchase" ? true : null, source:"Operations", editable:true, total_sales:0, signed_sales:0}))};
 
 test("reordering and renaming stages preserve the stable stage identities", async () => {
   let saved;
@@ -33,8 +35,9 @@ test("reordering and renaming stages preserve the stable stage identities", asyn
 test("failed buyer save retains entered status, calendar date, purpose and reason", async () => {
   let submitted;
   const render = mount("operations/BuyerOperations", "BuyerOperations", {"@/lib/api":{ApiError:class extends Error {}}, "@/lib/api/operations":{operations:{saveBuyer:async (...args) => {submitted=args; throw Error("offline");}}}}, {projectId:"p", buyer, data, onClose(){}, async onChanged(){throw Error("Should not close");}});
-  nodes(render()).filter(n => n.type === "select")[0].props.onChange({target:{value:"golden_visa"}});
-  nodes(render()).filter(n => n.type === "select")[1].props.onChange({target:{value:"yes"}});
+  const choice = label => nodes(render()).find(n => n.type === "Segmented" && n.props.label === label);
+  choice("Purpose of Purchase").props.onChange("golden_visa");
+  choice("EOI status").props.onChange("yes");
   nodes(render()).find(n => n.type === "input" && n.props.type === "date").props.onChange({target:{value:"2026-09-21"}});
   nodes(render()).find(n => n.type === "input" && n.props.maxLength === 1000).props.onChange({target:{value:"Verified original"}});
   await nodes(render()).find(n => n.type === "form").props.onSubmit({preventDefault(){}});
@@ -47,16 +50,18 @@ test("failed buyer save retains entered status, calendar date, purpose and reaso
 test("Sales signatures are read-only and investment-only visa controls are disabled", () => {
   const linked = {...buyer, purpose:"investment_only", milestones:[{...buyer.milestones[0], completed:true, completed_date:"2026-09-21", total_sales:2, signed_sales:2}, buyer.milestones[1]]};
   const render = mount("operations/BuyerOperations", "BuyerOperations", {"@/lib/format":{businessDate:value=>value}}, {projectId:"p", buyer:linked, data, onClose(){}, onChanged(){}});
-  const selects = nodes(render()).filter(n => n.type === "select");
-  assert.equal(selects[1].props.disabled, true);
-  assert.equal(selects[2].props.disabled, true);
+  // A stage the reader cannot change shows its recorded status, with no control to change it.
+  const choices = nodes(render()).filter(n => n.type === "Segmented").map(n => n.props.label);
+  assert.ok(!choices.includes("EOI status"));
+  assert.ok(!choices.includes("Visa status"));
+  assert.ok(choices.includes("Purpose of Purchase"));
   assert.match(text(render()), /2\s+of\s+2\s+current purchases/);
   assert.match(text(render()), /Not applicable to Investment Only/);
 });
 
 test("denied and failed reads do not display zero-buyer analysis", () => {
   for (const answer of [{status:"denied"}, {status:"failed", message:"Unavailable", retry(){}}]) {
-    const render = mount("OperationsTab", "OperationsTab", {"@/lib/answer":{useAnswer:()=>answer}, "@/lib/roles":{hasAnyRole:()=>true}}, {projectId:"p", roles:new Set()});
+    const render = mount("OperationsTab", "OperationsTab", {"@/components/ui":ui, "@/lib/answer":{useAnswer:()=>answer}, "@/lib/roles":{hasAnyRole:()=>true}}, {projectId:"p", roles:new Set()});
     assert.doesNotMatch(text(render()), /0 buyers/);
     assert.match(text(render()), /not available|Unavailable/);
   }
@@ -84,7 +89,7 @@ test("Excel import requires validation and reason; conflicts preserve the file",
 test("Operations starts compact and stage cards filter clients", () => {
   const complete = {...buyer, active:true, purchases:[], completed_count:1,applicable_count:2,completion_percent:50,next_stage:"Visa",milestones:[{...buyer.milestones[0],applicable:true,completed:true},buyer.milestones[1]]};
   const loaded = {...data,buyers:[complete],buyer_count:1,summaries:data.stages.map(s=>({stage_id:s.id,yes:1,no:0,unrecorded:0,missing_dates:0,applicable:1,completion_percent:100}))};
-  const render=mount("OperationsTab","OperationsTab",{"@/lib/answer":{useAnswer:()=>({status:"ready",data:loaded})},"@/lib/roles":{hasAnyRole:()=>true},"@/lib/format":{businessDate:v=>v}}, {projectId:"p",roles:new Set()});
+  const render=mount("OperationsTab","OperationsTab",{"@/components/ui":ui,"@/lib/answer":{useAnswer:()=>({status:"ready",data:loaded})},"@/lib/roles":{hasAnyRole:()=>true},"@/lib/format":{businessDate:v=>v}}, {projectId:"p",roles:new Set()});
   assert.match(text(render()),/Show every stage/);
   nodes(render()).find(n=>n.type === "Button" && /0\s+No/.test(text(n))).props.onClick();
   assert.ok(nodes(render()).some(n=>n.type === "EmptyState" && n.props.title === "No buyers match these filters"));

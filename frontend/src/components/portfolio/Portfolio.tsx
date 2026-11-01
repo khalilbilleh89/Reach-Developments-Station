@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AttentionList, Badge, Button, ButtonRow, Card, Disclosure, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Loading, Meter, Metric, MetricGroup, Notice, Position, PositionFigure, PositionSupport, PositionSupportItem, SectionHeader, TableScroll, SourceNote } from "@/components/ui";
+import { AttentionList, Badge, Button, ButtonRow, Card, Disclosure, EmptyState, IdentityCell, KeyValue, KeyValueGrid, Loading, Metric, MetricGroup, Notice, Position, PositionFigure, PositionSupport, PositionSupportItem, ProgressRing, SectionHeader, StatusDot, TableScroll, SourceNote, Tooltip } from "@/components/ui";
 import { useAnswer } from "@/lib/answer";
 import type { Answer } from "@/lib/answer";
 import { portfolio } from "@/lib/api/portfolio";
@@ -18,7 +18,7 @@ function Pending({ answer }: { answer: Answer<unknown> & { retry: () => void } }
 }
 
 function MetricValue({ row }: { row: MoneyMetric }) {
-  return <><span className="figure">{row.amount === null ? `${row.currency} · Unavailable` : money(row.amount, row.currency)}</span>{row.availability !== "available" ? <p className="muted">{row.availability}: {row.reason}</p> : null}</>;
+  return <><span className="figure">{row.amount === null ? `${row.currency} · Unavailable` : money(row.amount, row.currency)}</span>{row.availability !== "available" ? <p className="muted"><StatusDot tone={row.availability === "partial" ? "warning" : "muted"}>{row.availability}</StatusDot> {row.reason}</p> : null}</>;
 }
 
 export function MoneyRegister({ rows }: { rows: MoneyMetric[] }) {
@@ -72,7 +72,7 @@ export function PortfolioOverview() {
       </Position>
       <div className="portfolio-penetration">
         <div><p className="metric-label">Sales penetration</p><p className="metric-note">{data.sales_penetration.numerator} / {data.sales_penetration.denominator} eligible units · {data.sales_penetration.availability}</p></div>
-        {data.sales_penetration.percentage === null ? <span>Unavailable · {data.sales_penetration.reason}</span> : <Meter neutral percent={data.sales_penetration.percentage} label={`Sales penetration ${data.sales_penetration.percentage}%`} />}
+        {data.sales_penetration.percentage === null ? <span>Unavailable · {data.sales_penetration.reason}</span> : <ProgressRing focus percent={data.sales_penetration.percentage} label="Sales penetration" />}
       </div>
       <PositionSupport>
         <PositionSupportItem label="Committed units" value={data.committed_units} />
@@ -112,7 +112,7 @@ function ProjectRows({ offset, onChange }: { offset: number; onChange: (value: n
   const answer = useAnswer(true, () => portfolio.projects(offset), [offset]);
   if (answer.status !== "ready") return <Pending answer={answer} />;
   const data = answer.data;
-  return <Card title="Authorized projects" flush><TableScroll label="Portfolio projects" fixedFirst stickyHeader><thead><tr>{["Project", "Inventory", "Commercial", "Confirmed receipts", "Unrestricted cash", "Construction EAC", "Risks / coverage"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{data.items.map((project) => <tr key={project.project_id}><th scope="row" className="cell-prose cell-prose-tight"><Link className="button-link" href={`/portfolio/?project=${project.project_id}`}><IdentityCell icon="projects" name={project.name} meta={project.code} /></Link><p><Badge>{project.status.replaceAll("_", " ")}</Badge> · {project.currency}</p></th><td>{project.eligible_units} eligible<p>{project.committed_units} committed</p><p>{project.active_sold_units} active sold</p></td><td>{project.sales_penetration.percentage === null ? "Unavailable" : `${project.sales_penetration.percentage}%`}<p>{project.sales_penetration.numerator} / {project.sales_penetration.denominator}</p></td><td><ProjectMoney project={project} code="confirmed_receipts" /></td><td><ProjectMoney project={project} code="unrestricted_cash" /></td><td><ProjectMoney project={project} code="construction_eac" /></td><td>{project.risk_count} risks · {project.highest_risk ?? "No triggered risk"}<p>Coverage: {project.coverage}</p><Link href={project.drilldown}>Open project</Link></td></tr>)}</tbody></TableScroll>{!data.items.length ? <Notice tone="info">No authorized whole-project records on this page.</Notice> : null}<PageControls offset={offset} total={data.total} count={data.items.length} onChange={onChange} /></Card>;
+  return <Card title="Authorized projects" flush><TableScroll label="Portfolio projects" fixedFirst stickyHeader><thead><tr>{["Project", "Inventory", "Commercial", "Confirmed receipts", "Unrestricted cash"].map((label) => <th key={label} scope="col">{label}</th>)}<th scope="col">Construction <Tooltip term="EAC">Estimate at completion: what the construction is now expected to cost when finished.</Tooltip></th><th scope="col">Risks / coverage</th></tr></thead><tbody>{data.items.map((project) => <tr key={project.project_id}><th scope="row" className="cell-prose cell-prose-tight"><Link className="button-link" href={`/portfolio/?project=${project.project_id}`}><IdentityCell icon="projects" name={project.name} meta={project.code} /></Link><p><Badge>{project.status.replaceAll("_", " ")}</Badge> · {project.currency}</p></th><td>{project.eligible_units} eligible<p>{project.committed_units} committed</p><p>{project.active_sold_units} active sold</p></td><td>{project.sales_penetration.percentage === null ? "Unavailable" : `${project.sales_penetration.percentage}%`}<p>{project.sales_penetration.numerator} / {project.sales_penetration.denominator}</p></td><td><ProjectMoney project={project} code="confirmed_receipts" /></td><td><ProjectMoney project={project} code="unrestricted_cash" /></td><td><ProjectMoney project={project} code="construction_eac" /></td><td>{project.risk_count} risks · {project.highest_risk ?? "No triggered risk"}<p>Coverage: {project.coverage}</p><Link href={project.drilldown}>Open project</Link></td></tr>)}</tbody></TableScroll>{!data.items.length ? <Notice tone="info">No authorized whole-project records on this page.</Notice> : null}<PageControls offset={offset} total={data.total} count={data.items.length} onChange={onChange} /></Card>;
 }
 
 export function PortfolioProjects() {
@@ -136,7 +136,7 @@ export function PortfolioProject({ id }: { id: string }) {
   const answer = useAnswer(true, () => portfolio.project(id), [id]);
   if (answer.status !== "ready") return <Pending answer={answer} />;
   const project = answer.data;
-  return <><SectionHeader level={2} title={`${project.code} · ${project.name}`} /><p>{project.status} · {project.currency} · {businessDate(project.as_of)} · Coverage: {project.coverage}</p><Link href={project.drilldown}>Open project workspace</Link>
+  return <><SectionHeader level={2} title={`${project.code} · ${project.name}`} /><p><Badge>{project.status.replaceAll("_", " ")}</Badge> · {project.currency} · {businessDate(project.as_of)} · Coverage: {project.coverage}</p><Link href={project.drilldown}>Open project workspace</Link>
     {project.cashflow_reason_code ? <Notice tone="warning">Cashflow unavailable: source currency mismatch. Observed currencies: {project.cashflow_observed_currencies.join(", ")}. No partial cash balance is reported.</Notice> : null}
     <Card tone="command" title="Commercial position"><MetricGroup><Metric label="Eligible units" value={project.eligible_units} /><Metric label="Committed" value={project.committed_units} /><Metric label="Active sold" value={project.active_sold_units} /><Metric label="Cancelled sales" value={project.cancelled_sales ?? "Not captured"} /><Metric label="Sales penetration" value={project.sales_penetration.percentage === null ? "Unavailable" : `${project.sales_penetration.percentage}%`} /><Metric label="Net sales / month" value={project.sales_run_rate.average_monthly_absorption ?? "Unavailable"} note="Three complete UTC months" /></MetricGroup></Card>
     <Link href={`/projects/?project=${project.project_id}&section=sales&sales_view=history&transaction_status=cancelled`}>Inspect cancelled sales in Sales history</Link>

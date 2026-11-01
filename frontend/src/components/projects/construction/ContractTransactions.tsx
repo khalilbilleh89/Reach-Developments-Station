@@ -5,7 +5,8 @@ import { construction } from "@/lib/api";
 import type { ContractDetail, ConstructionInvoice, ConstructionPayment, Variation } from "@/lib/api";
 import { hasAnyRole } from "@/lib/roles";
 import { money, businessDate } from "@/lib/format";
-import { Button, ButtonRow, DraftBoundary, Field, MoneyInput, Notice, PromptDialog, RecordPage, RowMenu, TableScroll } from "@/components/ui";
+import { Badge, Button, ButtonRow, DraftBoundary, Field, MoneyInput, Notice, PromptDialog, RecordPage, RowMenu, TableScroll } from "@/components/ui";
+import { paymentLabel, paymentTone, variationLabel, variationTone } from "./labels";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 type Props = {
@@ -40,7 +41,7 @@ export function ContractTransactions({ projectId, contract, roles, invoices, var
     </ButtonRow>
     <p>Payments update paid to date immediately. Changes adjust the contract value after approval. Use Certificates to value completed work, then Invoices & payments to record the related invoice. Advance invoices identify advance cash separately.</p>
     <TableScroll label="Contract variations and reductions"><thead><tr><th scope="col">Reference</th><th scope="col">Description</th><th scope="col">Change excluding tax</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>
-      {variations?.map(row => <tr key={row.id}><th scope="row">{row.variation_number}</th><td>{row.description}</td><td>{money(row.total_value_ex_tax, contract.currency_code)}</td><td>{row.status}</td><td className="row-menu-cell">
+      {variations?.map(row => <tr key={row.id}><th scope="row">{row.variation_number}</th><td>{row.description}</td><td>{money(row.total_value_ex_tax, contract.currency_code)}</td><td><Badge tone={variationTone(row.status)}>{variationLabel(row.status)}</Badge></td><td className="row-menu-cell">
         {prepare && row.status === "draft" ? <RowMenu label="More actions"><Button disabled={busy || unavailable} onClick={() => void act(() => construction.submitVariation(projectId, row.id))}>Submit change</Button><DeleteRecordButton label="draft change" recordName={row.variation_number} description="Delete this draft change and its lines. The audit trail remains." onDelete={reason => construction.deleteDraftVariation(projectId, row.id, reason)} onDeleted={onChanged} /></RowMenu> : null}
         {check && row.status === "submitted" ? <Button disabled={busy || unavailable} onClick={() => void act(() => construction.approveVariation(projectId, row.id))}>Approve change</Button> : null}
         {prepare && row.status === "submitted" ? <Button disabled={busy || unavailable} onClick={() => { setError(null); setReasonAction({ title: `Withdraw ${row.variation_number}`, run: reason => construction.withdrawVariation(projectId, row.id, reason) }); }}>Withdraw</Button> : null}
@@ -49,7 +50,7 @@ export function ContractTransactions({ projectId, contract, roles, invoices, var
     </tbody></TableScroll>
     {variations === null ? <Notice tone="warning">Changes are unavailable. Refresh the contract to retry.</Notice> : variations.length === 0 ? <p>No variations or reductions recorded.</p> : null}
     <TableScroll label="Contract payment history"><thead><tr><th scope="col">Reference</th><th scope="col">Payment date</th><th scope="col">Amount including tax</th><th scope="col">Basis</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>
-      {payments?.map(row => <tr key={row.id}><th scope="row">{row.payment_reference}</th><td>{businessDate(row.payment_date)}</td><td>{money(row.amount, row.currency_code)}</td><td>{row.allocations.length ? row.allocations.map(item => item.invoice_number).join(", ") : row.direct_contract_payment ? "Paid against contract" : "Invoice payment"}</td><td>{row.status}</td><td>
+      {payments?.map(row => <tr key={row.id}><th scope="row">{row.payment_reference}</th><td>{businessDate(row.payment_date)}</td><td>{money(row.amount, row.currency_code)}</td><td>{row.allocations.length ? row.allocations.map(item => item.invoice_number).join(", ") : row.direct_contract_payment ? "Paid against contract" : "Invoice payment"}</td><td><Badge tone={paymentTone(row.status)}>{paymentLabel(row.status)}</Badge></td><td>
         {check && row.status === "confirmed" ? <Button disabled={busy || unavailable} onClick={() => { setError(null); setReasonAction({ title: `Reverse payment ${row.payment_reference}`, run: reason => construction.reversePayment(projectId, row.id, reason) }); }}>Reverse payment</Button> : null}
       </td></tr>)}
     </tbody></TableScroll>

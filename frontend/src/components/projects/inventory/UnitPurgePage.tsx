@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, inventory } from "@/lib/api";
 import type { RemovedUnit, UnitPurgePreview } from "@/lib/api";
-import { Button, Card, Field, Loading, Notice, RecordPage, TableScroll, UnsavedChangesGuard } from "@/components/ui";
+import { Banner, Button, Card, Field, Loading, Notice, RecordPage, StatusDot, TableScroll, UnsavedChangesGuard } from "@/components/ui";
 
 export function UnitPurgePage({ projectId, unit, onClose, onPurged }: {
   projectId: string; unit: RemovedUnit; onClose: () => void; onPurged: () => void;
@@ -63,9 +63,9 @@ export function UnitPurgePage({ projectId, unit, onClose, onPurged }: {
             <tr><th scope="row">Total records</th><td>{preview.total_records}</td></tr></tbody></TableScroll></Card>
         {preview.transactions.length ? <Card flush><TableScroll label="Sales and reservations to erase">
           <thead><tr><th>Type</th><th>Reference</th><th>Status</th></tr></thead><tbody>{preview.transactions.map((item, index) =>
-            <tr key={`${item.kind}-${item.reference}-${index}`}><td>{item.kind}</td><th scope="row">{item.reference}</th><td>{item.status}</td></tr>
+            <tr key={`${item.kind}-${item.reference}-${index}`}><td>{item.kind}</td><th scope="row">{item.reference}</th><td><StatusDot>{item.status}</StatusDot></td></tr>
           )}</tbody></TableScroll></Card> : null}
-        {preview.blockers.length ? <Notice tone="error"><p>Purge is blocked. No records have been deleted.</p><ul>{preview.blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul></Notice> :
+        {preview.blockers.length ? <Banner tone="danger"><p>Purge is blocked. No records have been deleted.</p><ul>{preview.blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul></Banner> :
           <fieldset disabled={busy} className="draft-fields stack">
             <Field label="Reason for permanent purge"><input className="input" required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></Field>
             <Field label={`Type ${preview.unit_reference} to confirm`}><input className="input" required autoComplete="off" maxLength={200} value={reference} onChange={event => setReference(event.target.value)} /></Field>

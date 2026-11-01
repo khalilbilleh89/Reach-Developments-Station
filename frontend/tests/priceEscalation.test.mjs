@@ -47,7 +47,8 @@ test("register shows exact saved percentage and custom status; deletion retains 
     "@/lib/answer": { useAnswer: () => ({ status: "ready", data: { entries: [entry], can_manage: true }, retry() { retries++; } }) },
   });
   const tree = render("PriceEscalationTab", { projectId: "project" });
-  const text = nodes(tree).filter(node => node.type === "dd").map(node => node.props.children).flat().join(" ");
+  // Each entry is a card row (design system E5): its title and facts carry the saved values.
+  const text = find(tree, "CardRow").flatMap(row => [row.props.title, ...row.props.facts.map(fact => fact.value)]).flat().join(" ");
   assert.match(text, /5.1256/); assert.match(text, /Custom foundation stage/); assert.match(text, /18 Oct 2026/);
   const deletion = find(tree, "DeleteRecordButton")[0];
   assert.match(deletion.props.recordName, /18 Oct 2026/);

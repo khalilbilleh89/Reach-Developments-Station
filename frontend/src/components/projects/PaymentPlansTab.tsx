@@ -16,6 +16,8 @@ import {
   Button,
   Card,
   DataToolbar,
+  DensitySwitch,
+  FilterChips,
   IdentityCell,
   EmptyState,
   Field,
@@ -28,7 +30,9 @@ import {
   PositionSupportItem,
   Notice,
   PageHeader,
+  SavedViews,
   SectionHeader,
+  Segmented,
   SortHeader,
   StatusDot,
   TableScroll,
@@ -42,6 +46,7 @@ import { useRecordHref } from "@/components/ui";
 import { projectHref } from "@/components/shell/navigation";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
 import { versionLabel, versionTone } from "@/components/projects/payments/labels";
+import { saleLabel, saleTone } from "@/components/projects/sales/labels";
 
 /** The value a register column sorts by: always a field the server returned. */
 function readPlanColumn(row: PlanRegisterRow, column: string): string | number | null {
@@ -165,7 +170,7 @@ export function PaymentPlansTab({
       return true;
     });
   }, [rows, search, status]);
-  const { sort, toggle, sorted } = useSort(shown, readPlanColumn);
+  const { sort, setSort, toggle, sorted } = useSort(shown, readPlanColumn);
   const { sort: contractSort, toggle: toggleContract, sorted: sortedUnscheduled } = useSort(unscheduled, readContractColumn);
 
   const header = (actions?: React.ReactNode) => (
@@ -262,7 +267,7 @@ export function PaymentPlansTab({
         </Card></div>
 
         </>}
-        {register && canPrepare && unscheduled.length ? <section className="stack"><SectionHeader title="Contracts needing a payment schedule" description="Eligible contracts returned to your role, without a plan in the authorized register." /><TableScroll label="Contracts needing schedules" stickyHeader><thead><tr><SortHeader column="sale" sort={contractSort} onToggle={toggleContract}>Sale / SPA</SortHeader><SortHeader column="status" sort={contractSort} onToggle={toggleContract}>Status</SortHeader><SortHeader column="value" sort={contractSort} onToggle={toggleContract}>Contract value</SortHeader><th scope="col">Action</th></tr></thead><tbody>{sortedUnscheduled.map(sale => <tr key={sale.id}><th scope="row"><RecordLink projectId={projectId} kind="sale" id={sale.id}>{sale.spa_number ?? sale.sale_number}</RecordLink></th><td>{sale.status.replaceAll("_", " ")}</td><td>{money(sale.total_contract_price, currencyCodeOf(sale.currency_id))}</td><td><RecordLink projectId={projectId} kind="sale" id={sale.id} tab="plan">Prepare SPA schedule</RecordLink></td></tr>)}</tbody></TableScroll></section> : null}
+        {register && canPrepare && unscheduled.length ? <section className="stack"><SectionHeader title="Contracts needing a payment schedule" description="Eligible contracts returned to your role, without a plan in the authorized register." /><TableScroll label="Contracts needing schedules" stickyHeader><thead><tr><SortHeader column="sale" sort={contractSort} onToggle={toggleContract}>Sale / SPA</SortHeader><SortHeader column="status" sort={contractSort} onToggle={toggleContract}>Status</SortHeader><SortHeader column="value" sort={contractSort} onToggle={toggleContract}>Contract value</SortHeader><th scope="col">Action</th></tr></thead><tbody>{sortedUnscheduled.map(sale => <tr key={sale.id}><th scope="row"><RecordLink projectId={projectId} kind="sale" id={sale.id}>{sale.spa_number ?? sale.sale_number}</RecordLink></th><td><StatusDot tone={saleTone(sale.status)}>{saleLabel(sale.status)}</StatusDot></td><td>{money(sale.total_contract_price, currencyCodeOf(sale.currency_id))}</td><td><RecordLink projectId={projectId} kind="sale" id={sale.id} tab="plan">Prepare SPA schedule</RecordLink></td></tr>)}</tbody></TableScroll></section> : null}
 
         {opening && canPrepare ? (
           <Card
@@ -347,14 +352,15 @@ export function PaymentPlansTab({
                     />
                   </Field>
                   <Field label="Reservation" hint="Either way the schedule covers the whole contract.">
-                    <select
-                      className="input"
+                    <Segmented
+                      label="Reservation"
                       value={form.reservation_treatment}
-                      onChange={(event) => setForm({ ...form, reservation_treatment: event.target.value })}
-                    >
-                      <option value="reference_only">Held on the deal</option>
-                      <option value="included_in_schedule">Shown in the schedule</option>
-                    </select>
+                      onChange={(reservation_treatment) => setForm({ ...form, reservation_treatment })}
+                      options={[
+                        { value: "reference_only", label: "Held on the deal" },
+                        { value: "included_in_schedule", label: "Shown in the schedule" },
+                      ]}
+                    />
                   </Field>
                 </FieldRow>
                 <FormActions>
@@ -380,6 +386,7 @@ export function PaymentPlansTab({
                 }
               : undefined
           }
+          actions={<DensitySwitch />}
         >
           <ToolbarFilter label="Version status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -392,6 +399,19 @@ export function PaymentPlansTab({
             </select>
           </ToolbarFilter>
         </DataToolbar>
+        <FilterChips
+          chips={[
+            status ? { key: "status", label: `Version: ${versionLabel(status)}`, onRemove: () => setStatus("") } : null,
+            search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+          ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)}
+          onClearAll={() => setFilters({ search: "", status: "" })}
+        />
+        <SavedViews
+          screen="payment_plans"
+          filters={{ status }}
+          sort={sort}
+          onApply={(saved, savedSort) => { setStatus(String(saved.status ?? "")); setSort(savedSort); }}
+        />
 
         <Card flush>
           {register === null ? (

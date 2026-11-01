@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Badge, Metric, MetricGroup, Notice, TableScroll } from "@/components/ui";
+import { Badge, Banner, Metric, MetricGroup, TableScroll, Tooltip } from "@/components/ui";
 import { ApiError, collections } from "@/lib/api";
 import type { CollectionSaleSummary } from "@/lib/api";
 import { ReceiptPanel } from "./ReceiptPanel";
@@ -86,7 +86,7 @@ export function DealCollections({ projectId, saleId, roles, saleStatus }: {
   return (
     <div className="stack">
       <CollectionProgress summary={summary} />
-      {summary.active_payment_plan_version_id === null ? <Notice tone="info">No active SPA schedule yet. Confirmed receipts remain unapplied until they are allocated to an active schedule.</Notice> : null}
+      {summary.active_payment_plan_version_id === null ? <Banner tone="info">No active <Tooltip term="SPA">Sale and purchase agreement: the contract the buyer signs for the unit.</Tooltip> schedule yet. Confirmed receipts remain unapplied until they are allocated to an active schedule.</Banner> : null}
       <ReceiptPanel projectId={projectId} saleId={saleId} summary={summary} currencyCode={code}
         canRecord={roles.has("collections") && ["signature_pending", "active", "termination_pending"].includes(saleStatus)}
         canConfirm={roles.has("finance")} canRestrictCash={hasAnyRole(roles, CASHFLOW_RECORDERS)}
@@ -118,10 +118,10 @@ export function DealCollections({ projectId, saleId, roles, saleStatus }: {
       </MetricGroup>
 
       {isPositive(summary.unapplied_cash) ? (
-        <Notice tone="warning">
+        <Banner tone="warning">
           {money(summary.unapplied_cash, code)} of confirmed cash has not been applied to any
           instalment, so it is not reducing the balance.
-        </Notice>
+        </Banner>
       ) : null}
 
       {summary.open_disputes > 0 || summary.active_waivers > 0 ? (

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import {
   Badge,
+  Banner,
   Button,
   ButtonRow,
   Card,
@@ -85,13 +86,13 @@ export function CashflowEscrow({
   return (
     <div className="stack">
       {unbacked.length > 0 ? (
-        <Notice tone="warning">
+        <Banner tone="warning">
           {unbacked.length === 1
             ? "One confirmed escrow is no longer backed by standing buyer cash: the receipt it was taken from has been reversed."
             : `${unbacked.length} confirmed escrows are no longer backed by standing buyer cash: the receipts they were taken from have been reversed.`}{" "}
           They have stopped counting towards restricted cash. Reverse them to
           clear the exception.
-        </Notice>
+        </Banner>
       ) : null}
 
       <Card

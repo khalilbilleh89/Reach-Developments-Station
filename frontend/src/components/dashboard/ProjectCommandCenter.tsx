@@ -41,6 +41,7 @@ import {
 import type { Roles } from "@/lib/roles";
 import type { ProjectSection } from "@/components/shell/navigation";
 import {
+  Banner,
   Breakdown,
   BreakdownRow,
   Button,
@@ -372,12 +373,14 @@ export function ProjectCommandCenter({
             onNavigate={onNavigate}
           />
         ) : null}
+        {/* A condition the reader acts on before anything downstream opens, so
+            it is a banner with the one control that resolves it (G2). */}
         {!operational ? (
-          <Notice tone="info">
+          <Banner tone="info" action={canEdit ? <Button small onClick={onEdit}>Edit project</Button> : undefined}>
             This project is still in setup. Inventory, pricing, sales and everything downstream
             open once the country and currency basis is confirmed and the project moves to
             Pre-development.
-          </Notice>
+          </Banner>
         ) : null}
 
         {/* The money owed beside what needs somebody: the two things a director
@@ -546,9 +549,11 @@ export function ProjectCommandCenter({
             director opens the overview to read. */}
         <ProjectAnalysis key={id} projectId={id} roles={roles} />
 
-        <Card title="More about this project" description="Each department's position, management actions and report coverage.">
-          {operational ? (
-          <Disclosure title="Department positions" context="Commercial · development · delivery · finance">
+        {/* Each department's position is the answer a director came for, not
+            evidence behind one, so the band is on the page rather than folded
+            (D): four ruled sections side by side, each with its own way in. */}
+        {operational ? (
+        <Card title="Department positions" description="Commercial · development · delivery · finance, each with its way in.">
             <div className="module-band">
               <ModuleSection
                 title="Commercial"
@@ -730,12 +735,13 @@ export function ProjectCommandCenter({
                 </ModuleSection>
               ) : null}
             </div>
-          
-          </Disclosure>
-          ) : null}
-          <Disclosure title="Management actions"><ManagementSummary key={refreshKey} project={id} /></Disclosure>
-          {operational ? <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} /> : null}
+          <ManagementReports roles={roles} sources={sources} onNavigate={onNavigate} />
         </Card>
+        ) : null}
+
+        {/* Open and overdue management actions lead their own card: a count
+            somebody owns is a finding, not a disclosure. */}
+        <ManagementSummary key={refreshKey} project={id} />
 
       </div>
     </>

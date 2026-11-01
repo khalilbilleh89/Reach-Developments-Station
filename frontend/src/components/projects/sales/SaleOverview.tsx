@@ -7,10 +7,10 @@ import { useAnswer } from "@/lib/answer";
 import { COLLECTION_READERS, hasAnyRole } from "@/lib/roles";
 import { businessDate, money } from "@/lib/format";
 import { useCurrencyCode } from "@/lib/currency";
-import { Button, KeyValue, KeyValueGrid, SectionHeader, Notice } from "@/components/ui";
+import { Badge, Banner, Button, KeyValue, KeyValueGrid, SectionHeader, StatusDot, Tooltip } from "@/components/ui";
 import { CollectionSnapshot } from "@/components/projects/inventory/unit/UnitSummary";
-import { statusLabel } from "@/components/projects/inventory/statusLabels";
-import { gateLabel } from "./labels";
+import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import { gateLabel, gateTone } from "./labels";
 
 export function SaleOverview({ projectId, sale, reservation, client, roles, onOpenTab, onChanged, priceReadError }: {
   projectId: string; sale: SaleDetail | null; reservation: ReservationDetail | null; client: SalesClient | null;
@@ -25,9 +25,9 @@ export function SaleOverview({ projectId, sale, reservation, client, roles, onOp
       <KeyValueGrid columns={2}>
         <KeyValue label="Buyer" value={client?.display_name ?? "Not returned by source"} />
         <KeyValue label="Governing record" value={sale?.sale.spa_number ?? sale?.sale.sale_number ?? reservation?.reservation.reservation_number} />
-        {sale ? <><KeyValue label="Contract principal · ex tax" value={money(sale.sale.net_contract_price_ex_tax, codeOf(sale.sale.currency_id))} /><KeyValue label="Legal position" value={statusLabel(sale.legal.legal_status)} /><KeyValue label="Contract date" value={businessDate(sale.sale.contract_date)} /><KeyValue label="First-payment gate" value={gateLabel(sale.sale.first_payment_gate_status)} /></> : <KeyValue label="Reservation expires" value={businessDate(reservation?.reservation.expires_on)} />}
+        {sale ? <><KeyValue label="Contract principal · ex tax" value={money(sale.sale.net_contract_price_ex_tax, codeOf(sale.sale.currency_id))} /><KeyValue label="Legal position" value={<StatusDot tone={statusTone(sale.legal.legal_status)}>{statusLabel(sale.legal.legal_status)}</StatusDot>} /><KeyValue label="Contract date" value={businessDate(sale.sale.contract_date)} /><KeyValue label="First-payment gate" value={<Badge tone={gateTone(sale.sale.first_payment_gate_status)}>{gateLabel(sale.sale.first_payment_gate_status)}</Badge>} /></> : <KeyValue label="Reservation expires" value={businessDate(reservation?.reservation.expires_on)} />}
       </KeyValueGrid>
-      {!sale ? <Notice tone="info">Complete the reservation&apos;s deposit and approval gates before creating the Sale Contract. Its SPA schedule is prepared after the contract reaches an eligible state.</Notice> : null}
+      {!sale ? <Banner tone="info" action={<Button small onClick={() => onOpenTab("commercial")}>Open the reservation</Button>}>Complete the reservation&apos;s deposit and approval gates before creating the Sale Contract. Its <Tooltip term="SPA">Sale and purchase agreement: the contract the buyer signs for the unit.</Tooltip> schedule is prepared after the contract reaches an eligible state.</Banner> : null}
     </section>
     {account.status !== "off" ? <section><SectionHeader level={2} title="Collections position" actions={<Button small onClick={() => onOpenTab("collections")}>Account detail</Button>} /><CollectionSnapshot answer={account} /></section> : null}
   </div>;

@@ -22,7 +22,7 @@ function harness({blockers = [], fail = false} = {}) {
   class ApiError extends Error {}
   runInNewContext(`(function(require, exports) { ${code}\n})`)(name => {
     if (name === "react") return hooks;
-    if (name === "@/components/ui") return Object.fromEntries(["Button", "Card", "Field", "Loading", "Notice", "RecordPage", "TableScroll", "UnsavedChangesGuard"].map(key => [key, key]));
+    if (name === "@/components/ui") return Object.fromEntries(["Banner", "Button", "Card", "Field", "Loading", "Notice", "RecordPage", "StatusDot", "TableScroll", "UnsavedChangesGuard"].map(key => [key, key]));
     if (name === "@/lib/api") return {ApiError, inventory: {
       unitPurgePreview: async () => ({unit_id: "unit", unit_reference: "1102", fingerprint: "fingerprint", blockers, counts: [{label: "Sale contracts", count: 1}], transactions: [{kind: "Sale", reference: "SALE-1", status: "cancelled"}], total_records: 1}),
       purgeUnitHistory: async (...args) => {calls.push(args); if (fail) throw new ApiError("History changed; refresh preview.");},

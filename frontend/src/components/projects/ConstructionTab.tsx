@@ -10,12 +10,15 @@ import {
   Button,
   Card,
   DataToolbar,
+  DensitySwitch,
   EmptyState,
+  FilterChips,
   IdentityCell,
   InlineEdit,
   Loading,
   Notice,
   PageHeader,
+  SavedViews,
   SortHeader,
   Tabs,
   TabPanel,
@@ -147,10 +150,27 @@ function readMilestoneColumn(row: ConstructionMilestone, column: string): SortVa
   }
 }
 
+function readForecastColumn(row: ForecastDetail["lines"][number], column: string): SortValue {
+  switch (column) {
+    case "code": return row.cost_code;
+    case "committed": return row.revised_commitment;
+    case "certified": return row.certified_to_date;
+    case "remaining": return row.forecast_remaining_amount_ex_tax;
+    case "eac": return row.estimate_at_completion;
+    default: return null;
+  }
+}
+
+/** The status filter's chip label, in the same words its menu uses. */
+function chipFor(status: string, label: (value: string) => string, clear: () => void) {
+  return status ? [{ key: "status", label: `Status: ${label(status)}`, onRemove: clear }] : [];
+}
+
 // Stable stand-ins while a register is still loading, so the sort hooks run unconditionally.
 const NO_INVOICES: ConstructionInvoice[] = [];
 const NO_PAYMENTS: ConstructionPayment[] = [];
 const NO_MILESTONES: ConstructionMilestone[] = [];
+const NO_FORECAST_LINES: ForecastDetail["lines"] = [];
 
 const SECTIONS = [
   { key: "overview", label: "Overview" },
@@ -324,7 +344,11 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
       );
     });
   }, [rows, search, status]);
-  const { sort, toggle, sorted } = useSort(shown, readContractColumn);
+  const { sort, setSort, toggle, sorted } = useSort(shown, readContractColumn);
+  const chips = [
+    ...chipFor(status, contractLabel, () => setStatus("")),
+    ...(search ? [{ key: "search", label: `“${search}”`, onRemove: () => setSearch("") }] : []),
+  ];
 
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the contracts" shape="rows" />;
@@ -344,11 +368,11 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
         onReset={
           search || status
             ? () => {
-                setSearch("");
-                setStatus("");
+                setView({ contractSearch: "", contractStatus: "" });
               }
             : undefined
         }
+        actions={<DensitySwitch />}
       >
         <ToolbarFilter label="Status" active={status !== ""}>
           <select
@@ -366,6 +390,16 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
           </select>
         </ToolbarFilter>
       </DataToolbar>
+      <FilterChips chips={chips} onClearAll={() => setView({ contractSearch: "", contractStatus: "" })} />
+      <SavedViews
+        screen="construction-contracts"
+        filters={{ contractSearch: search, contractStatus: status }}
+        sort={sort}
+        onApply={(saved, savedSort) => {
+          setView({ contractSearch: String(saved.contractSearch ?? ""), contractStatus: String(saved.contractStatus ?? "") });
+          setSort(savedSort);
+        }}
+      />
 
       {shown.length === 0 ? (
         <EmptyState
@@ -378,7 +412,7 @@ function ContractsSection({ projectId, roles = new Set<string>(), currencyId = "
         />
       ) : (
         <Card flush>
-        <TableScroll label="Contracts" fixedFirst>
+        <TableScroll label="Contracts" fixedFirst stickyHeader>
           <thead>
             <tr>
               <SortHeader column="contract" sort={sort} onToggle={toggle}>Contract</SortHeader>
@@ -501,6 +535,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
     [rows, status],
   );
   const { sort, toggle, sorted } = useSort(shown, readVariationColumn);
+  const chips = chipFor(status, variationLabel, () => setStatus(""));
 
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the variations" shape="rows" />;
@@ -511,6 +546,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
         framed
         count={{ shown: shown.length, total: rows.length, noun: "variation" }}
         onReset={status ? () => setStatus("") : undefined}
+        actions={<DensitySwitch />}
       >
         <ToolbarFilter label="Status" active={status !== ""}>
           <select
@@ -527,6 +563,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
           </select>
         </ToolbarFilter>
       </DataToolbar>
+      <FilterChips chips={chips} />
 
       {shown.length === 0 ? (
         <EmptyState
@@ -539,7 +576,7 @@ function VariationsSection({ projectId }: { projectId: string }) {
         />
       ) : (
         <Card flush>
-        <TableScroll label="Variations" fixedFirst>
+        <TableScroll label="Variations" fixedFirst stickyHeader>
           <thead>
             <tr>
               <SortHeader column="variation" sort={sort} onToggle={toggle}>Variation</SortHeader>
@@ -632,6 +669,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
     [rows, status],
   );
   const { sort, toggle, sorted } = useSort(shown, readCertificateColumn);
+  const chips = chipFor(status, certificateLabel, () => setStatus(""));
 
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (!rows) return <Loading label="Loading the certificates" shape="rows" />;
@@ -642,6 +680,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
         framed
         count={{ shown: shown.length, total: rows.length, noun: "certificate" }}
         onReset={status ? () => setStatus("") : undefined}
+        actions={<DensitySwitch />}
       >
         <ToolbarFilter label="Status" active={status !== ""}>
           <select
@@ -658,6 +697,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
           </select>
         </ToolbarFilter>
       </DataToolbar>
+      <FilterChips chips={chips} />
 
       {shown.length === 0 ? (
         <EmptyState
@@ -670,7 +710,7 @@ function CertificatesSection({ projectId }: { projectId: string }) {
         />
       ) : (
         <Card flush>
-        <TableScroll label="Certificates" fixedFirst>
+        <TableScroll label="Certificates" fixedFirst stickyHeader>
           <thead>
             <tr>
               <SortHeader column="certificate" sort={sort} onToggle={toggle}>Certificate</SortHeader>
@@ -1056,6 +1096,7 @@ function ForecastSection({ projectId }: { projectId: string }) {
       await load();
     })();
   }, [load]);
+  const { sort, toggle, sorted } = useSort(detail?.lines ?? NO_FORECAST_LINES, readForecastColumn);
 
   if (error) return <><Notice tone="error">{error}</Notice><Button disabled={retrying} onClick={() => void load()}>{retrying ? "Retrying…" : "Retry"}</Button></>;
   if (empty) {
@@ -1084,23 +1125,23 @@ function ForecastSection({ projectId }: { projectId: string }) {
       <TableScroll label="Forecast by cost code" fixedFirst>
         <thead>
           <tr>
-            <th scope="col">Cost code</th>
-            <th scope="col" className="num">
+            <SortHeader column="code" sort={sort} onToggle={toggle}>Cost code</SortHeader>
+            <SortHeader column="committed" sort={sort} onToggle={toggle} className="num">
               Committed
-            </th>
-            <th scope="col" className="num">
+            </SortHeader>
+            <SortHeader column="certified" sort={sort} onToggle={toggle} className="num">
               Certified
-            </th>
-            <th scope="col" className="num">
+            </SortHeader>
+            <SortHeader column="remaining" sort={sort} onToggle={toggle} className="num">
               Forecast remaining
-            </th>
-            <th scope="col" className="num">
+            </SortHeader>
+            <SortHeader column="eac" sort={sort} onToggle={toggle} className="num">
               Estimate at completion
-            </th>
+            </SortHeader>
           </tr>
         </thead>
         <tbody>
-          {detail.lines.map((line) => (
+          {sorted.map((line) => (
             <tr key={line.cost_code_id}>
               <td>
                 <IdentityCell
@@ -1140,7 +1181,7 @@ function ForecastSection({ projectId }: { projectId: string }) {
         </tfoot>
       </TableScroll>
       <p className="footnote">
-        Forecast figures exclude tax. This optional estimate does not block contracts or payments.
+        Forecast figures exclude tax. The estimate at completion is the work certified to date plus the forecast remaining. This optional estimate does not block contracts or payments.
       </p>
     </Card>
   );

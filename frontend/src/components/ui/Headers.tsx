@@ -66,8 +66,9 @@ export function SectionHeader({
   id,
   level = 3,
 }: {
-  title: string;
-  description?: string;
+  /** Text, or text with a `Tooltip` term in it (design system I2). */
+  title: ReactNode;
+  description?: ReactNode;
   actions?: ReactNode;
   id?: string;
   level?: 2 | 3;

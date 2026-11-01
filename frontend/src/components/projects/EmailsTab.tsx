@@ -7,7 +7,7 @@ import { emails } from "@/lib/api/emails";
 import type { Email, EmailCategory } from "@/lib/api/emails";
 import { useAnswer } from "@/lib/answer";
 import { SALES_READERS, hasAnyRole } from "@/lib/roles";
-import { Button, Card, DataToolbar, Disclosure, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PageHeader, RecordPage, Tabs, TabPanel } from "@/components/ui";
+import { Button, Card, DataToolbar, Disclosure, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PageHeader, RecordPage, Segmented, Tabs, TabPanel } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 const categories: {key: EmailCategory; label: string}[] = [
@@ -72,7 +72,7 @@ export function EmailEditor({projectId, row, category: initialCategory, onClose,
         finally { setBusy(false); }
       }}>
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <Field label="Category"><select className="input" disabled={busy} value={category} onChange={event => setCategory(event.target.value as EmailCategory)}>{categories.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></Field>
+        <fieldset className="fieldset" disabled={busy}><Field label="Category"><Segmented<EmailCategory> label="Category" value={category} options={categories.map(item => ({value: item.key, label: item.label}))} onChange={setCategory} /></Field></fieldset>
         <Field label="Template title"><input className="input" dir="auto" required maxLength={500} disabled={busy} value={title} onChange={event => setTitle(event.target.value)} /></Field>
         <Field label="Subject"><input className="input" dir="auto" required maxLength={500} disabled={busy} value={subject} onChange={event => setSubject(event.target.value)} /></Field>
         <Field label="Email body"><textarea className="input" dir="auto" required maxLength={20000} rows={14} disabled={busy} value={body} onChange={event => setBody(event.target.value)} /></Field>

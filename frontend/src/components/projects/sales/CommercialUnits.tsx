@@ -2,12 +2,12 @@
 import { useEffect, useState } from "react";
 import { ApiError, inventory, sales } from "@/lib/api";
 import type { Unit, UnitRegister, UnitReleaseResult, UnitStatusEvent } from "@/lib/api";
-import { BulkBar, Button, Card, Field, Loading, Notice, PromptDialog, RegisterPagination, SelectAllCell, SelectCell, TableScroll } from "@/components/ui";
+import { Banner, BulkBar, Button, Card, DataToolbar, DensitySwitch, FilterChips, Loading, Notice, PromptDialog, RegisterPagination, SelectAllCell, SelectCell, StatusDot, TableScroll, ToolbarFilter } from "@/components/ui";
 import { CommercialUnitControls } from "./CommercialUnitControls";
 import { UnitStanding } from "../inventory/unit/UnitStanding";
 import { UnitHistory } from "../inventory/unit/UnitHistory";
 import { UnitStages } from "../construction/StageWorkspace";
-import { statusLabel } from "../inventory/statusLabels";
+import { statusLabel, statusTone } from "../inventory/statusLabels";
 
 /** Stock status controls live beside transactions, including units without a buyer yet. */
 export function CommercialUnits({projectId,roles,onClose}: {projectId:string;roles:Set<string>;onClose:()=>void}) {
@@ -69,7 +69,7 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
       <h2>{selected.unit_reference}</h2><UnitStanding unit={selected} />
       {selected.commercial_status === "returned" ? <section className="stack">
         <p>The cancelled Sale remains in history. Activate a fresh price in Pricing, resolve the release blockers, then explicitly return this Unit to market. A new buyer will start a new Reservation.</p>
-        {selected.release_blockers.length ? <Notice tone="info">Not ready: {selected.release_blockers.join("; ")}.</Notice> : null}
+        {selected.release_blockers.length ? <Banner tone="info">Not ready: {selected.release_blockers.join("; ")}.</Banner> : null}
         <div><Button disabled={busy} onClick={()=>void loadUnit(selected.id)}>Refresh eligibility</Button>{canReturn ? <Button variant="primary" disabled={busy || selected.release_blockers.length>0} onClick={()=>{setError(null);setReturnPrompt(true);}}>Return to market</Button> : null}</div>
       </section> : null}
       <CommercialUnitControls key={selected.id} unit={selected} roles={roles} busy={busy} onSaveControls={async changes => {await inventory.releaseControls(projectId,selected.id,changes);await loadUnit(selected.id);setRevision(value=>value+1);}}
@@ -78,8 +78,16 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
       {history ? <UnitHistory history={history} /> : null}
       <UnitStages projectId={projectId} unitId={selected.id} roles={roles} />
     </div> : <>
-      <Field label="Find unit"><input className="input" type="search" value={search} onChange={e=>{setSearch(e.target.value);setOffset(0);}} /></Field>
-      <Field label="Commercial status"><select className="input" value={status} onChange={e=>{setStatus(e.target.value);setOffset(0);}}><option value="">All statuses</option>{["unreleased","held","available","reserved","sold","returned"].map(value=><option key={value} value={value}>{statusLabel(value)}</option>)}</select></Field>
+      <DataToolbar framed search={{value:search,onChange:value=>{setSearch(value);setOffset(0);},label:"Find unit",placeholder:"Unit reference"}}
+        count={rows ? {shown:rows.units.length,total:rows.total,noun:"unit"} : undefined}
+        onReset={search || status ? ()=>{setSearch("");setStatus("");setOffset(0);} : undefined}
+        actions={<DensitySwitch />}>
+        <ToolbarFilter label="Commercial status" active={status!==""}><select className="input" value={status} onChange={e=>{setStatus(e.target.value);setOffset(0);}}><option value="">All statuses</option>{["unreleased","held","available","reserved","sold","returned"].map(value=><option key={value} value={value}>{statusLabel(value)}</option>)}</select></ToolbarFilter>
+      </DataToolbar>
+      <FilterChips chips={[
+        status ? {key:"status",label:`Commercial: ${statusLabel(status)}`,onRemove:()=>{setStatus("");setOffset(0);}} : null,
+        search ? {key:"search",label:`“${search}”`,onRemove:()=>{setSearch("");setOffset(0);}} : null,
+      ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)} onClearAll={()=>{setSearch("");setStatus("");setOffset(0);}} />
       {outcome ? <Notice tone={outcome.skipped ? "warning" : "success"}>
         <strong>{outcome.released} {outcome.released===1 ? "unit is" : "units are"} now on sale.</strong>
         {outcome.skipped ? <ul className="unit-release-requirements">{outcome.outcomes.filter(row=>!row.released).map(row=><li key={row.unit_id}>{row.unit_reference}: {row.blockers.join("; ")}</li>)}</ul> : null}
@@ -90,7 +98,7 @@ export function CommercialUnits({projectId,roles,onClose}: {projectId:string;rol
           // Ticked only when every ready row on the page is picked; a dash while some are. Decided from
           // what is picked, never from the box's own state, so the selection always has a way back off.
           checked={chosen.length>0 && chosen.length===ready.length} indeterminate={chosen.length>0 && chosen.length<ready.length}
-          onChange={()=>setPicked(chosen.length>0 ? new Set() : new Set(ready.map(unit=>unit.id)))} /> : null}<th>Unit</th><th>Commercial</th><th>Legal</th><th>Collections</th><th>Delivery</th></tr></thead><tbody>{rows.units.map(unit=><tr key={unit.id}>{canRelease ? <SelectCell label={`Select ${unit.unit_reference}`} checked={picked.has(unit.id)} disabled={busy || !ready.some(row=>row.id===unit.id)} onChange={()=>{ setPicked(current=>{const next = new Set(current); if(next.has(unit.id)) next.delete(unit.id); else next.add(unit.id); return next;}); }} /> : null}<th scope="row"><Button disabled={busy} onClick={()=>void loadUnit(unit.id)}>{unit.unit_reference}</Button></th><td>{statusLabel(unit.commercial_status)}{unit.release_blockers.length && ["unreleased","held"].includes(unit.commercial_status) ? <span className="footnote"> — {unit.release_blockers.join("; ")}</span> : null}</td><td>{statusLabel(unit.legal_status)}</td><td>{statusLabel(unit.collection_status)}</td><td>{statusLabel(unit.delivery_status)}</td></tr>)}</tbody></TableScroll>
+          onChange={()=>setPicked(chosen.length>0 ? new Set() : new Set(ready.map(unit=>unit.id)))} /> : null}<th>Unit</th><th>Commercial</th><th>Legal</th><th>Collections</th><th>Delivery</th></tr></thead><tbody>{rows.units.map(unit=><tr key={unit.id}>{canRelease ? <SelectCell label={`Select ${unit.unit_reference}`} checked={picked.has(unit.id)} disabled={busy || !ready.some(row=>row.id===unit.id)} onChange={()=>{ setPicked(current=>{const next = new Set(current); if(next.has(unit.id)) next.delete(unit.id); else next.add(unit.id); return next;}); }} /> : null}<th scope="row"><Button disabled={busy} onClick={()=>void loadUnit(unit.id)}>{unit.unit_reference}</Button></th><td><StatusDot tone={statusTone(unit.commercial_status)}>{statusLabel(unit.commercial_status)}</StatusDot>{unit.release_blockers.length && ["unreleased","held"].includes(unit.commercial_status) ? <span className="footnote"> — {unit.release_blockers.join("; ")}</span> : null}</td><td><StatusDot tone={statusTone(unit.legal_status)}>{statusLabel(unit.legal_status)}</StatusDot></td><td><StatusDot tone={statusTone(unit.collection_status)}>{statusLabel(unit.collection_status)}</StatusDot></td><td><StatusDot tone={statusTone(unit.delivery_status)}>{statusLabel(unit.delivery_status)}</StatusDot></td></tr>)}</tbody></TableScroll>
         {rows.units.length===0 ? <p>No matching units.</p> : null}
         {canRelease ? <BulkBar count={chosen.length} noun="unit" onClear={()=>setPicked(new Set())}>
           <Button small variant="primary" disabled={busy} onClick={()=>void releaseChosen()}>Release selected</Button>

@@ -81,7 +81,7 @@ test("building stack keeps records separate and switches status without exposing
  assert.equal(nodes(tree).filter(n=>n.props?.className==="atlas-building").length,2);
  assert.deepEqual(nodes(tree).filter(n=>n.type==="RecordLink").map(n=>n.props.id),["a","b"]);
  assert.ok(textOf(tree).includes("Schematic")); assert.ok(!textOf(tree).includes("100000.00"));
- nodes(tree).find(n=>n.type==="select").props.onChange({target:{value:"delivery_status"}});
+ nodes(tree).find(n=>n.type==="Segmented"&&n.props.label==="Colour by").props.onChange("delivery_status");
  tree=render(); assert.ok(textOf(tree).includes("Under construction")); assert.ok(textOf(tree).includes("Handed over"));
  assert.equal(nodes(tree).filter(n=>n.props?.className==="atlas-unit")[1].props["data-tone"],"success");
 });

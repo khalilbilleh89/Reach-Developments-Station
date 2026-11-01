@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { Unit } from "@/lib/api";
-import { Button, KeyValue, KeyValueGrid, Notice, SectionHeader } from "@/components/ui";
+import { Banner, Button, KeyValue, KeyValueGrid, SectionHeader } from "@/components/ui";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { businessDate } from "@/lib/format";
@@ -34,12 +34,12 @@ export function UnitRelease({unit,roles,onSaveControls}: {
     {released
       ? <p className="subtle">The unit is on sale. Its commercial lifecycle is managed in Sales.</p>
       : unit.release_blockers.length
-        ? <Notice tone="info">
+        ? <Banner tone="info">
             <strong>Not on sale yet</strong>
             <ul className="unit-release-requirements">
               {unit.release_blockers.map((blocker, index) => <li key={`${index}-${blocker}`}>{blocker}</li>)}
             </ul>
-          </Notice>
+          </Banner>
         : null}
   </section>;
 }

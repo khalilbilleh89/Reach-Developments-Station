@@ -11,20 +11,26 @@ import {
   Button,
   Card,
   DataToolbar,
+  DensitySwitch,
   EmptyState,
   Field,
   FieldRow,
+  FilterChips,
   FormActions,
+  FormOutline,
   FormSection,
   Loading,
   Notice,
   StatusDot,
+  StickyActions,
   TableScroll,
   RowMenu,
 } from "@/components/ui";
 
 const EMPTY_DRAFT = { email: "", display_name: "", initial_password: "", role_keys: [] as string[] };
 const EMPTY_PERMISSION_DRAFT = { role_keys: [] as string[], reason: "" };
+/** The new-user form's sections, linked down its side (J3). */
+const ADD_SECTIONS = ["Identity", "First sign-in", "Roles"];
 
 /** User administration: who exists, what they may do, and access resets. */
 export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { currentUserId?: string; onOwnPermissionsChanged?: () => Promise<void> }) {
@@ -186,6 +192,7 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
       {adding ? (
         <Card title="Add a user" description="They sign in with a temporary password and must replace it before doing anything else.">
           <form
+            className="form-layout"
             onSubmit={(event) => {
               event.preventDefault();
               void act(async () => {
@@ -195,8 +202,10 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
               }, "User created. They must change the temporary password at first sign-in.");
             }}
           >
+            <FormOutline sections={ADD_SECTIONS} label="New user sections" />
+            <div className="form-layout-body">
             <FormSection title="Identity">
-              <FieldRow columns={3}>
+              <FieldRow columns={2}>
                 <Field label="Email">
                   <input
                     className="input"
@@ -214,6 +223,10 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
                     onChange={(event) => setDraft({ ...draft, display_name: event.target.value })}
                   />
                 </Field>
+              </FieldRow>
+            </FormSection>
+            <FormSection title="First sign-in">
+              <FieldRow columns={2}>
                 <Field label="Temporary password" hint="At least 12 characters. Replaced at first sign-in.">
                   <input
                     className="input"
@@ -244,14 +257,13 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
                 </div>
               </fieldset>
             </FormSection>
-            <FormActions>
-              <Button variant="primary" type="submit" disabled={busy}>
-                {busy ? "Creating…" : "Create user"}
-              </Button>
-              <Button onClick={() => setAdding(false)} disabled={busy}>
-                Cancel
-              </Button>
-            </FormActions>
+            <StickyActions
+              dirty={JSON.stringify(draft) !== JSON.stringify(EMPTY_DRAFT)}
+              submitLabel="Create user"
+              busy={busy}
+              onCancel={() => setAdding(false)}
+            />
+            </div>
           </form>
         </Card>
       ) : null}
@@ -261,18 +273,24 @@ export function UsersSection({ currentUserId, onOwnPermissionsChanged }: { curre
         search={{ value: search, onChange: setSearch, placeholder: "Name or email", label: "Search users" }}
         count={rows ? { shown: shown.length, total: rows.length, noun: "user" } : undefined}
         actions={
-          adding ? undefined : (
-            <Button
-              variant="primary"
-              onClick={() => {
-                closePermissionEditor();
-                setAdding(true);
-              }}
-            >
-              Add user
-            </Button>
-          )
+          <>
+            <DensitySwitch />
+            {adding ? null : (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  closePermissionEditor();
+                  setAdding(true);
+                }}
+              >
+                Add user
+              </Button>
+            )}
+          </>
         }
+      />
+      <FilterChips
+        chips={search ? [{ key: "search", label: `“${search}”`, onRemove: () => setSearch("") }] : []}
       />
 
       <Card flush>

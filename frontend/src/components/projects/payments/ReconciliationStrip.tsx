@@ -1,7 +1,7 @@
 "use client";
 
 import type { PlanReconciliation } from "@/lib/api";
-import { Badge, Metric, MetricGroup } from "@/components/ui";
+import { Badge, Banner, Metric, MetricGroup, StatusDot } from "@/components/ui";
 import { useCurrencyCode } from "@/lib/currency";
 import { money, percent } from "@/lib/format";
 
@@ -63,21 +63,23 @@ export function ReconciliationStrip({
         />
         <Metric label="Instalments" value={reconciliation.installment_count} size="sm" />
       </MetricGroup>
-      <div className={ok ? "reconcile reconcile-ok" : "reconcile reconcile-fail"} role="status">
-        <span className="reconcile-title">{ok ? "Reconciled." : "Does not reconcile."}</span>
-        <span>
-          {ok
-            ? "Principal, tax and fees reconcile to the selected schedule basis."
-            : "This schedule cannot be put forward yet."}
-        </span>
-        {ok ? null : (
+      {/* A schedule that does not reconcile cannot be put forward: that is a
+          condition to act on, pinned above the rows (design system G2). */}
+      {ok ? (
+        <p role="status">
+          <StatusDot tone="success">Reconciled.</StatusDot>{" "}
+          Principal, tax and fees reconcile to the selected schedule basis.
+        </p>
+      ) : (
+        <Banner tone="warning">
+          <strong>Does not reconcile.</strong> This schedule cannot be put forward yet.
           <ul className="reason-list">
             {reconciliation.blocking_reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>
-        )}
-      </div>
+        </Banner>
+      )}
     </>
   );
 }

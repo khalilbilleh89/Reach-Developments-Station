@@ -41,6 +41,8 @@ function buyerAgentTab(props, routes = []) {
     "./sales/AgentsPanel": {AgentsPanel: "AgentsPanel"},
     "./sales/NewReservation": {NewReservation: "NewReservation"},
     "./sales/salesRoutes": {createdSalesHref: (query, project, kind, id) => `${query}&${kind}=${id}`},
+    "next/link": {default: "Link"},
+    "@/components/shell/navigation": {projectHref: project => `/projects/?project=${project}`},
   }, props);
 }
 

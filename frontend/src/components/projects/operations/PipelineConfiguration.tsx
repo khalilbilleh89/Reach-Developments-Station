@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { operations } from "@/lib/api/operations";
 import type { OperationsData, OperationSection, StageDraft } from "@/lib/api/operations";
-import { Button, DraftBoundary, Field, FieldRow, FormActions, Notice, RecordPage, SubPanel } from "@/components/ui";
+import { Button, DraftBoundary, Field, FieldRow, FormActions, Notice, RecordPage, Segmented, SubPanel } from "@/components/ui";
 import { DeleteRecordButton } from "../DeleteRecordButton";
 
 export function PipelineConfiguration({projectId, data, onClose, onChanged}: {
@@ -34,9 +34,9 @@ export function PipelineConfiguration({projectId, data, onClose, onChanged}: {
         {stages.map((stage, index) => <SubPanel key={stage.id ?? `new-${index}`}><div className="stack">
           <FieldRow>
             <Field label="Stage name"><input className="input" required maxLength={160} value={stage.label} onChange={event => change(index, {label: event.target.value})} /></Field>
-            <Field label="Section"><select className="input" value={stage.section} onChange={event => change(index, {section: event.target.value as OperationSection})}><option value="property_purchase">Property Purchase</option><option value="golden_visa">Golden Visa</option></select></Field>
+            <Field label="Section"><Segmented<OperationSection> label={`Section for ${stage.label || "new stage"}`} value={stage.section} options={[{value: "property_purchase", label: "Property Purchase"}, {value: "golden_visa", label: "Golden Visa"}]} onChange={value => change(index, {section: value})} /></Field>
           </FieldRow>
-          <Field label="Availability"><select className="input" value={stage.is_active ? "active" : "retired"} onChange={event => change(index, {is_active: event.target.value === "active"})}><option value="active">Active</option><option value="retired">Retired — keep history</option></select></Field>
+          <Field label="Availability"><Segmented label={`Availability of ${stage.label || "new stage"}`} value={stage.is_active ? "active" : "retired"} options={[{value: "active", label: "Active"}, {value: "retired", label: "Retired — keep history"}]} onChange={value => change(index, {is_active: value === "active"})} /></Field>
           {data.stages.find(row => row.id === stage.id)?.source === "buyer_signed_spa" ? <p className="muted">Automatically follows buyer signatures in Sales when a current sale exists.</p> : null}
           <FormActions>
             <Button disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Move ${stage.label || "new stage"} up`}>Move up</Button>

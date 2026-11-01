@@ -314,7 +314,7 @@ test("the select-all tick can be cleared on a page holding a unit that cannot be
     "../inventory/unit/UnitStanding":{UnitStanding:"UnitStanding"},
     "../inventory/unit/UnitHistory":{UnitHistory:"UnitHistory"},
     "../construction/StageWorkspace":{UnitStages:"UnitStages"},
-    "../inventory/statusLabels":{statusLabel:value=>value},
+    "../inventory/statusLabels":{statusLabel:value=>value,statusTone:()=>"neutral"},
   },{projectId:"project",roles:new Set(["project_manager"]),onClose(){}});
   view.render();view.flush();await settle();
 

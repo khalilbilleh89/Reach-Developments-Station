@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { companyDocuments, type CompanyDocument } from "@/lib/api/companies";
 import { useAnswer } from "@/lib/answer";
-import { Button, Card, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, RecordPage, SectionHeader } from "@/components/ui";
+import { Button, Card, CardRow, CardRows, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, RecordPage, RowMenu, SectionHeader } from "@/components/ui";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
 export function CompanyDocumentForm({ row, onSave, onClose, onSaved }: {
@@ -49,19 +49,22 @@ export function CompanyDocuments({ projectId, companyId, canWrite }: { projectId
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}
     {error ? <Notice tone="error">{error}</Notice> : null}
     {answer.status === "ready" && answer.data.length === 0 ? <EmptyState title="No company documents added" hint="Upload company registration PDFs, each with a specific label." /> : null}
-    {answer.status === "ready" ? <div className="stack">{answer.data.map(row => <section className="form-section" key={row.id}>
-      <SectionHeader title={row.label} actions={canWrite ? <>
-        <Button variant="default" onClick={() => setEditor({ row })}>Edit label</Button>
-        <DeleteRecordButton label="company document" recordName={row.label} confirmLabel="Delete document" description="Remove this document from the company register. Its PDF and audit history will be retained." onDelete={reason => companyDocuments.remove(projectId, companyId, row, reason)} onDeleted={async () => { answer.retry(); }} />
-      </> : undefined} />
-      <p className="company-document-file">{row.filename}</p>
-      <Button variant="default" disabled={downloading !== null} aria-label={`Download PDF: ${row.label}`} onClick={async () => {
-        setDownloading(row.id); setError(null);
-        try { await companyDocuments.download(projectId, companyId, row); }
-        catch (caught) { setError(caught instanceof Error ? caught.message : "Could not download the PDF."); }
-        finally { setDownloading(null); }
-      }}>{downloading === row.id ? "Downloading…" : "Download PDF"}</Button>
-    </section>)}</div> : null}
+    {answer.status === "ready" && answer.data.length ? <CardRows label="Company registration documents">{answer.data.map(row => <CardRow key={row.id}
+      title={row.label}
+      meta={row.filename}
+      facts={[]}
+      actions={<>
+        <Button variant="default" disabled={downloading !== null} aria-label={`Download PDF: ${row.label}`} onClick={async () => {
+          setDownloading(row.id); setError(null);
+          try { await companyDocuments.download(projectId, companyId, row); }
+          catch (caught) { setError(caught instanceof Error ? caught.message : "Could not download the PDF."); }
+          finally { setDownloading(null); }
+        }}>{downloading === row.id ? "Downloading…" : "Download PDF"}</Button>
+        {canWrite ? <RowMenu label={`Actions for ${row.label}`}>
+          <Button variant="default" onClick={() => setEditor({ row })}>Edit label</Button>
+          <DeleteRecordButton label="company document" recordName={row.label} confirmLabel="Delete document" description="Remove this document from the company register. Its PDF and audit history will be retained." onDelete={reason => companyDocuments.remove(projectId, companyId, row, reason)} onDeleted={async () => { answer.retry(); }} />
+        </RowMenu> : null}
+      </>} />)}</CardRows> : null}
     {editor ? <CompanyDocumentForm key={editor.row?.id ?? "new"} row={editor.row} onClose={() => setEditor(null)} onSaved={answer.retry} onSave={async (label, file) => {
       if (editor.row) return companyDocuments.update(projectId, companyId, editor.row, label);
       if (file) return companyDocuments.create(projectId, companyId, label, file);

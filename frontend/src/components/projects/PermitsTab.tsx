@@ -17,6 +17,7 @@ import { businessDate, money, todayISO } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
+  Banner,
   Button,
   ButtonRow,
   Card,
@@ -24,10 +25,12 @@ import {
   CardRows,
   ConfirmDialog,
   DataToolbar,
+  DensitySwitch,
   Disclosure,
   EmptyState,
   Field,
   FieldRow,
+  FilterChips,
   FormActions,
   Icon,
   KeyValue,
@@ -37,6 +40,7 @@ import {
   Notice,
   PageHeader,
   RecordStrip,
+  SavedViews,
   SectionHeader,
   Segmented,
   StatStrip,
@@ -311,6 +315,12 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
   }, [register, filter, status, search, types]);
 
   const filtered = filter !== "" || status !== "" || search !== "";
+  const SHOW_LABELS: Record<Filter, string> = { "": "All permits", blocking: "Blocking", critical: "Critical path", overdue: "Late or expired" };
+  const chips = [
+    filter ? { key: "show", label: SHOW_LABELS[filter], onRemove: () => setFilter("") } : null,
+    status ? { key: "status", label: `Status: ${STATUS_LABELS[status] ?? status}`, onRemove: () => setStatus("") } : null,
+    search ? { key: "search", label: `“${search}”`, onRemove: () => setSearch("") } : null,
+  ].filter((chip): chip is NonNullable<typeof chip> => chip !== null);
 
   return (
     <>
@@ -369,12 +379,12 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
           }
         >
           <ToolbarFilter label="Show" active={filter !== ""}>
-            <select className="input" value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
-              <option value="">All permits</option>
-              <option value="blocking">Blocking only</option>
-              <option value="critical">Critical path only</option>
-              <option value="overdue">Late or expired only</option>
-            </select>
+            <Segmented<Filter>
+              label="Show"
+              value={filter}
+              onChange={setFilter}
+              options={(["", "blocking", "critical", "overdue"] as const).map((value) => ({ value, label: SHOW_LABELS[value] }))}
+            />
           </ToolbarFilter>
           <ToolbarFilter label="Status" active={status !== ""}>
             <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -387,8 +397,23 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
             </select>
           </ToolbarFilter>
         </DataToolbar>
+        <FilterChips chips={chips} onClearAll={() => { setFilter(""); setStatus(""); setSearch(""); }} />
+        <SavedViews
+          screen="project-permits"
+          filters={{ show: filter, status, search }}
+          sort={null}
+          onApply={(saved) => {
+            const show = String(saved.show ?? "");
+            setFilter((["", "blocking", "critical", "overdue"] as const).find((value) => value === show) ?? "");
+            setStatus(String(saved.status ?? ""));
+            setSearch(String(saved.search ?? ""));
+          }}
+        />
 
-        <Segmented label="Permit presentation" value={presentation} onChange={setPresentation} options={[{ value: "approvals", label: "Approvals" }, { value: "schedule", label: "Schedule" }]} />
+        <div className="row-actions">
+          <Segmented label="Permit presentation" value={presentation} onChange={setPresentation} options={[{ value: "approvals", label: "Approvals" }, { value: "schedule", label: "Schedule" }]} />
+          {presentation === "schedule" ? <DensitySwitch /> : null}
+        </div>
         <div>
           {register === null ? (
             <Loading label="Loading permits…" shape="rows" />
@@ -622,7 +647,7 @@ function PermitFile({
               actual milestone dates derive the status server-side. A warning
               that contradicts the behaviour teaches the operator to maintain
               by hand a status the server is already working out. */}
-          {permitReviewNotes(permit).map(note => <Notice key={note} tone="warning">Review this record: {note}</Notice>)}
+          {permitReviewNotes(permit).map(note => <Banner key={note} tone="warning" action={canWrite && !editing ? <Button small data-leaves-editor onClick={() => setEditing(true)}>Edit permit</Button> : undefined}>Review this record: {note}</Banner>)}
           {editing ? (
             <Card title="Edit permit">
               {/* Said here, where the operator is deciding what to type, and
@@ -666,7 +691,7 @@ function PermitFile({
 
           {/* The next action sits in the bar under the head; only a prerequisite still open is repeated here. */}
           {!permit.prerequisite_satisfied ? (
-            <Notice tone="warning">A permit this one depends on has not been issued.</Notice>
+            <Banner tone="warning">A permit this one depends on has not been issued.</Banner>
           ) : null}
 
           <section className="permit-date-groups">

@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
-import { statusLabel } from "@/components/projects/inventory/statusLabels";
+import { statusLabel, statusTone } from "@/components/projects/inventory/statusLabels";
+import Link from "next/link";
+import { projectHref } from "@/components/shell/navigation";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesTransaction } from "@/lib/api";
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
-import { Icon, Badge, Button, Card, DataToolbar, EmptyState, Loading, Notice, PageHeader, RecordLink, RegisterPagination, TableScroll, ToolbarFilter } from "@/components/ui";
+import { Icon, Badge, Banner, Button, Card, DataToolbar, DensitySwitch, EmptyState, FilterChips, Loading, Notice, PageHeader, RecordLink, RegisterPagination, SavedViews, StatusDot, TableScroll, ToolbarFilter, Tooltip } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useCurrencyCode } from "@/lib/currency";
 import { reservationLabel, saleLabel, reservationTone, saleTone } from "./sales/labels";
@@ -51,19 +53,26 @@ export function SalesTab({projectId, projectStatus, roles}: {
       <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "stock" ? null : "stock");}}><Icon name="inventory" />Commercial stock</Button>
       {canAdmin || roles.has("project_manager") ? <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "gates" ? null : "gates");}}>Sales gates</Button> : null}
     </>} />
-    {projectStatus === "setup" ? <Notice tone="info">Sales becomes available when project setup is complete.</Notice> : preparing ? <NewReservation projectId={projectId} allowOwner={roles.has("master_admin")} onSaleCreated={id => {router.replace(createdSalesHref(params,projectId,"sale",id));}} onCancel={() => setState({sales_view:""})} onCreated={id => {router.replace(createdSalesHref(params,projectId,"reservation",id));}} /> : <>
+    {projectStatus === "setup" ? <Banner tone="info" action={<Link className="button" href={projectHref(projectId)}>Open the project overview</Link>}>Sales becomes available when project setup is complete.</Banner> : preparing ? <NewReservation projectId={projectId} allowOwner={roles.has("master_admin")} onSaleCreated={id => {router.replace(createdSalesHref(params,projectId,"sale",id));}} onCancel={() => setState({sales_view:""})} onCreated={id => {router.replace(createdSalesHref(params,projectId,"reservation",id));}} /> : <>
       {open === "stock" ? <CommercialUnits projectId={projectId} roles={roles} onClose={() => setOpen(null)} /> : null}
       {open === "gates" ? <SalesGates projectId={projectId} onClose={() => setOpen(null)} /> : null}
       <DataToolbar framed search={{ value: state.search, onChange: value => setState({search:value,offset:""}), placeholder: "Buyer, unit, reservation or SPA", label: "Find transaction" }}
         count={rows ? { shown: rows.items.length, total: rows.total, noun: "transaction" } : undefined}
-        onReset={state.search || state.transaction_status ? () => setState({search:"",transaction_status:"",offset:""}) : undefined}>
+        onReset={state.search || state.transaction_status ? () => setState({search:"",transaction_status:"",offset:""}) : undefined}
+        actions={<DensitySwitch />}>
       <ToolbarFilter label="Status" active={state.transaction_status !== ""}><select className="input" value={state.transaction_status} onChange={e => setState({transaction_status:e.target.value,offset:""})}><option value="">Any status</option>{["draft","deposit_pending","active","extended","signature_pending","termination_pending",...(history ? ["converted","expired","cancelled"] : [])].map(status => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></ToolbarFilter></DataToolbar>
+      <FilterChips chips={[
+        state.transaction_status ? {key: "status", label: `Status: ${statusLabel(state.transaction_status)}`, onRemove: () => setState({transaction_status: "", offset: ""})} : null,
+        state.search ? {key: "search", label: `“${state.search}”`, onRemove: () => setState({search: "", offset: ""})} : null,
+      ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)} onClearAll={() => setState({search: "", transaction_status: "", offset: ""})} />
+      {/* Server-paginated: a view keeps the filter, never a sort over one page. */}
+      <SavedViews screen={history ? "sales_history" : "sales_current"} filters={{transaction_status: state.transaction_status}} sort={null} onApply={saved => setState({transaction_status: String(saved.transaction_status ?? ""), offset: ""})} />
       {error ? <Notice tone="error">{error} <Button onClick={() => void refresh()}>Retry Sales transactions</Button></Notice> : !rows ? <Loading label="Loading Sales transactions…" shape="rows" /> : <Card title={history ? "Transaction history" : "Current transactions"}>
-        {rows.items.length === 0 ? <EmptyState icon="sales" title="No matching transactions" hint="Start a new reservation to select an available unit. Existing transactions can be found by buyer, unit or reference." /> : <TableScroll label="Sales transactions" fixedFirst stickyHeader><thead><tr><th>Transaction / buyer</th><th>Unit</th><th>List price at deal</th><th>Agreed sales price</th><th>Variance</th><th>Status</th><th>SPA</th><th>{history ? "Unit legal · current" : "Legal"}</th><th>{history ? "Unit collections · current" : "Collections"}</th></tr></thead><tbody>{rows.items.map(row => <tr key={`${row.kind}:${row.id}`}>
+        {rows.items.length === 0 ? <EmptyState icon="sales" title="No matching transactions" hint="Start a new reservation to select an available unit. Existing transactions can be found by buyer, unit or reference." /> : <TableScroll label="Sales transactions" fixedFirst stickyHeader><thead><tr><th>Transaction / buyer</th><th>Unit</th><th>List price at deal</th><th>Agreed sales price</th><th>Variance</th><th>Status</th><th><Tooltip term="SPA">Sale and purchase agreement: the contract the buyer signs for the unit.</Tooltip></th><th>{history ? "Unit legal · current" : "Legal"}</th><th>{history ? "Unit collections · current" : "Collections"}</th></tr></thead><tbody>{rows.items.map(row => <tr key={`${row.kind}:${row.id}`}>
           <th scope="row" className="sales-primary-cell"><RecordLink projectId={projectId} kind={row.kind} id={row.id}><span className="sales-reference">{row.reference}</span></RecordLink><span className="cell-secondary">{row.kind === "sale" ? "Sale" : "Reservation"} · {row.client_display_name}</span></th>
           <td>{row.unit_reference}</td><td>{money(row.reference_price_ex_tax,codeOf(row.currency_id))}</td><td>{money(row.sales_price_ex_tax,codeOf(row.currency_id))}</td>
           <td>{varianceDirection(row.price_variance_amount) === "At list" ? <span className="subtle">At list</span> : <>{money(row.price_variance_amount,codeOf(row.currency_id))}<span className="cell-secondary">{row.price_variance_fraction === null ? "Percentage unavailable" : row.price_variance_percentage} · {varianceDirection(row.price_variance_amount)}</span></>}</td>
-          <td><Badge tone={row.kind === "sale" ? saleTone(row.status) : reservationTone(row.status)}>{row.kind === "sale" ? saleLabel(row.status) : reservationLabel(row.status)}</Badge></td><td>{row.spa_number ?? "Not prepared"}</td><td>{statusLabel(row.legal_status)}</td><td><Badge tone={unitCollectionTone(row.collection_status)}>{unitCollectionLabel(row.collection_status)}</Badge></td>
+          <td><Badge tone={row.kind === "sale" ? saleTone(row.status) : reservationTone(row.status)}>{row.kind === "sale" ? saleLabel(row.status) : reservationLabel(row.status)}</Badge></td><td>{row.spa_number ?? "Not prepared"}</td><td><StatusDot tone={statusTone(row.legal_status)}>{statusLabel(row.legal_status)}</StatusDot></td><td><Badge tone={unitCollectionTone(row.collection_status)}>{unitCollectionLabel(row.collection_status)}</Badge></td>
         </tr>)}</tbody></TableScroll>}
         <RegisterPagination offset={offset} total={rows.total} pageSize={50} onChange={value => setState({offset:String(value)})} />
       </Card>}

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui";
 import { ApiError, construction } from "@/lib/api";
 import type { CertificateDetail } from "@/lib/api";
+import type { ReactNode } from "react";
 import { businessDate, money } from "@/lib/format";
 
 import { certificateLabel, certificateTone } from "./labels";
@@ -117,27 +118,20 @@ export function CertificateFile({
           {certificateLabel(certificate.status)}
         </Badge>
       }
-      actions={
-        onOpenContract ? (
-          <Button
-            variant="quiet"
-            onClick={() => onOpenContract(certificate.contract_id)}
-          >
-            Open contract
-          </Button>
-        ) : undefined
-      }
-      facts={[
-        {
-          label: "Work this period",
-          value: money(certificate.current_work_value_ex_tax, currency),
+      strip={{
+        lead: {
+          label: "Net due",
+          value: money(certificate.net_due, currency),
+          note: "After retention, releases, recoveries, deductions and tax",
         },
-        { label: "Net due", value: money(certificate.net_due, currency) },
-        {
-          label: "Still to invoice",
-          value: money(certificate.uninvoiced_net_due, currency),
-        },
-      ]}
+        items: [
+          { label: "Work this period", value: money(certificate.current_work_value_ex_tax, currency), note: "Excluding tax" },
+          { label: "Retention withheld", value: money(certificate.retention_held_amount, currency) },
+          { label: "Still to invoice", value: money(certificate.uninvoiced_net_due, currency) },
+          { label: "Period", value: `${businessDate(certificate.period_start)} to ${businessDate(certificate.period_end)}` },
+        ],
+      }}
+      next={nextStep(certificate, currency, onOpenContract)}
       onClose={onClose}
     >
       <div className="stack">
@@ -270,4 +264,33 @@ export function CertificateFile({
       </div>
     </RecordPage>
   );
+}
+
+/**
+ * What this certificate waits on, in the words of its server status. Every
+ * action that moves it lives on its contract, so the one control offered is
+ * the way there.
+ */
+function nextStep(
+  certificate: CertificateDetail,
+  currency: string,
+  onOpenContract?: (contractId: string) => void,
+): { text: ReactNode; action?: ReactNode } {
+  const action = onOpenContract ? (
+    <Button small onClick={() => onOpenContract(certificate.contract_id)}>Open contract</Button>
+  ) : undefined;
+  switch (certificate.status) {
+    case "draft":
+      return { text: "A draft valuation: submit it for certification from its contract's Certificates tab.", action };
+    case "submitted":
+      return { text: "Awaiting certification by another authorised user on its contract.", action };
+    case "certified":
+      return { text: `Certified. ${money(certificate.uninvoiced_net_due, currency)} of the net due is still to invoice.`, action };
+    case "rejected":
+      return { text: certificate.rejection_reason ? `Rejected: ${certificate.rejection_reason}` : "Rejected.", action };
+    case "reversed":
+      return { text: certificate.reversal_reason ? `Reversed: ${certificate.reversal_reason}` : "Reversed.", action };
+    default:
+      return { text: certificateLabel(certificate.status), action };
+  }
 }
