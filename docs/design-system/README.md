@@ -112,3 +112,12 @@ Left as they are, on purpose:
 - **Money distributions** (collections ageing) keep their server-share track: `CountComposition` is for counts.
 - **Undo (G1)** is offered only where a restore endpoint exists.
 
+## Text-size audit (owner request, 1 Nov 2026)
+
+Every visible text element on 152 views (every page, tab and first record, desktop and phone) was measured by role, and every `font-size` in the two stylesheets was checked against the scale.
+
+- **One scale, no fractions.** About 70 hard-coded sizes (`.64rem`–`1.9rem`, `clamp()` titles, 10px chart labels) now use the tokens; computed sizes are whole steps of the scale.
+- **A floor.** Sentence text is never under 12px (`--text-xs`); 11px (`--text-2xs`) is for uppercase labels, table headings and chart axes only. Key caps and short code glyphs stay 11px. `<small>` takes 12px.
+- **Phones.** Form fields are 16px under 640px (`--text-touch`), so iOS does not zoom on focus.
+- **Hierarchy.** A sub-heading is never larger than its section heading (Design, Land, Inventory, Pre-launch); record titles use `--title-record`.
+
