@@ -6789,9 +6789,9 @@ td.buyer-identity { min-width: 9rem; max-width: 16rem; white-space: normal; over
 .matrix-step { flex: 0 1 11.5rem; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 3px solid transparent; border-radius: 18px 18px 6px 6px; background: var(--accent-soft); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease); }
 .matrix-step:hover { transform: translateY(-4px); }
 .matrix-step[aria-pressed="true"] { border-color: var(--ink); box-shadow: var(--shadow-lg); }
-.matrix-step > span { font-size: var(--text-xs); opacity: 0.85; }
+.matrix-step > span { font-size: var(--text-xs); }
 .matrix-step > strong { font-size: var(--text-md); font-weight: 600; }
-.matrix-step .matrix-step-number { font-size: var(--metric-hero-lg); font-weight: 700; line-height: 1; letter-spacing: -0.03em; opacity: 0.9; }
+.matrix-step .matrix-step-number { font-size: var(--metric-hero-lg); font-weight: 700; line-height: 1; letter-spacing: -0.03em; }
 .matrix-step .matrix-step-count { margin-top: auto; font-weight: 600; }
 .matrix-step-0 { height: 12rem; }
 .matrix-step-1 { height: 16rem; background: var(--brand-gold-fill); }
