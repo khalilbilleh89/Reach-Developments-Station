@@ -65,3 +65,55 @@ test("BCG renders server positions with exact source values",()=>{
  const render=harness("matrix/MatrixCanvas");const tree=render("MatrixCanvas",{values:{...record,framework:"bcg",items:[{label:"A",growth_pct:"12.125",relative_share:"1.250",notes:"",category:""}]},points:[{label:"A",category:"Stars",x:410,y:220}]});
  assert.equal(find(tree,"circle")[0].props.cx,410);assert.equal(find(tree,"circle")[0].props.cy,220);const text=JSON.stringify(tree);assert.ok(text.includes("12.125"));assert.ok(text.includes("1.250"));assert.ok(text.includes("Stars"));
 });
+const byClass = (tree, name) => nodes(tree).filter(node => typeof node.props?.className === "string" && node.props.className.split(" ").includes(name));
+const item = (category, label, notes = "") => ({ category, label, notes, growth_pct: null, relative_share: null });
+test("SWOT ledger keeps each entry on its side and opens a note in place",()=>{
+ const render=harness("matrix/MatrixCanvas");const values={...record,framework:"swot",items:[item("Strengths","Seafront","Beach frontage"),item("Threats","Rates")]};
+ let tree=render("MatrixCanvas",{values});
+ const forSide=JSON.stringify(byClass(tree,"matrix-ledger-for")[0]);assert.ok(forSide.includes("Seafront"));assert.ok(!forSide.includes("Rates"));
+ assert.deepEqual(byClass(tree,"matrix-entry-ref").map(n=>n.props.children),["S1","T1"]);
+ byClass(tree,"matrix-entry")[0].props.onClick();tree=render("MatrixCanvas",{values});
+ assert.equal(byClass(tree,"matrix-entry")[0].props["aria-expanded"],true);assert.equal(byClass(tree,"matrix-entry-note")[0].props.children,"Beach frontage");
+ byClass(tree,"matrix-ledger-head")[0].props.onClick();tree=render("MatrixCanvas",{values});
+ assert.equal(byClass(tree,"matrix-ledger-group").filter(n=>n.props.className.includes("matrix-dim")).length,3);
+});
+test("PESTEL wheel reads one lens at a time and steps round the six",()=>{
+ const render=harness("matrix/MatrixCanvas");const values={...record,framework:"pestel",items:[item("Political","Policy review"),item("Economic","Rates rising"),item("Economic","Tourism up")]};
+ let tree=render("MatrixCanvas",{values});
+ assert.equal(byClass(tree,"matrix-lens-0")[0].props["aria-pressed"],true);assert.ok(JSON.stringify(byClass(tree,"matrix-wheel-panel")[0]).includes("Policy review"));
+ find(tree,"button").find(n=>n.props.className==="button button-primary").props.onClick();tree=render("MatrixCanvas",{values});
+ assert.equal(byClass(tree,"matrix-wheel")[0].props.style["--matrix-turn"],"60deg");
+ const panel=JSON.stringify(byClass(tree,"matrix-wheel-panel")[0]);assert.ok(panel.includes("Tourism up"));assert.ok(!panel.includes("Policy review"));
+ assert.ok(JSON.stringify(byClass(tree,"matrix-lens-1")[0]).includes("2 observations"));assert.ok(JSON.stringify(byClass(tree,"matrix-lens-0")[0]).includes("1 observation\""));
+});
+test("Porter rivalry lights every arrow; an outside force lights its own",()=>{
+ const render=harness("matrix/MatrixCanvas");const values={...record,framework:"porter",items:[item("Buyers","Investors compare yields")]};
+ let tree=render("MatrixCanvas",{values});
+ byClass(tree,"matrix-area-e")[0].props.onClick();tree=render("MatrixCanvas",{values});
+ assert.deepEqual(byClass(tree,"matrix-arrow-on").map(n=>n.props.className.includes("matrix-area-ae")),[true]);
+ byClass(tree,"matrix-centre")[0].props.onClick();tree=render("MatrixCanvas",{values});
+ assert.equal(byClass(tree,"matrix-arrow-on").length,4);
+});
+test("BCG keeps unplaced products visible until the server places them",()=>{
+ const render=harness("matrix/MatrixCanvas");const values={...record,framework:"bcg",items:[{...item("","Studios"),growth_pct:"18",relative_share:"0.6"}]};
+ const tree=render("MatrixCanvas",{values,points:[]});
+ assert.equal(find(tree,"circle").length,0);assert.equal(byClass(tree,"matrix-card").length,0);
+ assert.ok(JSON.stringify(tree).includes("1. Studios (18% · 0.6×)"));
+});
+test("Ansoff staircase opens on the first step and counts each step's moves",()=>{
+ const render=harness("matrix/MatrixCanvas");const values={...record,framework:"ansoff",items:[item("Market penetration","Referrals"),item("Diversification","Retail"),item("Diversification","Hotel")]};
+ let tree=render("MatrixCanvas",{values});
+ assert.equal(byClass(tree,"matrix-step-0")[0].props["aria-pressed"],true);
+ assert.deepEqual(byClass(tree,"matrix-step-count").map(n=>n.props.children),["1 move","0 moves","0 moves","2 moves"]);
+ byClass(tree,"matrix-step-3")[0].props.onClick();tree=render("MatrixCanvas",{values});
+ const detail=JSON.stringify(byClass(tree,"matrix-stairs-detail")[0]);assert.ok(detail.includes("Hotel"));assert.ok(!detail.includes("Referrals"));
+});
+test("Fishbone traces a chosen cause into the effect",()=>{
+ const render=harness("matrix/MatrixCanvas");const values={...record,framework:"fishbone",effect:"Reservations stalled",items:[item("Process","Three visits","Finance approval waits")]};
+ let tree=render("MatrixCanvas",{values});
+ assert.equal(byClass(tree,"matrix-trace").length,0);
+ byClass(tree,"matrix-cause")[0].props.onClick();tree=render("MatrixCanvas",{values});
+ assert.ok(JSON.stringify(byClass(tree,"matrix-trace")[0]).includes("Three visits"));
+ assert.equal(byClass(tree,"matrix-funnel-line-on").length,1);assert.equal(byClass(tree,"matrix-funnel-line-dim").length,5);
+ assert.ok(JSON.stringify(byClass(tree,"matrix-effect")[0]).includes("Reservations stalled"));
+});
