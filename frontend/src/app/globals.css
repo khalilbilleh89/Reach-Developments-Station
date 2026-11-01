@@ -7260,7 +7260,11 @@ small { font-size: var(--text-xs); }
 /* A currency's sub-heading inside a section sits below the section's own list titles. */
 .analysis-primary h4 { font-size: var(--text-sm); }
 @media (max-width: 640px) {
+  /* Every rule that sizes a field more specifically is named here too, at
+   * equal or higher specificity, so this later rule wins on a phone. */
   .input, input.input, select.input, textarea.input,
-  .toolbar-search .input, .toolbar-framed .toolbar-search .input { font-size: var(--text-touch); }
+  .toolbar-search .input, .toolbar-framed .toolbar-search .input,
+  .toolbar-framed .toolbar-filter .input, .schedule-editor .input,
+  input[type="file"].input, .palette-search input { font-size: var(--text-touch); }
 }
 
