@@ -1,4 +1,5 @@
 "use client";
+import { ImportedSalesDetails } from "./SalesDrafts";
 
 import * as ui from "@/components/ui";
 import { LegalSummary } from "@/components/projects/sales/LegalSummary";
@@ -784,6 +785,8 @@ export function SaleWorkspace({
     >
       <p className="subtle"><RecordLink projectId={projectId} kind="unit" id={(sale?.sale.unit_id ?? terms?.unit_id)!}>Inspect unit reference {unitLabel}</RecordLink></p>
       <Steps label="Where the deal has got to" steps={lifecycle(terms, sale)} />
+      {terms ? <ImportedSalesDetails projectId={projectId} reservationId={terms.id} allowed={roles.has("master_admin")}/> : null}
+
 
       {error ? <Notice tone="error">{error}</Notice> : null}
 
