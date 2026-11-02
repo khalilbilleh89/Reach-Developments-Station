@@ -19,6 +19,17 @@ drafts and imported records. An Add/Edit feature is incomplete without its remov
 8. Test removal, permissions, scope isolation, dependencies, repeat requests, audit retention
    and affected totals where applicable.
 
+## Bulk removal on registers
+
+Buyers, Agents and current Sales transactions may be ticked and removed together
+(`app/modules/sales/bulk.py`). A bulk request is not a wider permission: each ticked
+record runs through its own single-record removal, in its own transaction, with the
+same role, dependency checks, reason and audit event. A record that must be kept is
+returned with the rule that kept it and never blocks the others. Nothing is erased
+that the single-record path retains: buyers and Agents with history stay, signed or
+collected sales still need Cancellation, and removed sales and reservations remain as
+cancelled history. At most 500 records are accepted per request.
+
 ## Enforcement
 
 `AGENTS.md` makes this a standing agent instruction. The PR template requires removal evidence.

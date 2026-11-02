@@ -28,12 +28,16 @@ import {
   SortHeader,
   SubPanel,
   TableScroll,
+  SelectAllCell,
+  SelectCell,
+  useSelection,
   RowMenu,
   Segmented,
   useSort,
 } from "@/components/ui";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
+import { BulkRemovalBar } from "./BulkRemoval";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { kycLabel, kycTone } from "@/components/projects/sales/labels";
@@ -198,6 +202,8 @@ export function ClientsPanel({
 
   // Ordering the buyers already on screen; the server returns the list in full.
   const { sort, toggle, sorted } = useSort(clients ?? NO_CLIENTS, readClientColumn);
+  // Every buyer on screen is in the list the server returned; Select all means all of them.
+  const ticked = useSelection(sorted.map((client) => client.id));
 
   const run = async (action: () => Promise<unknown>, done: string) => {
     setBusy(true);
@@ -295,6 +301,12 @@ export function ClientsPanel({
         actions={<DensitySwitch />}
       />
 
+      {canAdmin ? <BulkRemovalBar count={ticked.selected.length} noun="buyer" verb="Delete"
+        description="Buyers with no transaction history are deleted. A buyer with a reservation, sale or payment is kept and listed with the reason; deactivate them instead. The audit trail is retained."
+        names={Object.fromEntries(sorted.map((client) => [client.id, client.display_name]))}
+        run={(reason) => sales.bulkDeleteClients(projectId, ticked.selected, reason)}
+        onClear={ticked.clear} onDone={() => { void load(); void onChanged(); }} /> : null}
+
       {clients.length === 0 ? (
         <EmptyState
           title="No buyers yet"
@@ -304,6 +316,7 @@ export function ClientsPanel({
         <TableScroll label="Buyers" compact>
           <thead>
             <tr>
+              {canAdmin ? <SelectAllCell label="Select all buyers" checked={ticked.all} indeterminate={ticked.some} onChange={ticked.toggleAll} /> : null}
               <SortHeader column="client" sort={sort} onToggle={toggle}>Client</SortHeader>
               <SortHeader column="name" sort={sort} onToggle={toggle}>Name</SortHeader>
               <SortHeader column="kyc" sort={sort} onToggle={toggle}>Identity checks</SortHeader>
@@ -317,6 +330,7 @@ export function ClientsPanel({
           <tbody>
             {sorted.map((client) => (
               <tr key={client.id} aria-selected={selected === client.id}>
+                {canAdmin ? <SelectCell label={`Select ${client.display_name}`} checked={ticked.isSelected(client.id)} onChange={() => ticked.toggle(client.id)} /> : null}
                 <th scope="row" className="mono">
                   {client.client_number}
                 </th>

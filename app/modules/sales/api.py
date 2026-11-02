@@ -34,7 +34,16 @@ from starlette.concurrency import run_in_threadpool
 from app.core.xlsx import MAX_BYTES
 from app.modules.access.dependencies import ActiveActor, ActorContext, DbSession, SystemAdmin
 from app.modules.projects.models import Project
-from app.modules.sales import agents, deletion, imports, registration, removal, service, workspace
+from app.modules.sales import (
+    agents,
+    bulk,
+    deletion,
+    imports,
+    registration,
+    removal,
+    service,
+    workspace,
+)
 from app.modules.sales.models import (
     Client,
     HandoverRecord,
@@ -53,6 +62,9 @@ from app.modules.sales.schemas import (
     AdjustmentRead,
     AdjustmentUpdateRequest,
     AgentDetailsRequest,
+    BulkDeleteRequest,
+    BulkRemovalRead,
+    BulkTransactionRequest,
     BuyerRegistrationRequest,
     CancellationAdvanceRequest,
     CancellationCompleteRequest,
@@ -424,6 +436,54 @@ def delete_agent(
 ) -> Response:
     agents.delete_agent(session, project=project, actor=actor, agent_id=agent_id, reason=reason)
     return Response(status_code=204)
+
+
+@router.post(
+    "/{project_id}/sales/clients/bulk-delete",
+    response_model=BulkRemovalRead,
+    summary="Delete ticked buyers; those with history are kept and explained",
+)
+def bulk_delete_clients(
+    payload: BulkDeleteRequest,
+    session: DbSession,
+    actor: SystemAdmin,
+    project: SalesProject,
+) -> BulkRemovalRead:
+    return bulk.delete_clients(
+        session, project=project, actor=actor, client_ids=payload.ids, reason=payload.reason
+    )
+
+
+@router.post(
+    "/{project_id}/sales/agents/bulk-delete",
+    response_model=BulkRemovalRead,
+    summary="Delete ticked Agents; those with history are kept and explained",
+)
+def bulk_delete_agents(
+    payload: BulkDeleteRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> BulkRemovalRead:
+    return bulk.delete_agents(
+        session, project=project, actor=actor, agent_ids=payload.ids, reason=payload.reason
+    )
+
+
+@router.post(
+    "/{project_id}/sales/transactions/bulk-remove",
+    response_model=BulkRemovalRead,
+    summary="Remove ticked unsigned sales and live reservations as cancelled",
+)
+def bulk_remove_transactions(
+    payload: BulkTransactionRequest,
+    session: DbSession,
+    actor: ActiveActor,
+    project: SalesProject,
+) -> BulkRemovalRead:
+    return bulk.remove_transactions(
+        session, project=project, actor=actor, items=payload.items, reason=payload.reason
+    )
 
 
 def _client_read(actor: ActorContext, client: Client) -> ClientRead | ClientSummaryRead:

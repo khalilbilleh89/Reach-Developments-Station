@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesTransaction } from "@/lib/api";
 import { useRegisterFields, useRegisterRestore } from "@/components/shell/registerState";
-import { Icon, Badge, Banner, Button, Card, DataToolbar, DensitySwitch, EmptyState, FilterChips, Loading, Notice, PageHeader, RecordLink, RegisterPagination, SavedViews, StatusDot, TableScroll, ToolbarFilter, Tooltip } from "@/components/ui";
+import { Icon, Badge, Banner, Button, Card, DataToolbar, DensitySwitch, EmptyState, FilterChips, Loading, Notice, PageHeader, RecordLink, RegisterPagination, SavedViews, SelectAllCell, SelectCell, StatusDot, TableScroll, ToolbarFilter, Tooltip, useSelection } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useCurrencyCode } from "@/lib/currency";
 import { reservationLabel, saleLabel, reservationTone, saleTone } from "./sales/labels";
@@ -17,6 +17,7 @@ import { NewReservation } from "./sales/NewReservation";
 import { SalesGates } from "./sales/SalesGates";
 import { createdSalesHref } from "./sales/salesRoutes";
 import { varianceDirection } from "./sales/PriceComparison";
+import { BulkRemovalBar } from "./sales/BulkRemoval";
 
 export function SalesTab({projectId, projectStatus, roles}: {
   projectId: string; projectStatus: string; roles: Set<string>; userId: string;
@@ -45,6 +46,9 @@ export function SalesTab({projectId, projectStatus, roles}: {
   const rows = result?.key === key ? result : null;
   const error = failure?.key === key ? failure.message : null;
   useRegisterRestore(rows !== null && !preparing);
+  // Removal is a Master Administrator action on the current register; history is read-only.
+  const canRemove = roles.has("master_admin") && !history;
+  const ticked = useSelection(rows ? rows.items.map(row => `${row.kind}:${row.id}`) : []);
   const refresh = async () => {setRetry(value => value + 1);};
   return <div className="stack">
     <PageHeader icon="sales" title="Sales" subtitle="The sales workflow for each unit" compact actions={<>
@@ -67,14 +71,19 @@ export function SalesTab({projectId, projectStatus, roles}: {
       ].filter((chip): chip is NonNullable<typeof chip> => chip !== null)} onClearAll={() => setState({search: "", transaction_status: "", offset: ""})} />
       {/* Server-paginated: a view keeps the filter, never a sort over one page. */}
       <SavedViews screen={history ? "sales_history" : "sales_current"} filters={{transaction_status: state.transaction_status}} sort={null} onApply={saved => setState({transaction_status: String(saved.transaction_status ?? ""), offset: ""})} />
+      {canRemove ? <BulkRemovalBar count={ticked.selected.length} noun="transaction" verb="Remove"
+          description="Unsigned sales and live reservations close as cancelled and leave current Sales; their buyer, history and any recorded payments are retained. A signed sale, or one with collections, is kept and listed: use its Cancellation tab."
+          names={Object.fromEntries((rows?.items ?? []).map(row => [row.id, `${row.reference} · ${row.client_display_name}`]))}
+          run={reason => sales.bulkRemoveTransactions(projectId, ticked.selected.map(key => { const [kind, id] = key.split(":"); return {kind: kind as "sale" | "reservation", id}; }), reason)}
+          onClear={ticked.clear} onDone={() => void refresh()} /> : null}
       {error ? <Notice tone="error">{error} <Button onClick={() => void refresh()}>Retry Sales transactions</Button></Notice> : !rows ? <Loading label="Loading Sales transactions…" shape="rows" /> : <Card title={history ? "Transaction history" : "Current transactions"}>
-        {rows.items.length === 0 ? <EmptyState icon="sales" title="No matching transactions" hint="Start a new reservation to select an available unit. Existing transactions can be found by buyer, unit or reference." /> : <TableScroll label="Sales transactions" fixedFirst stickyHeader><thead><tr><th>Transaction / buyer</th><th>Unit</th><th>List price at deal</th><th>Agreed sales price</th><th>Variance</th><th>Status</th><th><Tooltip term="SPA">Sale and purchase agreement: the contract the buyer signs for the unit.</Tooltip></th><th>{history ? "Unit legal · current" : "Legal"}</th><th>{history ? "Unit collections · current" : "Collections"}</th></tr></thead><tbody>{rows.items.map(row => <tr key={`${row.kind}:${row.id}`}>
+        {rows.items.length === 0 ? <EmptyState icon="sales" title="No matching transactions" hint="Start a new reservation to select an available unit. Existing transactions can be found by buyer, unit or reference." /> : <TableScroll label="Sales transactions" fixedFirst stickyHeader><thead><tr>{canRemove ? <SelectAllCell label="Select every transaction on this page" checked={ticked.all} indeterminate={ticked.some} onChange={ticked.toggleAll} /> : null}<th>Transaction / buyer</th><th>Unit</th><th>List price at deal</th><th>Agreed sales price</th><th>Variance</th><th>Status</th><th><Tooltip term="SPA">Sale and purchase agreement: the contract the buyer signs for the unit.</Tooltip></th><th>{history ? "Unit legal · current" : "Legal"}</th><th>{history ? "Unit collections · current" : "Collections"}</th></tr></thead><tbody>{rows.items.map(row => <tr key={`${row.kind}:${row.id}`}>{canRemove ? <SelectCell label={`Select ${row.reference}`} checked={ticked.isSelected(`${row.kind}:${row.id}`)} onChange={() => ticked.toggle(`${row.kind}:${row.id}`)} /> : null}
           <th scope="row" className="sales-primary-cell"><RecordLink projectId={projectId} kind={row.kind} id={row.id}><span className="sales-reference">{row.reference}</span></RecordLink><span className="cell-secondary">{row.kind === "sale" ? "Sale" : "Reservation"} · {row.client_display_name}</span></th>
           <td>{row.unit_reference}</td><td>{money(row.reference_price_ex_tax,codeOf(row.currency_id))}</td><td>{money(row.sales_price_ex_tax,codeOf(row.currency_id))}</td>
           <td>{varianceDirection(row.price_variance_amount) === "At list" ? <span className="subtle">At list</span> : <>{money(row.price_variance_amount,codeOf(row.currency_id))}<span className="cell-secondary">{row.price_variance_fraction === null ? "Percentage unavailable" : row.price_variance_percentage} · {varianceDirection(row.price_variance_amount)}</span></>}</td>
           <td><Badge tone={row.kind === "sale" ? saleTone(row.status) : reservationTone(row.status)}>{row.kind === "sale" ? saleLabel(row.status) : reservationLabel(row.status)}</Badge></td><td>{row.spa_number ?? "Not prepared"}</td><td><StatusDot tone={statusTone(row.legal_status)}>{statusLabel(row.legal_status)}</StatusDot></td><td><Badge tone={unitCollectionTone(row.collection_status)}>{unitCollectionLabel(row.collection_status)}</Badge></td>
         </tr>)}</tbody></TableScroll>}
-        <RegisterPagination offset={offset} total={rows.total} pageSize={50} onChange={value => setState({offset:String(value)})} />
+        <RegisterPagination offset={offset} total={rows.total} pageSize={50} onChange={value => { ticked.clear(); setState({offset:String(value)}); }} />
       </Card>}
     </>}
   </div>;

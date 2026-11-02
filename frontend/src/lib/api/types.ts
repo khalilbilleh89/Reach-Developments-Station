@@ -3107,6 +3107,11 @@ export interface SalesUnitOption {
   commercial_availability: string; gross_area: string | null; area_unit: string | null;
   reference_price_ex_tax: string; currency_id: string;
 }
+/** What a bulk removal did: each ticked record either went or was kept, with the rule that kept it. */
+export interface BulkRemoval {
+  removed: string[];
+  skipped: { id: string; message: string }[];
+}
 export interface SalesTransaction extends SalesPriceFacts {
   id: string; kind: "reservation" | "sale"; reference: string; status: string;
   created_at: string; unit_id: string; unit_reference: string; client_display_name: string;

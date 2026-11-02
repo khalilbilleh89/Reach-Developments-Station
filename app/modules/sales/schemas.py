@@ -26,7 +26,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.modules.projects.schemas import StrictRequest
 from app.modules.sales.models import (
@@ -92,6 +92,53 @@ class ReasonRequest(StrictRequest):
     """A decision that has to be explicable to whoever reads it later."""
 
     reason: Reason
+
+
+#: One request removes at most this many records; each still runs on its own.
+MAX_BULK = 500
+
+
+class BulkDeleteRequest(StrictRequest):
+    """Records ticked on a register, and one reason recorded on each removal."""
+
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_BULK)
+    reason: ShortReason
+
+    @field_validator("ids")
+    @classmethod
+    def _distinct(cls, ids: list[uuid.UUID]) -> list[uuid.UUID]:
+        if len(set(ids)) != len(ids):
+            raise ValueError("Each record may be listed once.")
+        return ids
+
+
+class BulkTransactionItem(StrictRequest):
+    kind: Literal["sale", "reservation"]
+    id: uuid.UUID
+
+
+class BulkTransactionRequest(StrictRequest):
+    items: list[BulkTransactionItem] = Field(min_length=1, max_length=MAX_BULK)
+    reason: ShortReason
+
+    @field_validator("items")
+    @classmethod
+    def _distinct(cls, items: list[BulkTransactionItem]) -> list[BulkTransactionItem]:
+        if len({item.id for item in items}) != len(items):
+            raise ValueError("Each transaction may be listed once.")
+        return items
+
+
+class BulkSkippedRead(BaseModel):
+    """A ticked record that was kept, and the rule that kept it."""
+
+    id: uuid.UUID
+    message: str
+
+
+class BulkRemovalRead(BaseModel):
+    removed: list[uuid.UUID]
+    skipped: list[BulkSkippedRead]
 
 
 class AgentDetailsRequest(ReasonRequest):
