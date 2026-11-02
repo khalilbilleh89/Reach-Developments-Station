@@ -7,9 +7,10 @@ import { SalesImport } from "./SalesImport";
 import { ApiError, sales } from "@/lib/api";
 import type { SalesAgent } from "@/lib/api";
 import { Button, DataToolbar, DensitySwitch, DraftBoundary, EmptyState, Field, FieldRow, FormActions,
-  Loading, Notice, RecordPage, RowMenu, SortHeader, StatusDot, TableScroll, useSort } from "@/components/ui";
+  Loading, Notice, RecordPage, RowMenu, SelectAllCell, SelectCell, SortHeader, StatusDot, TableScroll, useSelection, useSort } from "@/components/ui";
 import { eventTime } from "@/lib/format";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
+import { BulkRemovalBar } from "./BulkRemoval";
 
 function AgentForm({projectId, agent, onSaved, onCancel}: {
   projectId: string; agent: SalesAgent | null; onSaved: () => Promise<void>; onCancel: () => void;
@@ -78,6 +79,8 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
   useEffect(() => { void (async () => { await load(); })(); }, [load]);
   // Ordering the roster already on screen; the server returns it in full.
   const { sort, toggle, sorted } = useSort(agents ?? NO_AGENTS, readAgentColumn);
+  // The roster arrives whole, so Select all means every Agent matching the search.
+  const ticked = useSelection(sorted.map(agent => agent.id));
 
   if (importing) return <SalesImport projectId={projectId} kind="agents" onClose={() => setImporting(false)} onImported={() => { void load(); }} />;
 
@@ -106,11 +109,17 @@ export function AgentsPanel({projectId, canWrite}: {projectId: string; canWrite:
       count={agents ? {shown: agents.length, noun: "agent"} : undefined}
       onReset={search ? () => setSearch("") : undefined}
       actions={<><DensitySwitch />{canWrite ? <><Button onClick={() => setImporting(true)}>Import from Excel</Button><Button variant="primary" onClick={() => setEditing("new")}>Add agent</Button></> : null}</>} />
+    {canWrite ? <BulkRemovalBar count={ticked.selected.length} noun="agent" verb="Delete"
+      description="Agents with no buyer, transaction, commission or attribution history are deleted. Any other Agent is kept and listed with the reason; deactivate them instead. The audit trail is retained."
+      names={Object.fromEntries(sorted.map(agent => [agent.id, agent.display_name]))}
+      run={reason => sales.bulkDeleteAgents(projectId, ticked.selected, reason)}
+      onClear={ticked.clear} onDone={() => { void load(); }} /> : null}
     {agents === null ? (error ? null : <Loading label="Loading Agents…" />) : agents.length === 0 ?
       <EmptyState title="No agents registered" hint="Add an Agent before assigning one to a buyer. Buyers may also have no Agent." /> :
       <TableScroll label="Project Agents" fixedFirst>
-        <thead><tr><SortHeader column="agent" sort={sort} onToggle={toggle}>Agent</SortHeader><SortHeader column="country" sort={sort} onToggle={toggle}>Country</SortHeader><SortHeader column="branch" sort={sort} onToggle={toggle}>Branch</SortHeader><SortHeader column="leader" sort={sort} onToggle={toggle}>Branch leader</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
+        <thead><tr>{canWrite ? <SelectAllCell label="Select all agents" checked={ticked.all} indeterminate={ticked.some} onChange={ticked.toggleAll} /> : null}<SortHeader column="agent" sort={sort} onToggle={toggle}>Agent</SortHeader><SortHeader column="country" sort={sort} onToggle={toggle}>Country</SortHeader><SortHeader column="branch" sort={sort} onToggle={toggle}>Branch</SortHeader><SortHeader column="leader" sort={sort} onToggle={toggle}>Branch leader</SortHeader><SortHeader column="status" sort={sort} onToggle={toggle}>Status</SortHeader>{canWrite ? <th scope="col">Actions</th> : null}</tr></thead>
         <tbody>{sorted.map(agent => <tr key={agent.id}>
+          {canWrite ? <SelectCell label={`Select ${agent.display_name}`} checked={ticked.isSelected(agent.id)} onChange={() => ticked.toggle(agent.id)} /> : null}
           <th scope="row">{agent.display_name}</th><td>{agent.country ?? "—"}</td><td>{agent.branch ?? "—"}</td><td>{agent.branch_leader ?? "—"}</td>
           <td>{agent.is_active ? <StatusDot tone="success">Active</StatusDot> : <StatusDot tone="muted">Inactive</StatusDot>}</td>
           {canWrite ? <td className="row-menu-cell"><RowMenu label={`Actions for ${agent.display_name}`}><Button onClick={() => setEditing(agent)}>Edit agent</Button>

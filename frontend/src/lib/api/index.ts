@@ -111,6 +111,7 @@ import type {
   SaleDetail,
   SalesClient,
   SalesAgent,
+  BulkRemoval,
   ClientParty,
   HandoverDetail,
   HandoverClearance,
@@ -915,6 +916,12 @@ export const sales = {
     patch<SalesAgent>(`/projects/${projectId}/sales/agents/${id}`, body),
   deleteAgent: (projectId: string, id: string, reason: string) =>
     remove(`/projects/${projectId}/sales/agents/${id}?${new URLSearchParams({reason})}`),
+  bulkDeleteAgents: (projectId: string, ids: string[], reason: string) =>
+    post<BulkRemoval>(`/projects/${projectId}/sales/agents/bulk-delete`, {ids, reason}),
+  bulkDeleteClients: (projectId: string, ids: string[], reason: string) =>
+    post<BulkRemoval>(`/projects/${projectId}/sales/clients/bulk-delete`, {ids, reason}),
+  bulkRemoveTransactions: (projectId: string, items: {kind: "sale" | "reservation"; id: string}[], reason: string) =>
+    post<BulkRemoval>(`/projects/${projectId}/sales/transactions/bulk-remove`, {items, reason}),
   unitOptions: (projectId: string, query: Record<string, string> = {}) =>
     get<{items: SalesUnitOption[]; next_offset: number | null}>(`/projects/${projectId}/sales/unit-options?${new URLSearchParams(query)}`),
   transactions: (projectId: string, query: Record<string, string> = {}) =>
