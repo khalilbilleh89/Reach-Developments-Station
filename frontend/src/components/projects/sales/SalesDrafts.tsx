@@ -12,7 +12,7 @@ import { salesDrafts } from "@/lib/api/salesDrafts";
 
 import type { DraftPayload, SalesDraft } from "@/lib/api/salesDrafts";
 
-import { Button, Card, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PromptDialog, RecordLink, RecordPage, TableScroll } from "@/components/ui";
+import { Button, Card, Disclosure, DraftBoundary, EmptyState, Field, FormActions, Loading, Notice, PromptDialog, RecordLink, RecordPage, TableScroll } from "@/components/ui";
 
 import { SalesImport } from "./SalesImport";
 
@@ -111,13 +111,13 @@ export function DraftEditor({projectId,row,fields,refresh,onDeleted}:{projectId:
 
     {error&&!action?<Notice tone="error">{error}</Notice>:null}
 
-    {Object.entries(fields).map(([section,columns])=><details key={section} open={section==="Sales"||undefined}><summary>{section} · {payload[section]?.length??0} rows</summary><div className="stack">
+    {Object.entries(fields).map(([section,columns])=><Disclosure key={section} title={section} context={`${payload[section]?.length??0} rows`} open={section==="Sales"||undefined}><div className="stack">
 
-      {(payload[section]??[]).map((values,index)=><fieldset key={index} disabled={busy||row.status==="added"}><legend>{section} row {index+1}</legend><div className="form-grid">{columns.map(column=><Field key={column} label={fieldLabel(column)}><input className="input" aria-label={`${section} ${index+1} ${fieldLabel(column)}`} value={display(values[column])} onChange={event=>{const value=event.target.value;setPayload(current=>({...current,[section]:current[section].map((entry,i)=>{if(i!==index)return entry;const next={...entry};if(value)next[column]=value;else delete next[column];return next;})}));}}/></Field>)}</div>{row.status==="draft"?<Button disabled={busy} onClick={()=>setPayload(current=>({...current,[section]:current[section].filter((_,i)=>i!==index)}))}>Remove {section} row {index+1}</Button>:null}</fieldset>)}
+      {(payload[section]??[]).map((values,index)=><fieldset key={index} disabled={busy||row.status==="added"}><legend>{section} row {index+1}</legend><div className="field-row field-row-3">{columns.map(column=><Field key={column} label={fieldLabel(column)}><input className="input" aria-label={`${section} ${index+1} ${fieldLabel(column)}`} value={display(values[column])} onChange={event=>{const value=event.target.value;setPayload(current=>({...current,[section]:current[section].map((entry,i)=>{if(i!==index)return entry;const next={...entry};if(value)next[column]=value;else delete next[column];return next;})}));}}/></Field>)}</div>{row.status==="draft"?<Button disabled={busy} onClick={()=>setPayload(current=>({...current,[section]:current[section].filter((_,i)=>i!==index)}))}>Remove {section} row {index+1}</Button>:null}</fieldset>)}
 
       {row.status==="draft"?<Button disabled={busy} onClick={()=>setPayload(current=>({...current,[section]:[...(current[section]??[]),{}]}))}>Add {section} row</Button>:null}
 
-    </div></details>)}
+    </div></Disclosure>)}
 
     {action?<PromptDialog title={`${action==="add"?"Add reviewed draft":action==="save"?"Save corrections":"Delete draft"} ${row.source_key}?`} label="Reason" confirmLabel={action==="add"?"Add to Sales":action==="save"?"Save":"Delete draft"} destructive={action==="delete"} description={action==="delete"?"Removes this unposted draft. An audit record of the deletion is retained.":action==="add"?"Creates a preparing transaction. All imported source details remain accessible here. No cash, signature or completed handover is posted.":"Validates all changed fields and saves a new review version."} busy={busy} error={error} onRefresh={refresh} onCancel={()=>{setAction(null);setError(null);}} onSubmit={reason=>void submit(reason)}/>:null}
 
