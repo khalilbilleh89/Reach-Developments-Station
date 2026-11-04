@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { salesImport } from "@/lib/api/salesImport";
 import type { ImportKind, SalesImportReport } from "@/lib/api/salesImport";
@@ -9,6 +9,7 @@ import { Button, DraftBoundary, Field, FormActions, Notice, RecordPage, TableScr
 export function SalesImport({projectId, kind, onClose, onImported}: {
   projectId: string; kind: ImportKind; onClose: () => void; onImported: () => void;
 }) {
+  const running=useRef(false);
   const [file, setFile] = useState<{ name: string; bytes: ArrayBuffer } | null>(null);
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<SalesImportReport | null>(null);
@@ -17,7 +18,8 @@ export function SalesImport({projectId, kind, onClose, onImported}: {
   const [completed, setCompleted] = useState(false);
   const showError = (caught: unknown) => setError(caught instanceof ApiError || caught instanceof Error ? caught.message : "Import could not be completed.");
   const run = async (operation: "validate" | "apply") => {
-    if (!file || busy) return;
+    if (!file || running.current) return;
+    running.current=true;
     setBusy(true); setError(null); setValidated(false);
     try {
       const result = await salesImport.run(projectId, kind, operation, file.bytes);
@@ -25,16 +27,17 @@ export function SalesImport({projectId, kind, onClose, onImported}: {
       setValidated(operation === "validate" && result.error_count === 0);
       if (result.applied) { setCompleted(true); onImported(); }
     } catch (caught) { showError(caught); }
-    finally { setBusy(false); }
+    finally { running.current=false; setBusy(false); }
   };
+  const drafts = kind === "sales-drafts";
   const faqs = kind === "faqs";
-  const label = faqs ? "FAQs" : kind;
+  const label = drafts ? "Sales drafts" : faqs ? "FAQs" : kind;
   const newCount = report?.new_count ?? report?.total_rows;
   const duplicateCount = report?.duplicate_count ?? 0;
   return <RecordPage title={`Import ${label} from Excel`} onClose={onClose}>
     <DraftBoundary dirty={Boolean(file) && !completed} busy={busy}>
       <div className="stack">
-        <p>Download the template, fill one record per row, then upload it here. Up to 1,000 records and 5 MB per file. {faqs ? "Enter a Question and Answer for each FAQ. Duplicate questions are flagged; existing answers are never overwritten." : "Keep adding names to the same template: matching records are skipped and counted; existing records are never updated."}</p>
+        <p>Download the template, fill one record per row, then upload it here. Up to 1,000 records and 5 MB per file. {drafts ? "Use the same sale_key across section sheets. Import creates unposted drafts for review; no live sale, unit hold or receipt is created." : faqs ? "Enter a Question and Answer for each FAQ. Duplicate questions are flagged; existing answers are never overwritten." : "Keep adding names to the same template: matching records are skipped and counted; existing records are never updated."}</p>
         <Button disabled={busy} onClick={async () => {
           setBusy(true); setError(null);
           try { await salesImport.template(projectId, kind); } catch (caught) { showError(caught); }

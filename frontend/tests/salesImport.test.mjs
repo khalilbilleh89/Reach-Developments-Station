@@ -12,7 +12,7 @@ function harness(file, mocks = {}) {
   const exports = {};
   runInNewContext(`(function(require,exports){${code}\n})`)((key) => {
     if (key in mocks) return mocks[key];
-    if (key === "react") return { useState(initial) {
+    if (key === "react") return { useRef(initial) { const i=cursor++; slots[i] ??= {current:initial}; return slots[i]; }, useState(initial) {
       const i = cursor++; slots[i] ??= { value: typeof initial === "function" ? initial() : initial };
       return [slots[i].value, value => { slots[i].value = typeof value === "function" ? value(slots[i].value) : value; }];
     }};
@@ -159,4 +159,42 @@ test("FAQ upload validates the same bytes before importing and uses FAQ guidance
   assert.ok(calls.every(args => args[3] === bytes));
   tree = render("SalesImport", p);
   assert.equal(find(tree,"Notice")[0].props.children,"Imported 2 FAQs.");
+});
+
+
+test("Sales workbook upload creates review drafts only and suppresses same-render double submit",async()=>{
+  const calls=[];let finish;
+  const render=setup(async(...args)=>{calls.push(args);return new Promise(resolve=>{finish=resolve;});});
+  const draftProps={...props,kind:"sales-drafts"};
+  await choose(render("SalesImport",draftProps));
+  const tree=render("SalesImport",draftProps);
+  const first=button(tree,"Validate").props.onClick();
+  await button(tree,"Validate").props.onClick();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][1],"sales-drafts");
+  finish(report);await first;
+  assert.equal(button(render("SalesImport",draftProps),"Import").props.disabled,false);
+});
+
+test("Sales draft corrections disable adding until saved and preserve version in save",async()=>{
+  const saved=[];let refreshed=0;
+  const row={id:"draft",source_key:"A",version:4,status:"draft",reservation_id:null,payload:{Sales:[{unit_reference:"U1"}]}};
+  const render=harness("sales/SalesDrafts",{
+    "next/navigation":{useSearchParams:()=>new URLSearchParams()},"next/link":{default:"Link"},
+    "@/lib/answer":{useAnswer:()=>({status:"off"})},"./SalesImport":{SalesImport:"SalesImport"},
+    "@/lib/api/salesDrafts":{salesDrafts:{save:async(...args)=>{saved.push(args);}}},
+  });
+  const reviewProps={projectId:"project",row,fields:{Sales:["unit_reference"]},refresh(){refreshed++;},onDeleted(){}};
+  let tree=render("DraftEditor",reviewProps);
+  find(tree,"input")[0].props.onChange({target:{value:"U2"}});
+  tree=render("DraftEditor",reviewProps);
+  assert.equal(button(tree,"Add reviewed").props.disabled,true);
+  assert.equal(row.payload.Sales[0].unit_reference,"U1");
+  button(tree,"Save corrections").props.onClick();
+  tree=render("DraftEditor",reviewProps);
+  await find(tree,"PromptDialog")[0].props.onSubmit("Correct unit");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(saved[0][1].version,4);
+  assert.equal(saved[0][2].Sales[0].unit_reference,"U2");
+  assert.equal(refreshed,1);
 });

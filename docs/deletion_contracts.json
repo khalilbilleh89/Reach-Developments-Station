@@ -910,5 +910,13 @@
     "removal_route": "POST /assets/{asset_id}/delete",
     "ui_file": "frontend/src/components/projects/marketing/MarketingAssets.tsx",
     "notes": "Whole-project Marketing writers delete from full-page attachment details with a reason and expected version. Metadata, bytes and audit retained; link target is never modified. Category is an editable item label, not a separate record."
+  },
+  {
+    "handler": "sales.add_import_draft",
+    "create_route": "POST /{draft_id}/add",
+    "status": "implemented",
+    "removal_route": "DELETE /{draft_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/sales/SalesDrafts.tsx",
+    "notes": "Unposted drafts can be physically removed with version, Boss authority and retained deletion audit. Added drafts retain source evidence and link to the preparing transaction, which uses existing cancellation/removal controls. No posted cash or legal event is created."
   }
 ]

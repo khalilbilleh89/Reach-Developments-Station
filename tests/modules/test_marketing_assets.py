@@ -249,7 +249,7 @@ def test_reader_cannot_write_and_selected_phase_cannot_read(
 def test_asset_migration_retention(admin_client: TestClient, project_id: str, db: Session) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0057_workspace_views")
+    command.downgrade(config, "0058_sales_import_drafts")
     command.upgrade(config, "head")
     command.check(config)
     row = upload(admin_client, project_id).json()
@@ -262,5 +262,5 @@ def test_asset_migration_retention(admin_client: TestClient, project_id: str, db
     )
     db.rollback()
     with pytest.raises(RuntimeError, match="attachment history"):
-        command.downgrade(config, "0057_workspace_views")
+        command.downgrade(config, "0058_sales_import_drafts")
     assert db.scalar(text("SELECT count(*) FROM marketing_assets")) == 1
