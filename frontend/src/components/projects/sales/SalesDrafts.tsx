@@ -111,7 +111,7 @@ export function DraftEditor({projectId,row,fields,refresh,onDeleted}:{projectId:
 
     {error&&!action?<Notice tone="error">{error}</Notice>:null}
 
-    {Object.entries(fields).map(([section,columns])=><Disclosure key={section} title={section} context={`${payload[section]?.length??0} rows`} open={section==="Sales"||undefined}><div className="stack">
+    {Object.entries(fields).map(([section,columns])=><Disclosure key={section} title={section} context={(payload[section]?.length??0)===1?"1 row":`${payload[section]?.length??0} rows`} open={section==="Sales"||undefined}><div className="stack">
 
       {(payload[section]??[]).map((values,index)=><fieldset key={index} disabled={busy||row.status==="added"}><legend>{section} row {index+1}</legend><div className="field-row field-row-3">{columns.map(column=><Field key={column} label={fieldLabel(column)}><input className="input" aria-label={`${section} ${index+1} ${fieldLabel(column)}`} value={display(values[column])} onChange={event=>{const value=event.target.value;setPayload(current=>({...current,[section]:current[section].map((entry,i)=>{if(i!==index)return entry;const next={...entry};if(value)next[column]=value;else delete next[column];return next;})}));}}/></Field>)}</div>{row.status==="draft"?<Button disabled={busy} onClick={()=>setPayload(current=>({...current,[section]:current[section].filter((_,i)=>i!==index)}))}>Remove {section} row {index+1}</Button>:null}</fieldset>)}
 
