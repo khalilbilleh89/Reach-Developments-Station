@@ -241,6 +241,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `sale_cancellations` | A cancelled legacy sale is closed history; it changes no current obligation. |
 | `sale_contract_tax_lines` | The tax decomposition of a frozen total. Part of the frozen-money problem, not separable from it. |
 | `sales_project_policies` | Policy is configuration. |
+| `sales_import_drafts` | Unposted Sales workbook drafts held for Master Administrator review; the workbook intake is its own reviewed path, and a draft becomes a transaction only through the native Sales services, never through a cutover bundle. |
 | `handover_records` | Handover is a forward process. A unit already handed over carries that in `units.delivery_status`. |
 | `handover_clearances` | As above. |
 | `collection_actions` | Dunning history. Operationally spent. |

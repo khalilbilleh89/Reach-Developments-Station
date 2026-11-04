@@ -13,6 +13,7 @@ import { useCurrencyCode } from "@/lib/currency";
 import { reservationLabel, saleLabel, reservationTone, saleTone } from "./sales/labels";
 import { unitCollectionLabel, unitCollectionTone } from "./collections/labels";
 import { CommercialUnits } from "./sales/CommercialUnits";
+import { SalesDrafts } from "./sales/SalesDrafts";
 import { NewReservation } from "./sales/NewReservation";
 import { SalesGates } from "./sales/SalesGates";
 import { createdSalesHref } from "./sales/salesRoutes";
@@ -50,9 +51,11 @@ export function SalesTab({projectId, projectStatus, roles}: {
   const canRemove = roles.has("master_admin") && !history;
   const ticked = useSelection(rows ? rows.items.map(row => `${row.kind}:${row.id}`) : []);
   const refresh = async () => {setRetry(value => value + 1);};
+  if(state.sales_view === "import-drafts") return <SalesDrafts projectId={projectId} allowed={roles.has("master_admin")} onClose={()=>setState({sales_view:""})}/>;
   return <div className="stack">
     <PageHeader icon="sales" title="Sales" subtitle="The sales workflow for each unit" compact actions={<>
       {canPrepare && projectStatus !== "setup" ? <Button variant="primary" data-leaves-editor onClick={() => {setOpen(null); const next = new URLSearchParams(params); next.set("sales_view", "new"); router.push(`/projects/?${next}`);}}><Icon name="plus" />New Reservation</Button> : null}
+      {roles.has("master_admin") ? <Button data-leaves-editor onClick={()=>setState({sales_view:"import-drafts"})}>Import Sales / review drafts</Button> : null}
       <Button data-leaves-editor onClick={() => {setOpen(null); setState({sales_view: history ? "" : "history", offset:"", transaction_status:""});}}><Icon name="history" />{history ? "Current transactions" : "Transaction history"}</Button>
       <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "stock" ? null : "stock");}}><Icon name="inventory" />Commercial stock</Button>
       {canAdmin || roles.has("project_manager") ? <Button data-leaves-editor onClick={() => {setState({sales_view:""}); setOpen(open === "gates" ? null : "gates");}}>Sales gates</Button> : null}

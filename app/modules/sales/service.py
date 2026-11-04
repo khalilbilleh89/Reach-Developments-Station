@@ -775,6 +775,7 @@ def create_party(
     project: Project,
     client: Client,
     actor: ActorContext,
+    commit: bool = True,
     **fields: object,
 ) -> ClientParty:
     """Add a named buyer to a client record.
@@ -820,8 +821,9 @@ def create_party(
         actor_user_id=actor.user_id,
         after=_snapshot(party, _PARTY_FIELDS),
     )
-    session.commit()
-    session.refresh(party)
+    if commit:
+        session.commit()
+        session.refresh(party)
     return party
 
 
@@ -1888,6 +1890,7 @@ def create_adjustment(
     project: Project,
     reservation_id: uuid.UUID,
     actor: ActorContext,
+    commit: bool = True,
     adjustment_type: str,
     rate_fraction: Decimal | None = None,
     amount: Decimal | None = None,
@@ -1938,8 +1941,9 @@ def create_adjustment(
         reason=adjustment.reason,
         after=_snapshot(adjustment, _ADJUSTMENT_FIELDS),
     )
-    session.commit()
-    session.refresh(adjustment)
+    if commit:
+        session.commit()
+        session.refresh(adjustment)
     return adjustment
 
 

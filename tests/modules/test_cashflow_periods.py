@@ -550,7 +550,16 @@ class TestTheOpeningBalanceAnchorsTheSeries:
             f"{cashflow_url(project_id)}/drilldown", params={"period_month": month_named(-2)}
         )
         assert drilldown.status_code == 200, drilldown.text
-        assert drilldown.json()["total"] == "9000.00"
+        # The receipt itself, not the month's total: the fixture schedule has
+        # instalments on fixed dates, and as the calendar moves one of them
+        # can fall in the same month without making the receipt any less shown.
+        receipts = [
+            row
+            for row in drilldown.json()["rows"]
+            if row["source_type"] == "collection_receipt"
+            and row["source_id"] == receipt.json()["id"]
+        ]
+        assert [(row["amount"], row["basis"]) for row in receipts] == [("9000.00", "actual")]
 
     def test_asking_for_a_month_before_the_anchor_says_why_it_cannot(
         self, finance_client: TestClient, project_id: str, opening_forecast: str

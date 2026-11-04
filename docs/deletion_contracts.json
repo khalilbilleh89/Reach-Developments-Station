@@ -894,5 +894,13 @@
     "removal_route": "DELETE /views/{view_id} (served under /me)",
     "ui_file": "frontend/src/components/ui/SavedViews.tsx",
     "notes": "A saved view belongs to the person who saved it and holds filters and a sort, no record data. Its owner removes it from the register's saved-views strip; another person's view is not found. Removal is audited with the view's last state; no downstream record references a view."
+  },
+  {
+    "handler": "sales.add_import_draft",
+    "create_route": "POST /{draft_id}/add",
+    "status": "implemented",
+    "removal_route": "DELETE /{draft_id}?version=...&reason=...",
+    "ui_file": "frontend/src/components/projects/sales/SalesDrafts.tsx",
+    "notes": "Unposted drafts can be physically removed with version, Boss authority and retained deletion audit. Added drafts retain source evidence and link to the preparing transaction, which uses existing cancellation/removal controls. No posted cash or legal event is created."
   }
 ]

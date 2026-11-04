@@ -29,6 +29,7 @@ from app.modules.pricing import models as prices
 from app.modules.projects.models import Project
 from app.modules.projects.service import lock_project
 from app.modules.sales import models as sm
+from app.modules.sales.import_draft_models import SalesImportDraft
 from app.modules.unit_economics.models import UnitCost
 
 
@@ -121,6 +122,7 @@ SCOPES = (
         "commission_grants",
         "Commission allocations",
     ),
+    Scope(SalesImportDraft.__table__, "unit_id", "units", "Imported Sales source drafts"),
     Scope(UnitCost.__table__, "unit_id", "units", "Unit cost entries"),
     Scope(UnitStageEvent.__table__, "unit_id", "units", "Construction progress history"),
 )
