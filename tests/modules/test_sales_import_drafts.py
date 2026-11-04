@@ -6,6 +6,7 @@ from datetime import datetime
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from sqlalchemy import select, text
@@ -265,8 +266,9 @@ def test_migration_roundtrip(postgres: None) -> None:
     with get_engine().connect() as connection:
         assert (
             connection.scalar(text("select version_num from alembic_version"))
-            == "0058_sales_import_drafts"
+            == ScriptDirectory.from_config(config).get_current_head()
         )
+        assert connection.scalar(text("select to_regclass('sales_import_drafts')")) is not None
 
 
 def test_new_buyer_agent_and_unit_purge(

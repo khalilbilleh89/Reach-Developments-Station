@@ -628,6 +628,7 @@ class TestOnlyEntitledReadersAsk:
             "marketing-bio",
             "marketing-economics",
             "marketing-branding",
+            "marketing-materials",
             "marketing-shots",
             "agreements",
             # "agent-buyer" split into the two jobs it was doing: registering a

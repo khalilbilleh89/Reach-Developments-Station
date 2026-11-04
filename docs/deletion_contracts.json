@@ -896,6 +896,22 @@
     "notes": "A saved view belongs to the person who saved it and holds filters and a sort, no record data. Its owner removes it from the register's saved-views strip; another person's view is not found. Removal is audited with the view's last state; no downstream record references a view."
   },
   {
+    "handler": "marketing.create_link",
+    "create_route": "POST /assets/links",
+    "status": "implemented",
+    "removal_route": "POST /assets/{asset_id}/delete",
+    "ui_file": "frontend/src/components/projects/marketing/MarketingAssets.tsx",
+    "notes": "Whole-project Marketing writers delete from full-page attachment details with a reason and expected version. Metadata, bytes and audit retained; link target is never modified. Category is an editable item label, not a separate record."
+  },
+  {
+    "handler": "marketing.upload_asset",
+    "create_route": "POST /assets/upload",
+    "status": "implemented",
+    "removal_route": "POST /assets/{asset_id}/delete",
+    "ui_file": "frontend/src/components/projects/marketing/MarketingAssets.tsx",
+    "notes": "Whole-project Marketing writers delete from full-page attachment details with a reason and expected version. Metadata, bytes and audit retained; link target is never modified. Category is an editable item label, not a separate record."
+  },
+  {
     "handler": "sales.add_import_draft",
     "create_route": "POST /{draft_id}/add",
     "status": "implemented",

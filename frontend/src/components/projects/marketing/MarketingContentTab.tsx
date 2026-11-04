@@ -8,6 +8,7 @@ import { businessDate } from "@/lib/format";
 import { Button, Card, EmptyState, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, RowMenu, SectionHeader } from "@/components/ui";
 import { sectionIcon } from "@/components/shell/navigation";
 import { DeleteRecordButton } from "../DeleteRecordButton";
+import { MarketingAssets } from "./MarketingAssets";
 import { MarketingContentEditor } from "./MarketingContentEditor";
 
 export const NARRATIVES = [["country", "About Country"], ["area", "About Area"], ["project", "About Project"], ["location", "About Location"]] as const;
@@ -20,6 +21,7 @@ export function MarketingContentTab({ projectId, roles, kind }: { projectId: str
   if (editing && answer.status === "ready") return <MarketingContentEditor kind={kind} initial={answer.data.data} onClose={() => setEditing(false)} onSave={async data => { await marketing.saveContent(projectId, kind, data, answer.data.version); setEditing(false); answer.retry(); }} />;
   return <div className="stack">
     <PageHeader icon={sectionIcon(kind === "bio" ? "marketing-bio" : "marketing-branding")} title={title} subtitle={kind === "bio" ? "The story and setting behind this development." : "A consistent identity for every project touchpoint."} actions={canWrite && answer.status === "ready" ? <Button onClick={() => setEditing(true)}>{answer.data.version ? "Edit" : "Create"} {title.toLowerCase()}</Button> : undefined} />
+    {kind === "branding" ? <MarketingAssets projectId={projectId} roles={roles} placement="logo" /> : null}
     {answer.status === "loading" ? <Loading label={`Loading ${title.toLowerCase()}…`} /> : null}
     {answer.status === "denied" ? <Notice tone="info">Not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button onClick={answer.retry}>Retry</Button></Notice> : null}

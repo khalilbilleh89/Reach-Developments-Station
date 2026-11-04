@@ -47,6 +47,7 @@ import { ProjectImages } from "@/components/projects/ProjectImages";
 import { ProjectCurrencyCorrection } from "@/components/projects/ProjectCurrencyCorrection";
 import { InventoryTab } from "@/components/projects/InventoryTab";
 import { LandTab } from "@/components/projects/LandTab";
+import { MarketingAssets } from "./marketing/MarketingAssets";
 import { MarketingContentTab } from "@/components/projects/marketing/MarketingContentTab";
 import { MarketingEconomicsTab } from "@/components/projects/marketing/MarketingEconomicsTab";
 import { MatrixTab } from "@/components/projects/MatrixTab";
@@ -249,6 +250,7 @@ export function ProjectWorkspace({
     }
     return (
       <>
+        {section === "marketing-materials" ? <MarketingAssets key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "marketing-bio" || section === "marketing-branding" ? <MarketingContentTab key={`${projectId}-${section}`} projectId={projectId} roles={roles} kind={section === "marketing-bio" ? "bio" : "branding"} /> : null}
         {section === "marketing-shots" ? <>
           <PageHeader icon={sectionIcon("marketing-shots")} title="3D Shots" subtitle="Manage the project images displayed in Overview." />
