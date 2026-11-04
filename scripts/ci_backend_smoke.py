@@ -256,6 +256,10 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "marketing",
         ("tests/modules/test_marketing.py::test_economics_migration_retention",),
     ),
+    "0058_marketing_assets.py": (
+        "marketing",
+        ("tests/modules/test_marketing_assets.py::test_asset_migration_retention",),
+    ),
     "0042_marketing.py": (
         "marketing",
         ("tests/modules/test_marketing.py::test_migration_roundtrip_and_retention",),

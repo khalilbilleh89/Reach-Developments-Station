@@ -1,7 +1,8 @@
 # Marketing
 
 Owner-requested Marketing menu group, alongside Development, Commercial, Delivery
-and Finance. It contains Project Bio, Economics and Branding. Governed by
+and Finance. It includes Project Bio, Economics, Branding and Materials. See
+`docs/MARKETING_MATERIALS.md` for logo uploads and categorized media/references. Governed by
 `docs/ENGINEERING_RULES.md` and `docs/DELETION_POLICY.md`.
 
 ## Content

@@ -30,6 +30,39 @@ function nodes(tree) {
 }
 const find = (tree, type) => nodes(tree).filter(node => node.type === type);
 
+test("material editor keeps custom category and selected file after a failed upload", async () => {
+  const h = harness("MarketingAssets");
+  let submitted;
+  const props = { placement: "material", categories: [], onClose() {}, onSave: async (values, file) => { submitted = { values, file }; throw new Error("offline"); } };
+  let tree = h.render("AssetEditor", props);
+  find(tree, "input").find(n => n.props.list).props.onChange({ target: { value: "Research references" } });
+  tree = h.render("AssetEditor", props);
+  const file = { name: "logo.png", size: 80 };
+  find(tree, "input").find(n => n.props.type === "file").props.onChange({ target: { files: [file] } });
+  tree = h.render("AssetEditor", props);
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  tree = h.render("AssetEditor", props);
+  assert.equal(submitted.values.category, "Research references");
+  assert.equal(submitted.file, file);
+  assert.equal(find(tree, "DraftBoundary")[0].props.dirty, true);
+  assert.ok(find(tree, "Notice").some(n => String(n.props.children).includes("kept")));
+});
+
+test("logo editor restricts sources and rejects an oversized file before submission", async () => {
+  const h = harness("MarketingAssets");
+  let calls = 0;
+  const props = { placement: "logo", categories: [], onClose() {}, onSave() { calls++; } };
+  let tree = h.render("AssetEditor", props);
+  assert.equal(find(tree, "select").length, 0);
+  const input = find(tree, "input").find(n => n.props.type === "file");
+  assert.equal(input.props.accept, ".png,.jpg,.jpeg");
+  input.props.onChange({ target: { files: [{ name: "large.png", size: 11 * 1024 * 1024 }] } });
+  tree = h.render("AssetEditor", props);
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(calls, 0);
+  assert.ok(find(h.render("AssetEditor", props), "Notice").length);
+});
+
 test("rental editor submits exact decimal strings and preserves failed drafts", async () => {
   const h = harness("RentalEditor");
   const initial = h.exports.blankScenario("00000000-0000-0000-0000-000000000001", "short_term");

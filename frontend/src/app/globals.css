@@ -7453,3 +7453,5 @@ small { font-size: var(--text-xs); }
   input[type="file"].input, .palette-search input { font-size: var(--text-touch); }
 }
 
+
+.marketing-asset-preview { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: var(--surface-secondary); }

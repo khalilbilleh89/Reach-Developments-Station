@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, Response
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.inventory.service import marketing_unit_references
 from app.modules.marketing import service
+from app.modules.marketing.asset_api import router as asset_router
 from app.modules.marketing.models import MarketIndicator, RentalScenario
 from app.modules.marketing.permissions import scope
 from app.modules.marketing.schemas import (
@@ -24,6 +25,7 @@ from app.modules.marketing.schemas import (
 )
 
 router = APIRouter(prefix="/projects/{project_id}/marketing", tags=["marketing"])
+router.include_router(asset_router)
 
 
 class BioWrite(ContentWrite):

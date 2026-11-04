@@ -42,6 +42,7 @@ export type ProjectSection =
   | "marketing-bio"
   | "marketing-economics"
   | "marketing-branding"
+  | "marketing-materials"
   | "marketing-shots"
   | "overview"
   | "company"
@@ -172,6 +173,9 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
       },
       {
         key: "marketing-branding", label: "Branding", icon: "documents", description: "The project name, its meaning, colour palette and typography.", visible: roles => hasAnyRole(roles, MARKETING_READERS),
+      },
+      {
+        key: "marketing-materials", label: "Materials", icon: "documents", description: "Categorized project videos, images and reference documents.", visible: roles => hasAnyRole(roles, MARKETING_READERS),
       },
       {
         key: "marketing-shots", label: "3D Shots", icon: "documents",
