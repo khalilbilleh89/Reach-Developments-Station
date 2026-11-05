@@ -1,4 +1,4 @@
-"""Plain-text titles and email templates; no executable or rich-text content."""
+"""Plain-text metadata and optional inert email formatting."""
 
 import uuid
 from typing import Literal
@@ -12,12 +12,13 @@ class EmailInput(StrictRequest):
     category: Literal["internal", "clients", "external"]
     subject: str = Field(min_length=1, max_length=500)
     title: str = Field(min_length=1, max_length=500)
+    body_html: str | None = Field(default=None, max_length=100000)
     body: str = Field(min_length=1, max_length=20000)
 
     @field_validator("title", "subject", "body")
     @classmethod
     def nonblank(cls, value: str) -> str:
-        if not value.strip():
+        if not value.strip() or "\x00" in value:
             raise ValueError("Enter a title, subject and email body.")
         return value.strip()
 
@@ -32,6 +33,7 @@ class EmailRead(BaseModel):
     id: uuid.UUID
     title: str
     body: str
+    body_html: str | None = None
     version: int
 
 

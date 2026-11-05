@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { EmailBodyEditor, EmailBodyPreview } from "./EmailBodyEditor";
+import { copyFormattedEmail, plainEmailHtml } from "@/lib/emailFormatting";
 import { sectionIcon } from "@/components/shell/navigation";
 import { ApiError } from "@/lib/api";
 import { emails } from "@/lib/api/emails";
@@ -39,7 +41,7 @@ export function EmailsTab({projectId, roles}: {projectId: string; roles: Set<str
       {rows.length ? rows.map(row => <Card key={`${row.id}:${row.version}`} title={row.title} actions={<Button onClick={() => setComposer(row)}>Customize &amp; copy</Button>}>
         <div className="stack">
           <p className="faq-answer" dir="auto"><strong>Subject: </strong>{row.subject}</p>
-          <Disclosure title="Preview email"><p className="faq-answer" dir="auto">{row.body}</p></Disclosure>
+          <Disclosure title="Preview email"><EmailBodyPreview body={row.body} html={row.body_html} /></Disclosure>
           {answer.data.can_edit ? <FormActions>
             <Button onClick={() => setEditor(row)}>Edit template</Button>
             <DeleteRecordButton label="email template" recordName={row.title} description="This removes the saved template from this project's library. Its full audit history is retained." destructive onDelete={reason => emails.delete(projectId, row, reason)} onDeleted={changed} />
@@ -57,15 +59,16 @@ export function EmailEditor({projectId, row, category: initialCategory, onClose,
   const [title, setTitle] = useState(row?.title ?? "");
   const [subject, setSubject] = useState(row?.subject ?? "");
   const [body, setBody] = useState(row?.body ?? "");
+  const [bodyHtml, setBodyHtml] = useState<string | null>(row?.body_html ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = category !== (row?.category ?? initialCategory) || title !== (row?.title ?? "") || subject !== (row?.subject ?? "") || body !== (row?.body ?? "");
+  const dirty = category !== (row?.category ?? initialCategory) || title !== (row?.title ?? "") || subject !== (row?.subject ?? "") || body !== (row?.body ?? "") || bodyHtml !== (row?.body_html ?? null);
   return <RecordPage title={row ? "Edit email template" : "Add email template"} subtitle="Use placeholders such as [Client name] and replace them when preparing an email. Templates are shared with this project's Commercial readers." onClose={onClose}>
     <DraftBoundary dirty={dirty} busy={busy}>
       <form className="stack" onSubmit={async event => {
         event.preventDefault(); if (busy) return; setBusy(true); setError(null);
         try {
-          const input = {category, title: title.trim(), subject: subject.trim(), body: body.trim()};
+          const input = {category, title: title.trim(), subject: subject.trim(), body: body.trim(), body_html: bodyHtml};
           if (row) await emails.update(projectId, row, input); else await emails.create(projectId, input);
           await onSaved();
         } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save the template. Your text is still here."); }
@@ -75,9 +78,9 @@ export function EmailEditor({projectId, row, category: initialCategory, onClose,
         <fieldset className="fieldset" disabled={busy}><Field label="Category"><Segmented<EmailCategory> label="Category" value={category} options={categories.map(item => ({value: item.key, label: item.label}))} onChange={setCategory} /></Field></fieldset>
         <Field label="Template title"><input className="input" dir="auto" required maxLength={500} disabled={busy} value={title} onChange={event => setTitle(event.target.value)} /></Field>
         <Field label="Subject"><input className="input" dir="auto" required maxLength={500} disabled={busy} value={subject} onChange={event => setSubject(event.target.value)} /></Field>
-        <Field label="Email body"><textarea className="input" dir="auto" required maxLength={20000} rows={14} disabled={busy} value={body} onChange={event => setBody(event.target.value)} /></Field>
+        <EmailBodyEditor body={body} html={bodyHtml} disabled={busy} onChange={(text, html) => {setBody(text); setBodyHtml(html);}} />
         <FormActions>
-          <Button type="submit" variant="primary" disabled={busy || !dirty || !title.trim() || !subject.trim() || !body.trim()}>{busy ? "Saving…" : "Save template"}</Button>
+          <Button type="submit" variant="primary" disabled={busy || !dirty || !title.trim() || !subject.trim() || !body.trim() || body.length > 20000 || (bodyHtml?.length ?? 0) > 100000}>{busy ? "Saving…" : "Save template"}</Button>
           <Button data-leaves-editor disabled={busy} onClick={onClose}>Cancel</Button>
         </FormActions>
       </form>
@@ -88,21 +91,27 @@ export function EmailEditor({projectId, row, category: initialCategory, onClose,
 export function EmailComposer({row, onClose}: {row: Email; onClose: () => void}) {
   const [subject, setSubject] = useState(row.subject);
   const [body, setBody] = useState(row.body);
+  const [bodyHtml, setBodyHtml] = useState<string | null>(row.body_html ?? null);
   const [status, setStatus] = useState("");
-  const copy = async (value: string, label: string) => {
+  const copy = async (value: string, label: string, html?: string) => {
     setStatus("");
-    try { await navigator.clipboard.writeText(value); setStatus(`${label} copied.`); }
+    try {
+      if (html !== undefined) {
+        const result = await copyFormattedEmail(html, value);
+        setStatus(result === "formatted" ? `${label} copied with formatting.` : `${label} copied as plain text. To keep formatting, select the body and copy it manually.`);
+      } else { await navigator.clipboard.writeText(value); setStatus(`${label} copied.`); }
+    }
     catch { setStatus("Copy is unavailable. Select the text in the fields and copy it manually."); }
   };
   return <RecordPage title={row.title} subtitle="Customize this email for the recipient. Your saved template stays unchanged; this draft is kept only while this page is open." onClose={onClose}>
-    <DraftBoundary dirty={subject !== row.subject || body !== row.body}>
+    <DraftBoundary dirty={subject !== row.subject || body !== row.body || bodyHtml !== (row.body_html ?? null)}>
       <div className="stack">
         <Field label="Subject"><input className="input" dir="auto" maxLength={500} value={subject} onChange={event => {setSubject(event.target.value); setStatus("");}} /></Field>
-        <Field label="Email body"><textarea className="input" dir="auto" rows={16} maxLength={20000} value={body} onChange={event => {setBody(event.target.value); setStatus("");}} /></Field>
+        <EmailBodyEditor body={body} html={bodyHtml} onChange={(text, html) => {setBody(text); setBodyHtml(html); setStatus("");}} />
         <FormActions>
-          <Button variant="primary" onClick={() => copy(body, "Email body")}>Copy body</Button>
+          <Button variant="primary" onClick={() => copy(body, "Email body", bodyHtml ?? plainEmailHtml(body))}>Copy body</Button>
           <Button onClick={() => copy(subject, "Subject")}>Copy subject</Button>
-          <Button onClick={() => copy(`Subject: ${subject}\n\n${body}`, "Email")}>Copy entire email</Button>
+          <Button onClick={() => copy(`Subject: ${subject}\n\n${body}`, "Email", `<p><strong>Subject: </strong>${plainEmailHtml(subject)}</p>${bodyHtml ?? plainEmailHtml(body)}`)}>Copy entire email</Button>
         </FormActions>
         <p role="status">{status}</p>
       </div>

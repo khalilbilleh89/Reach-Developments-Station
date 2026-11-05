@@ -2,7 +2,7 @@
 
 Commercial > Emails appears immediately below FAQs. Each project has an initially
 empty library with Internal Emails, Clients Emails and External Emails sections.
-Templates have a category, title, subject and multiline plain-text body. Search
+Templates have a category, title, subject and formatted body. Search
 matches title, subject and body within the selected section.
 
 Add and Edit open full pages. Delete is available beside each editable template,
@@ -12,7 +12,12 @@ Failed saves preserve the form, and stale edits/deletes return a conflict.
 
 Customize & copy opens a separate full-page composer for any reader. Editing this
 in-memory copy does not change the saved template. Copy body, Copy subject and Copy
-entire email preserve Unicode and line breaks. Clipboard failures provide manual
+entire email preserve Unicode, line breaks, bold, italic, underline, strikethrough,
+bullets and numbered lists. The toolbar also offers clear formatting, undo and redo.
+Copy body and Copy entire email publish both HTML and plain text so rich email
+composers can preserve formatting. Plain-text destinations use the text fallback.
+Browsers without rich clipboard support explicitly report plain-text copying.
+Clipboard failures provide manual
 copy guidance. Unsaved-change protection covers both template edits and customized
 drafts. Customized drafts are not persisted in browser storage or the database.
 Placeholders such as [Client name] are plain text for the user to replace.
@@ -26,6 +31,21 @@ No email is sent and there is no mailbox integration, AI generation or attachmen
 storage. No business templates or factual claims are seeded.
 
 ## Migration and rollback
+
+0060_email_rich_text follows 0059_marketing_assets and adds nullable body_html.
+Existing body text is unchanged and treated literally, never interpreted as HTML.
+The server accepts only inert text-formatting tags with no attributes, URLs, styles,
+images or embedded content, and derives the searchable plain body from that HTML.
+Limits are 20,000 plain characters and 100,000 HTML characters. Deleted templates'
+HTML remains in the existing audit evidence. An older API client omitting body_html
+preserves it when body is unchanged, and clears it when body changes; explicit null
+also clears formatting. No backfill is required.
+
+Downgrade of 0060 refuses while formatted templates remain. Roll application code
+back with the additive column retained; export and explicitly resolve content before
+a schema downgrade. Native editing commands retain browser undo history without a
+new editor dependency; because execCommand is deprecated, browser compatibility
+should be included in future browser-support reviews.
 
 0055_commercial_emails follows 0054_specification_images. It adds commercial_emails with
 project foreign key, category/length/version constraints and project index. No
