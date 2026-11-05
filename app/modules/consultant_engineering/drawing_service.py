@@ -184,22 +184,30 @@ def remove(
     audit(session, row, actor, "delete", before, reason.strip())
 
 
+def _run_pdf_worker(data: bytes, operation: str) -> bytes:
+    return subprocess.run(
+        [sys.executable, "-m", "app.modules.consultant_engineering.drawing_render", operation],
+        input=data,
+        capture_output=True,
+        timeout=30,
+        check=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+    ).stdout
+
+
+def inspect_document(data: bytes) -> None:
+    try:
+        if int(_run_pdf_worker(data, "inspect")) < 1:
+            raise ValueError("Empty document")
+    except (subprocess.SubprocessError, ValueError, OSError) as exc:
+        raise ValidationError(
+            "Could not read this document. Use a valid, unencrypted PDF."
+        ) from exc
+
+
 def preview(data: bytes, page: int) -> dict:
     try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "app.modules.consultant_engineering.drawing_render",
-                str(page - 1),
-            ],
-            input=data,
-            capture_output=True,
-            timeout=30,
-            check=True,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        )
-        count, image = result.stdout.split(b"\n", 1)
+        count, image = _run_pdf_worker(data, str(page - 1)).split(b"\n", 1)
         if not image.startswith(b"\x89PNG\r\n\x1a\n") or len(image) > 25 * 1024 * 1024:
             raise ValueError("Invalid preview")
         return {
