@@ -264,3 +264,54 @@ def test_plan_categories_migration_retains_history(
         command.downgrade(config, "0059_marketing_assets")
     db.rollback()
     assert db.get(ProjectDrawing, uuid.UUID(row["id"])).is_deleted
+
+
+def test_upload_does_not_require_a_raster_preview(
+    manager_member_client: TestClient, project_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.modules.consultant_engineering import drawing_service
+
+    def unavailable_preview(*args: object) -> None:
+        raise AssertionError("Upload must not allocate a preview raster")
+
+    monkeypatch.setattr(drawing_service, "preview", unavailable_preview)
+    response = upload(manager_member_client, project_id)
+    assert response.status_code == 201, response.text
+    row = response.json()
+    original = manager_member_client.get(root(project_id) + f"/{row['id']}/document")
+    assert original.status_code == 200
+    assert original.content.startswith(b"%PDF-")
+
+
+def test_inspection_does_not_render_and_preview_keeps_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from PIL import Image
+
+    from app.modules.consultant_engineering.drawing_render import inspect, render
+
+    data = pdf()
+    with monkeypatch.context() as patch:
+
+        def no_raster(*args: object, **kwargs: object) -> None:
+            raise AssertionError("Inspection must not render")
+
+        patch.setattr(pdfium.PdfPage, "render", no_raster)
+        assert inspect(data) == 2
+    count, image = render(data, 0)
+    assert count == 2
+    with Image.open(io.BytesIO(image)) as preview:
+        assert preview.format == "PNG" and max(preview.size) == 4096
+
+
+def test_empty_pdf_does_not_create_plan(manager_member_client: TestClient, project_id: str) -> None:
+    output = io.BytesIO()
+    with pdfium.PdfDocument.new() as document:
+        document.save(output)
+    response = manager_member_client.post(
+        root(project_id),
+        params={"name": "Empty", "filename": "empty.pdf"},
+        content=output.getvalue(),
+    )
+    assert response.status_code == 422
+    assert manager_member_client.get(root(project_id)).json() == []
