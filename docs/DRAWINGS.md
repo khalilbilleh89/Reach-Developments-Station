@@ -34,3 +34,11 @@ and requires no backfill. Downgrade succeeds only while the table is empty; even
 deleted evidence prevents downgrade. After any upload, roll forward or revert the
 application while retaining this additive schema. Reconcile migration ordering
 with other pending PRs before merge. Governed by docs/ENGINEERING_RULES.md.
+
+## Plans workspace — 2026-11-05
+
+Delivery → Plans sits immediately above Construction and opens the same existing drawing library. Design → Drawings remains a compatible entry to these records; no PDF is copied or moved. Five primary disciplines are Architectural, Electrical, Mechanical, Structural and Shop Drawings. Existing General/MEP/Landscape/Interiors classifications are preserved and remain filterable/editable; they are never guessed into a new discipline. New uploads default to Architectural and ask only for title, category and PDF; optional metadata is behind More details.
+
+Uploads now also validate the first rendered page before persistence, outside the project write lock, rejecting malformed/encrypted PDFs without creating a record. The full-page viewer offers previous/next, direct page selection and fit-width/150–300% zoom with keyboard-scrollable inspection. Raster viewing does not execute PDF scripts or trigger a download; optional original downloads retain vector detail.
+
+Migration0060_plan_categories follows0059_marketing_assets and extends only the category constraint. No backfill, permission changes or new dependencies. Downgrade refuses active or retained records in new categories. The same versioned, reasoned removal and audit rules apply in Plans.

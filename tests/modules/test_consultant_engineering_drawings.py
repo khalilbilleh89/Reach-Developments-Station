@@ -216,3 +216,51 @@ def test_migration_roundtrip_and_retention(
         command.downgrade(config, "0055_commercial_emails")
     db.rollback()
     assert db.get(ProjectDrawing, uuid.UUID(row["id"])).is_deleted
+
+
+@pytest.mark.parametrize(
+    "category", ["architecture", "electrical", "mechanical", "structure", "shop_drawing"]
+)
+def test_plan_disciplines_require_only_title_and_pdf(
+    manager_member_client: TestClient, project_id: str, category: str
+) -> None:
+    response = upload(manager_member_client, project_id, category=category)
+    assert response.status_code == 201, response.text
+    row = response.json()
+    assert row["category"] == category and row["revision"] == "" and row["location"] == ""
+    assert manager_member_client.get(root(project_id)).json()[0]["id"] == row["id"]
+
+
+def test_malformed_pdf_does_not_create_plan(
+    manager_member_client: TestClient, project_id: str
+) -> None:
+    response = manager_member_client.post(
+        root(project_id),
+        params={"name": "Broken", "filename": "broken.pdf"},
+        content=b"%PDF-1.7\ninvalid payload\n%%EOF",
+    )
+    assert response.status_code == 422
+    assert manager_member_client.get(root(project_id)).json() == []
+
+
+def test_plan_categories_migration_retains_history(
+    manager_member_client: TestClient, project_id: str, db: Session
+) -> None:
+    db.rollback()
+    config = _alembic_config()
+    command.downgrade(config, "0059_marketing_assets")
+    command.upgrade(config, "head")
+    command.check(config)
+    row = upload(manager_member_client, project_id, category="electrical").json()
+    assert (
+        manager_member_client.post(
+            root(project_id) + f"/{row['id']}/delete",
+            json={"reason": "Retain source plan", "expected_version": 1},
+        ).status_code
+        == 204
+    )
+    db.rollback()
+    with pytest.raises(RuntimeError, match="New plan categories exist"):
+        command.downgrade(config, "0059_marketing_assets")
+    db.rollback()
+    assert db.get(ProjectDrawing, uuid.UUID(row["id"])).is_deleted

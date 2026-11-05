@@ -9,9 +9,17 @@ from app.modules.projects.schemas import StrictRequest
 
 class DrawingFields(StrictRequest):
     name: str = Field(min_length=1, max_length=320)
-    category: Literal["general", "architecture", "structure", "mep", "landscape", "interiors"] = (
-        "general"
-    )
+    category: Literal[
+        "general",
+        "architecture",
+        "structure",
+        "mep",
+        "landscape",
+        "interiors",
+        "electrical",
+        "mechanical",
+        "shop_drawing",
+    ] = "general"
     drawing_number: str = Field(default="", max_length=120)
     location: str = Field(default="", max_length=200)
     revision: str = Field(default="", max_length=80)

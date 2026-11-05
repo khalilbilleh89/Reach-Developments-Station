@@ -279,7 +279,8 @@ class ProjectDrawing(Base):
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="name_present"),
         CheckConstraint(
-            "category IN ('general','architecture','structure','mep','landscape','interiors')",
+            "category IN ('general','architecture','structure','mep','landscape','interiors',"
+            "'electrical','mechanical','shop_drawing')",
             name="valid_category",
         ),
         CheckConstraint(
