@@ -485,7 +485,7 @@ def test_plan_sources_migration_retains_history(
 ) -> None:
     db.rollback()
     config = _alembic_config()
-    command.downgrade(config, "0061_project_procedures")
+    command.downgrade(config, "0062_project_training")
     command.upgrade(config, "head")
     command.check(config)
     if kind == "link":
@@ -509,6 +509,6 @@ def test_plan_sources_migration_retains_history(
     )
     db.rollback()
     with pytest.raises(RuntimeError, match="Large PDFs or Drive links exist"):
-        command.downgrade(config, "0061_project_procedures")
+        command.downgrade(config, "0062_project_training")
     db.rollback()
     assert db.get(ProjectDrawing, uuid.UUID(row["id"])).is_deleted

@@ -102,6 +102,7 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
         "project_images",
         "project_team",
         "project_matrix",
+        "project_training",
         "project_procedure",
         "project_price_escalation",
         "project_documents",
@@ -484,7 +485,9 @@ def domain_of_migration(path: str) -> str | None:
             return domain
     if stem == "0054_specification_images":
         return "construction"
-    if stem in {"0060_plan_categories", "0062_plan_sources"}:
+    if stem == "0062_project_training":
+        return "projects"
+    if stem in {"0060_plan_categories", "0063_plan_sources"}:
         return "consultant_engineering"
     if stem == "0052_design_payments":
         return "consultant_engineering"

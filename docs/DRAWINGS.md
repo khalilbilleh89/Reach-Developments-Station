@@ -53,4 +53,4 @@ Google Drive link is an alternative source in the same form and register. HTTPS 
 
 A plan has exactly one source, protected by a database constraint. Source bytes/URL are immutable; add another plan for a changed source. Metadata edits and reasoned removal retain their existing version, scope and audit rules for both kinds. Removed links remain as history and disappear from the register; this does not delete the external Drive file.
 
-Migration 0062_plan_sources follows 0061_project_procedures, preserves old uploads and adds a nullable source URL while expanding the size constraint. Downgrade refuses any active or retained link or PDF over 10 MiB. Roll forward after these sources are recorded; do not truncate files or discard links to downgrade.
+Migration 0063_plan_sources follows 0062_project_training, preserves old uploads and adds a nullable source URL while expanding the size constraint. Downgrade refuses any active or retained link or PDF over 10 MiB. Roll forward after these sources are recorded; do not truncate files or discard links to downgrade.
