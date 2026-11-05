@@ -38,6 +38,7 @@ import type { Roles } from "@/lib/roles";
  */
 
 export type ProjectSection =
+  | "procedure"
   | "matrix"
   | "marketing-bio"
   | "marketing-economics"
@@ -322,6 +323,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         label: "Matrix",
         icon: "overview",
         description: "Create visual SWOT, PESTEL, Porter, BCG, Ansoff and Fishbone analyses.",
+        visible: everyone,
+      },
+      {
+        key: "procedure",
+        label: "Procedure",
+        icon: "overview",
+        description: "Map SOPs and objectives into clear Yes / No workflows.",
         visible: everyone,
       },
     ],

@@ -51,6 +51,7 @@ import { LandTab } from "@/components/projects/LandTab";
 import { MarketingAssets } from "./marketing/MarketingAssets";
 import { MarketingContentTab } from "@/components/projects/marketing/MarketingContentTab";
 import { MarketingEconomicsTab } from "@/components/projects/marketing/MarketingEconomicsTab";
+import { ProcedureTab } from "./ProcedureTab";
 import { MatrixTab } from "@/components/projects/MatrixTab";
 import { PriceEscalationTab } from "./PriceEscalationTab";
 
@@ -319,6 +320,7 @@ export function ProjectWorkspace({
         {section === "price-escalation" ? <PriceEscalationTab key={projectId} projectId={projectId} /> : null}
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "procedure" ? <ProcedureTab key={projectId} projectId={projectId} /> : null}
         {section === "matrix" ? <MatrixTab key={projectId} projectId={projectId} /> : null}
         {section === "team" ? <TeamTab key={projectId} projectId={projectId} /> : null}
         {section === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}

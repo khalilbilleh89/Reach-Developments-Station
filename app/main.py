@@ -58,6 +58,7 @@ from app.modules.projects.api import router as projects_router
 from app.modules.projects.company_api import router as company_router
 from app.modules.projects.escalation_api import router as escalation_router
 from app.modules.projects.matrix_api import router as matrix_router
+from app.modules.projects.procedure_api import router as procedure_router
 from app.modules.projects.team_api import router as team_router
 from app.modules.sales.api import router as sales_router
 from app.modules.sales.email_api import router as email_router
@@ -272,6 +273,7 @@ def create_app() -> FastAPI:
         marketing_router,
         team_router,
         matrix_router,
+        procedure_router,
         escalation_router,
         agreement_router,
         masterplan_router,

@@ -7454,3 +7454,29 @@ small { font-size: var(--text-xs); }
 
 
 .marketing-asset-preview { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: var(--surface-secondary); }
+
+/* Procedure maps: labelled decisions and readable manual walkthroughs. */
+.procedure-intro { padding: 32px; border-radius: var(--radius-card); background: var(--accent-soft); border: 1px solid var(--line-default); }
+.procedure-intro h2 { font-size: var(--title-page); max-width: 34rem; }
+.procedure-mini { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 24px 0; }
+.procedure-mini span { padding: 12px 20px; background: var(--surface); border: 1px solid var(--accent); border-radius: 24px; }
+.procedure-map-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.procedure-map-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--line-default); border-radius: var(--radius-card); background: var(--surface-secondary); }
+.procedure-map { display: block; width: 100%; height: auto; }
+.procedure-map-expanded { min-width: 1000px; }
+.procedure-node > rect, .procedure-node > path { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.procedure-node-decision > path { fill: var(--warning-soft); stroke: var(--warning); }
+.procedure-node-start > rect, .procedure-node-end > rect { fill: var(--success-soft); stroke: var(--success); }
+.procedure-node-kind { fill: var(--text-secondary); font-size: 14px; letter-spacing: 2px; }
+.procedure-node-label { text-align: center; font-size: 21px; font-weight: 650; overflow-wrap: anywhere; line-height: 1.3; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.procedure-node-label small { display: block; font-size: 14px; font-weight: 400; }
+.procedure-edge-yes path, .procedure-edge-no path { fill: none; stroke: var(--success); stroke-width: 2; }
+.procedure-edge-no path { stroke: var(--danger); stroke-dasharray: 7 4; }
+.procedure-edge-yes text, .procedure-edge-no text { fill: var(--text-primary); font-size: 16px; }
+.procedure-arrow { fill: var(--text-secondary); }
+.procedure-detail-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.procedure-detail, .procedure-step-editor, .procedure-walk { background: var(--surface); border: 1px solid var(--line-default); border-radius: var(--radius-card); padding: 24px; overflow-wrap: anywhere; }
+.procedure-step-editor { display: grid; gap: 16px; }
+.procedure-text, .procedure-detail p, .procedure-detail dd, .procedure-walk p { white-space: pre-wrap; }
+.procedure-detail dd { margin: 4px 0 16px; }
+@media (max-width: 48rem) { .procedure-detail-grid { grid-template-columns: minmax(0,1fr); } .procedure-intro, .procedure-step-editor { padding: 16px; } }
