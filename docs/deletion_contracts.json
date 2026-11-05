@@ -934,5 +934,13 @@
     "removal_route": "POST /projects/{project_id}/training/{asset_id}/delete",
     "ui_file": "frontend/src/components/projects/TrainingTab.tsx",
     "notes": "Project managers and administrators remove training with a reason and version. Files, metadata and audit retained; external targets unchanged. Categories are editable labels, not separate records."
+  },
+  {
+    "handler": "projects.create_procedure",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{procedure_id}/delete",
+    "ui_file": "frontend/src/components/projects/ProcedureTab.tsx",
+    "notes": "Whole-project manager/admin; version and reason required; map and audit retained. Steps removed on parent save with audit and invalid references rejected."
   }
 ]

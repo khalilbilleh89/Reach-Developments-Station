@@ -48,9 +48,12 @@ async def create_drawing(
         if len(document) + len(chunk) > service.MAX_DOCUMENT_BYTES:
             raise HTTPException(status_code=413, detail="Documents must be no larger than 10 MB.")
         document.extend(chunk)
-    # Validate previewability before taking the project write lock.
-    await run_in_threadpool(service.validate_document, fields.filename, bytes(document))
-    await run_in_threadpool(service.preview, bytes(document), 1)
+    # Inspect the PDF without rasterizing it. A large drawing preview must not
+    # be a prerequisite for saving its original bytes. No project lock is held.
+    data = bytes(document)
+    del document
+    await run_in_threadpool(service.validate_document, fields.filename, data)
+    await run_in_threadpool(service.inspect_document, data)
     row = await run_in_threadpool(
         service.create_locked,
         session,
@@ -58,7 +61,7 @@ async def create_drawing(
         actor,
         DrawingFields.model_validate(fields.model_dump(exclude={"filename"})),
         fields.filename,
-        bytes(document),
+        data,
     )
     return DrawingRead.model_validate(row)
 

@@ -201,7 +201,7 @@ def test_training_migration_retention(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0060_plan_categories")
+    command.downgrade(config, "0061_project_procedures")
     command.upgrade(config, "head")
     command.check(config)
     result = upload(admin_client, project_id)
@@ -216,5 +216,5 @@ def test_training_migration_retention(
     )
     db.rollback()
     with pytest.raises(RuntimeError, match="history must be retained"):
-        command.downgrade(config, "0060_plan_categories")
+        command.downgrade(config, "0061_project_procedures")
     assert db.scalar(text("SELECT count(*) FROM project_training")) == 1

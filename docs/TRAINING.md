@@ -30,7 +30,7 @@ project before inspecting/changing entries. The Projects module owns persistence
 it reuses Marketing's public `file_payload` validator without accessing Marketing
 records. No production dependencies or financial calculations change.
 
-Migration `0061_project_training` follows `0060_plan_categories`. Upgrade adds one
+Migration `0062_project_training` follows `0061_project_procedures`. Upgrade adds one
 table and does not modify existing data. Downgrade is allowed only when the new
 table is empty, including retained/deleted entries; once used, roll back application
 code while retaining the additive schema. Never erase records to enable rollback.
