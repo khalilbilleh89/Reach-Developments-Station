@@ -69,6 +69,7 @@ export type ProjectSection =
   | "operations"
   | "faqs"
   | "emails"
+  | "plans"
   | "technical-specifications"
   | "construction"
   | "economics"
@@ -263,6 +264,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "delivery",
     label: "Delivery",
     items: [
+      {
+        key: "plans",
+        label: "Plans",
+        icon: "blueprint",
+        description: "Your project plan library. Open a PDF, inspect every page and return whenever you need it.",
+        visible: (roles) => hasAnyRole(roles, CONSULTANT_READERS),
+      },
       {
         key: "construction",
         label: "Construction",

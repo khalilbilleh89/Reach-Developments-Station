@@ -260,6 +260,12 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "marketing",
         ("tests/modules/test_marketing.py::test_economics_migration_retention",),
     ),
+    "0060_plan_categories.py": (
+        "consultant_engineering",
+        (
+            "tests/modules/test_consultant_engineering_drawings.py::test_plan_categories_migration_retains_history",
+        ),
+    ),
     "0059_marketing_assets.py": (
         "marketing",
         ("tests/modules/test_marketing_assets.py::test_asset_migration_retention",),

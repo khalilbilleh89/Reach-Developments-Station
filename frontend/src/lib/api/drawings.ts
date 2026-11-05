@@ -1,6 +1,7 @@
 import { download, get, post, postBinary, put } from "./client";
 
-export const drawingCategories = { general: "General", architecture: "Architecture", structure: "Structure", mep: "MEP", landscape: "Landscape", interiors: "Interiors" };
+export const planCategories = { architecture: "Architectural", electrical: "Electrical", mechanical: "Mechanical", structure: "Structural", shop_drawing: "Shop Drawings" };
+export const drawingCategories = { ...planCategories, general: "General (existing)", mep: "MEP (existing)", landscape: "Landscape (existing)", interiors: "Interiors (existing)" };
 export const drawingStatuses = { reference: "Reference", for_review: "For review", issued: "Issued", superseded: "Superseded" };
 export interface DrawingFields {
   name: string;

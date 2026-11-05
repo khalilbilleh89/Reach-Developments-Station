@@ -644,6 +644,7 @@ class TestOnlyEntitledReadersAsk:
             "faqs",
             "emails",
             "operations",
+            "plans",
             "construction",
             "technical-specifications",
             "price-escalation",
@@ -660,6 +661,7 @@ class TestOnlyEntitledReadersAsk:
         for key, role_set in (
             ("prelaunch", "CASHFLOW_READERS"),
             ("consultant", "CONSULTANT_READERS"),
+            ("plans", "CONSULTANT_READERS"),
             ("agreements", "AGREEMENT_READERS"),
             ("buyers", "SALES_READERS"),
             ("agents", "SALES_READERS"),

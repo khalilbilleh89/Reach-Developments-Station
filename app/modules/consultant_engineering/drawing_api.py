@@ -48,6 +48,9 @@ async def create_drawing(
         if len(document) + len(chunk) > service.MAX_DOCUMENT_BYTES:
             raise HTTPException(status_code=413, detail="Documents must be no larger than 10 MB.")
         document.extend(chunk)
+    # Validate previewability before taking the project write lock.
+    await run_in_threadpool(service.validate_document, fields.filename, bytes(document))
+    await run_in_threadpool(service.preview, bytes(document), 1)
     row = await run_in_threadpool(
         service.create_locked,
         session,
