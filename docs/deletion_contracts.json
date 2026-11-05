@@ -918,5 +918,13 @@
     "removal_route": "DELETE /{draft_id}?version=...&reason=...",
     "ui_file": "frontend/src/components/projects/sales/SalesDrafts.tsx",
     "notes": "Unposted drafts can be physically removed with version, Boss authority and retained deletion audit. Added drafts retain source evidence and link to the preparing transaction, which uses existing cancellation/removal controls. No posted cash or legal event is created."
+  },
+  {
+    "handler": "projects.create_procedure",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{procedure_id}/delete",
+    "ui_file": "frontend/src/components/projects/ProcedureTab.tsx",
+    "notes": "Whole-project manager/admin; version and reason required; map and audit retained. Steps removed on parent save with audit and invalid references rejected."
   }
 ]

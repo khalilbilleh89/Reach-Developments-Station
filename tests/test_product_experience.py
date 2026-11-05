@@ -650,6 +650,7 @@ class TestOnlyEntitledReadersAsk:
             "economics",
             "cashflow",
             "matrix",
+            "procedure",
             "team",
             "documents",
             "access",
