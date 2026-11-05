@@ -129,9 +129,9 @@ def test_migration_roundtrip_and_retention(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0059_marketing_assets")
+    command.downgrade(config, "0060_plan_categories")
     command.upgrade(config, "head")
     command.check(config)
     assert admin_client.post(url(project_id), json=payload()).status_code == 201
     with pytest.raises(RuntimeError, match="Procedure history"):
-        command.downgrade(config, "0059_marketing_assets")
+        command.downgrade(config, "0060_plan_categories")

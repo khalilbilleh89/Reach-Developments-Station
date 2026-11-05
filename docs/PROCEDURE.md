@@ -8,4 +8,4 @@ Save requires one Start, at least one End, unique IDs, valid links, every node r
 
 Whole-project readers may view. Project managers and effective administrators may create/update/remove. Writes take the project lock and check versions; stale updates/deletions return 409. Deletion requires a reason and retains payload plus attributed audit snapshots. API /projects/{project_id}/procedures supports GET/POST, PUT /{procedure_id}, POST /{procedure_id}/delete.
 
-Migration 0060_project_procedures follows 0059_marketing_assets. It adds one table, no backfill. Empty downgrade works; retained records block downgrade. Roll forward after use.
+Migration 0061_project_procedures follows 0060_plan_categories. It adds one table, no backfill. Empty downgrade works; retained records block downgrade. Roll forward after use.

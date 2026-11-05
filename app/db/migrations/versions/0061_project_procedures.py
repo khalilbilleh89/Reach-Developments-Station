@@ -1,11 +1,11 @@
-"""Project strategy matrices with retained history."""
+"""Project procedure maps with retained history."""
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0060_project_procedures"
-down_revision = "0059_marketing_assets"
+revision = "0061_project_procedures"
+down_revision = "0060_plan_categories"
 branch_labels = None
 depends_on = None
 

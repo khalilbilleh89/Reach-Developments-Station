@@ -14,13 +14,13 @@ function harness() {
   let answer = { status: "loading", retry() {} };
   let enabled;
   class ApiError extends Error {}
-  runInNewContext(`(function(require,exports){${code}\n})`, { Error })((key) => {
+  runInNewContext(`(function(require,exports){${code}\n})`, { Error, FormData: class { constructor(form) { this.form = form; } get(key) { return this.form[key]; } } })((key) => {
     if (key === "react") return { useState(initial) {
       const i = cursor++; slots[i] ??= { value: typeof initial === "function" ? initial() : initial };
       return [slots[i].value, value => { slots[i].value = value; }];
     }};
     if (key === "@/lib/api") return { ApiError };
-    if (key === "@/lib/api/drawings") return { drawings: {}, drawingCategories: {general: "General"}, drawingStatuses: {reference: "Reference"}, filterDrawings: rows => rows };
+    if (key === "@/lib/api/drawings") return { drawings: {}, planCategories: {architecture: "Architectural", electrical: "Electrical", mechanical: "Mechanical", structure: "Structural", shop_drawing: "Shop Drawings"}, drawingCategories: {general: "General"}, drawingStatuses: {reference: "Reference"}, filterDrawings: rows => rows };
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
     if (key === "@/lib/roles") return { PROJECT_FINANCIAL_READERS: new Set(["finance"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) };
     if (key === "./CompanyDocuments") return { CompanyDocuments: "CompanyDocuments" };
@@ -44,7 +44,7 @@ test("drawing upload requires a name and PDF; failures retain the draft", async 
   let tree = h.render("DrawingForm", props);
   await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
   tree = h.render("DrawingForm", props);
-  assert.match(find(tree, "Notice")[0].props.children, /name/);
+  assert.match(find(tree, "Notice")[0].props.children, /title/);
   find(tree, "input")[0].props.onChange({ target: { value: " Certificate of incorporation " } });
   tree = h.render("DrawingForm", props);
   await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
@@ -104,8 +104,8 @@ test("drawing readers see review controls but no edit, upload or deletion", () =
   h.setAnswer({status:"ready", data:[{id:"d", name:"Plan", category:"general", status:"reference", filename:"plan.pdf"}]});
   let tree = h.render("Drawings", {projectId:"p",canWrite:false});
   assert.equal(find(tree,"DeleteRecordButton").length,0);
-  assert.equal(find(tree,"Button").some(node => node.props.children === "Add drawing"), false);
-  assert.equal(find(tree,"Button").some(node => node.props.children === "View drawing"), true);
+  assert.equal(find(tree,"Button").some(node => node.props.children === "Add plan"), false);
+  assert.equal(find(tree,"Button").some(node => node.props.children === "Open plan"), true);
   tree = h.render("Drawings", {projectId:"p",canWrite:true});
   assert.equal(find(tree,"DeleteRecordButton").length,1);
 });
@@ -122,4 +122,48 @@ test("drawing search combines human references and filters", () => {
   assert.equal(exports.filterDrawings(rows," r02 ","architecture","issued")[0].id,"one");
   assert.equal(exports.filterDrawings(rows,"roof","mep","superseded")[0].id,"two");
   assert.equal(exports.filterDrawings(rows,"roof","architecture","").length,0);
+});
+
+
+test("plans expose the five disciplines and keep optional details out of required entry", () => {
+  const h = harness();
+  let tree = h.render("DrawingForm", { onSave() {}, onClose() {}, onSaved() {} });
+  const choices = find(tree, "ChoiceCards")[0];
+  assert.deepEqual(Array.from(choices.props.options, row => row.label), ["Architectural", "Electrical", "Mechanical", "Structural", "Shop Drawings"]);
+  assert.equal(choices.props.value, "architecture");
+  const required = find(tree, "input").filter(node => node.props.required);
+  assert.equal(required.length, 2);
+  assert.equal(find(tree, "Disclosure")[0].props.title, "More details (optional)");
+});
+
+
+test("plan viewer jumps to a valid page and rejects an out-of-range jump", () => {
+  const h = harness();
+  h.setAnswer({ status: "ready", data: {page_count: 2, image: "data:image/png;base64,test"} });
+  const props = {projectId: "p", row: {id: "d", name: "Plan", category: "architecture", status: "reference", filename: "plan.pdf"}, onClose() {}};
+  let tree = h.render("DrawingViewer", props);
+  find(tree,"form")[0].props.onSubmit({preventDefault() {}, currentTarget: {page: "2"}});
+  tree = h.render("DrawingViewer", props);
+  assert.equal(find(tree,"input")[0].props.defaultValue,2);
+  find(tree,"form")[0].props.onSubmit({preventDefault() {}, currentTarget: {page: "3"}});
+  tree = h.render("DrawingViewer", props);
+  assert.equal(find(tree,"input")[0].props.defaultValue,2);
+});
+
+test("standalone Plans gates the library before it mounts and grants only Design writers", () => {
+  const source = readFileSync(new URL("../src/components/projects/PlansTab.tsx",import.meta.url),"utf8");
+  const code = ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  const exports = {};
+  runInNewContext(`(function(require,exports){${code}\n})`,{})((key) => {
+    if(key === "@/components/ui") return {Notice:"Notice",PageHeader:"PageHeader"};
+    if(key === "./design/Drawings") return {Drawings:"Drawings"};
+    if(key === "@/lib/roles") return {CONSULTANT_READERS:new Set(["finance","project_manager"]),CONSULTANT_EDITORS:new Set(["project_manager"]),hasAnyRole:(roles,allowed)=>[...roles].some(role=>allowed.has(role))};
+    return require(key);
+  },exports);
+  let tree = exports.PlansTab({projectId:"p",roles:new Set(["sales_advisor"])});
+  assert.equal(find(tree,"Drawings").length,0);
+  tree = exports.PlansTab({projectId:"p",roles:new Set(["finance"])});
+  assert.equal(find(tree,"Drawings")[0].props.canWrite,false);
+  tree = exports.PlansTab({projectId:"p",roles:new Set(["project_manager"])});
+  assert.equal(find(tree,"Drawings")[0].props.canWrite,true);
 });
