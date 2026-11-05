@@ -877,7 +877,7 @@
     "status": "implemented",
     "removal_route": "POST /projects/{project_id}/drawings/{drawing_id}/delete",
     "ui_file": "frontend/src/components/projects/design/Drawings.tsx",
-    "notes": "Delivery > Plans (also Design > Drawings): project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes, metadata and audit. No downstream records reference drawings."
+    "notes": "Delivery > Plans (also Design > Drawings): project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes or Drive URL, metadata and audit. No downstream records reference drawings."
   },
   {
     "handler": "construction.add_specification_image",
@@ -926,5 +926,13 @@
     "removal_route": "POST /{procedure_id}/delete",
     "ui_file": "frontend/src/components/projects/ProcedureTab.tsx",
     "notes": "Whole-project manager/admin; version and reason required; map and audit retained. Steps removed on parent save with audit and invalid references rejected."
+  },
+  {
+    "handler": "consultant_engineering.create_drawing_link",
+    "create_route": "POST /links",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/drawings/{drawing_id}/delete",
+    "ui_file": "frontend/src/components/projects/design/Drawings.tsx",
+    "notes": "Delivery > Plans (also Design > Drawings): project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes or Drive URL, metadata and audit. No downstream records reference drawings."
   }
 ]

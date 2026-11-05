@@ -11,6 +11,7 @@ from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.consultant_engineering import drawing_service as service
 from app.modules.consultant_engineering.drawing_schemas import (
     DrawingFields,
+    DrawingLink,
     DrawingPreview,
     DrawingRead,
     DrawingRemoval,
@@ -46,7 +47,7 @@ async def create_drawing(
     document = bytearray()
     async for chunk in request.stream():
         if len(document) + len(chunk) > service.MAX_DOCUMENT_BYTES:
-            raise HTTPException(status_code=413, detail="Documents must be no larger than 10 MB.")
+            raise HTTPException(status_code=413, detail="Documents must be no larger than 50 MB.")
         document.extend(chunk)
     # Inspect the PDF without rasterizing it. A large drawing preview must not
     # be a prerequisite for saving its original bytes. No project lock is held.
@@ -64,6 +65,13 @@ async def create_drawing(
         data,
     )
     return DrawingRead.model_validate(row)
+
+
+@router.post("/links", response_model=DrawingRead, status_code=201)
+def create_drawing_link(
+    project_id: uuid.UUID, body: DrawingLink, session: DbSession, actor: ActiveActor
+) -> DrawingRead:
+    return DrawingRead.model_validate(service.create_link(session, project_id, actor, body))
 
 
 @router.put("/{drawing_id}", response_model=DrawingRead)
@@ -88,6 +96,10 @@ def download_drawing(
 ) -> Response:
     service.scope(session, project_id, actor)
     row = service.drawing(session, project_id, drawing_id)
+    if row.source_url is not None:
+        raise HTTPException(
+            status_code=422, detail="This plan is a Drive link. Open it in Google Drive."
+        )
     return Response(
         content=row.document,
         media_type="application/pdf",
@@ -130,6 +142,10 @@ def preview_drawing(
 ) -> dict:
     service.scope(session, project_id, actor)
     row = service.drawing(session, project_id, drawing_id)
+    if row.source_url is not None:
+        raise HTTPException(
+            status_code=422, detail="This plan is a Drive link. Open it in Google Drive."
+        )
     data = row.document
     session.rollback()  # Release the read transaction before rendering.
     response.headers["Cache-Control"] = "private, no-store"
