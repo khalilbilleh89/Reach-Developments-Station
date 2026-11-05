@@ -22,10 +22,17 @@ Clearing the last actual date returns to Not started, effective today. Correctio
 append history rather than changing old events. Effective-date corrections that
 keep the same status are recorded in the append-only audit, not as a status
 movement. Re-saving matching facts adds no status event.
-Unrelated edits do not overwrite manual exception statuses. Optional manual
-status changes remain available for exceptions and retain their existing rules.
+Saving a legacy Not started/Preparing record reconciles all its recorded actual
+dates even when no date changed. The permit editor always sends Save, including
+an unchanged form. Other manual exception statuses are not overwritten by
+unrelated edits. The separate manual status form has been removed; the existing
+API remains compatible and historical exception statuses remain readable.
 
-Existing records are not bulk-converted: saving an actual-date field reconciles
-their status. Legacy API initial status input remains supported when no actual
-date is supplied; actual dates take precedence when present. No schema change,
-production backfill, new permission or dependency is required.
+Migration 0062 repairs active Not started/Preparing records with existing actual
+dates, using the same latest-date/tie order. Deleted records, undated records and
+explicit later/exception states remain untouched. Each correction retains full
+before/after facts in a system-attributed audit event, without fabricating a human
+status event or changing earlier history. Downgrade retains the correction and
+audit (there is no schema change); it must not restore knowingly stale status.
+Legacy API initial status input remains supported when no actual date is supplied.
+No new permission or dependency is required.

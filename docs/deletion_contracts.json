@@ -509,7 +509,7 @@
     "status": "retained",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Immutable permit status history; correct the current status through a permitted transition."
+    "notes": "Immutable permit status history; actual-date saves append movements and audit corrections. Legacy preparation reconciliation retains system audit evidence; removal never erases prior history."
   },
   {
     "handler": "sales.create_adjustment",

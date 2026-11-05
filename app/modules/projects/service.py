@@ -1896,7 +1896,10 @@ def update_permit(
     before = _snapshot(permit, _PERMIT_FIELDS)
     for field, value in updates.items():
         setattr(permit, field, value)
-    if any(field in updates for field, _ in _PERMIT_DATE_STATUSES):
+    if any(field in updates for field, _ in _PERMIT_DATE_STATUSES) or (
+        permit.status in _PRE_SUBMISSION_STATUSES
+        and any(getattr(permit, field) is not None for field, _ in _PERMIT_DATE_STATUSES)
+    ):
         _sync_permit_date_status(
             session, permit=permit, actor_user_id=actor_user_id, correlation_id=correlation_id
         )
