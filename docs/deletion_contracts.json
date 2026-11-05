@@ -920,6 +920,22 @@
     "notes": "Unposted drafts can be physically removed with version, Boss authority and retained deletion audit. Added drafts retain source evidence and link to the preparing transaction, which uses existing cancellation/removal controls. No posted cash or legal event is created."
   },
   {
+    "handler": "projects.create_link",
+    "create_route": "POST /links",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/training/{asset_id}/delete",
+    "ui_file": "frontend/src/components/projects/TrainingTab.tsx",
+    "notes": "Project managers and administrators remove training with a reason and version. Files, metadata and audit retained; external targets unchanged. Categories are editable labels, not separate records."
+  },
+  {
+    "handler": "projects.upload_asset",
+    "create_route": "POST /upload",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/training/{asset_id}/delete",
+    "ui_file": "frontend/src/components/projects/TrainingTab.tsx",
+    "notes": "Project managers and administrators remove training with a reason and version. Files, metadata and audit retained; external targets unchanged. Categories are editable labels, not separate records."
+  },
+  {
     "handler": "projects.create_procedure",
     "create_route": "POST ",
     "status": "implemented",
