@@ -7469,8 +7469,7 @@ small { font-size: var(--text-xs); }
 .procedure-node-decision > path { fill: var(--warning-soft); stroke: var(--warning); }
 .procedure-node-start > rect, .procedure-node-end > rect { fill: var(--success-soft); stroke: var(--success); }
 .procedure-node-kind { fill: var(--text-secondary); font-size: 14px; letter-spacing: 2px; }
-.procedure-node-label { text-align: center; font-size: 21px; font-weight: 650; overflow-wrap: anywhere; line-height: 1.3; color: var(--text-primary); }
-.procedure-node-label { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.procedure-node-label { text-align: center; font-size: 21px; font-weight: 650; overflow-wrap: anywhere; line-height: 1.3; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .procedure-node-label small { display: block; font-size: 14px; font-weight: 400; }
 .procedure-edge-yes path, .procedure-edge-no path { fill: none; stroke: var(--success); stroke-width: 2; }
 .procedure-edge-no path { stroke: var(--danger); stroke-dasharray: 7 4; }
