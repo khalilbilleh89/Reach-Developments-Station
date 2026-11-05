@@ -45,6 +45,7 @@ from app.modules.projects import (  # noqa: E402
     escalation_models,  # noqa: F401
     matrix_models,  # noqa: F401
     team_models,  # noqa: F401
+    training_models,  # noqa: F401
 )
 from app.modules.projects import models as projects_models  # noqa: E402,F401
 from app.modules.sales import (  # noqa: E402
