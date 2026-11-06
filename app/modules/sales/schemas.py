@@ -26,9 +26,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.modules.projects.schemas import StrictRequest
+from app.modules.sales.client_links import client_link
 from app.modules.sales.models import (
     ADJUSTMENT_TREATMENTS,
     ADJUSTMENT_TYPES,
@@ -223,6 +224,12 @@ class SalesPolicyWriteRequest(StrictRequest):
 # --------------------------------------------------------------------------- #
 
 
+ClientFolderLink = Annotated[
+    str | None, BeforeValidator(lambda value: client_link(value, folder=True))
+]
+OdooOpportunityLink = Annotated[str | None, BeforeValidator(client_link)]
+
+
 class ClientCreateRequest(StrictRequest):
     """``client_number`` is absent: the server issues it under the project lock."""
 
@@ -230,6 +237,8 @@ class ClientCreateRequest(StrictRequest):
     sole_purchaser_name: (
         Annotated[str, Field(min_length=1, max_length=200, pattern=r"\S")] | None
     ) = None
+    client_folder_url: ClientFolderLink = None
+    odoo_opportunity_url: OdooOpportunityLink = None
     email: Annotated[str, Field(max_length=320)] | None = None
     phone: Annotated[str, Field(max_length=64)] | None = None
     address: Annotated[str, Field(max_length=500)] | None = None
@@ -247,6 +256,8 @@ class ClientUpdateRequest(StrictRequest):
     """Correction, not replacement. ``client_number`` is not writable."""
 
     display_name: Name | None = None
+    client_folder_url: ClientFolderLink = None
+    odoo_opportunity_url: OdooOpportunityLink = None
     email: Annotated[str, Field(max_length=320)] | None = None
     phone: Annotated[str, Field(max_length=64)] | None = None
     address: Annotated[str, Field(max_length=500)] | None = None
@@ -293,6 +304,8 @@ class ClientSummaryRead(BaseModel):
 class ClientRead(ClientSummaryRead):
     """A buyer including their contact details, for the roles whose work needs them."""
 
+    client_folder_url: str | None
+    odoo_opportunity_url: str | None
     email: str | None
     phone: str | None
     address: str | None

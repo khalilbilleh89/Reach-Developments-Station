@@ -525,7 +525,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/clients/{client_id}",
     "ui_file": "frontend/src/components/projects/sales/ClientsPanel.tsx",
-    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract. Re-import skips existing records; only newly created rows use this removal flow."
+    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract. Re-import skips existing records; only newly created rows use this removal flow. Optional client folder/Odoo links can be cleared through Edit buyer or Sales client links; link URLs are not retained in audit, only changed field names."
   },
   {
     "handler": "sales.create_handover",

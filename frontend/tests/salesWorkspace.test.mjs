@@ -346,3 +346,37 @@ test("the select-all tick can be cleared on a page holding a unit that cannot be
   bar(one).props.onClear();
   assert.equal(bar(view.render()).props.count,0,"and the bulk bar's Clear empties it");
 });
+
+
+test("client links retain Odoo fragments and open safely in a separate tab", () => {
+  const client = {client_folder_url:"https://drive.google.com/drive/folders/example",odoo_opportunity_url:"https://crm.example.com/web#id=71&model=crm.lead"};
+  const view = mount("ClientLinks", "ClientLinkButtons", {"@/lib/api":{},"@/components/projects/EditForm":{}}, {client});
+  const links = nodes(view.render()).filter(node=>node.type==="a");
+  assert.deepEqual(links.map(node=>node.props.href), Object.values(client));
+  assert.ok(links.every(node=>node.props.target==="_blank" && node.props.rel==="noopener noreferrer"));
+});
+
+test("client links hide restricted data and save removals through the buyer API", async () => {
+  const calls=[]; let refreshed=0;
+  const dependencies={"@/lib/api":{sales:{updateClient:async(...args)=>calls.push(args)}},"@/components/projects/EditForm":{EditForm:"EditForm"}};
+  const restricted=mount("ClientLinks","ClientLinks",dependencies,{projectId:"p",client:{id:"b"},canWrite:false,onSaved:async()=>{}});
+  assert.equal(restricted.render(),null);
+  const view=mount("ClientLinks","ClientLinks",dependencies,{projectId:"p",client:{id:"b",display_name:"Buyer",client_folder_url:"https://drive.google.com/drive/folders/test",odoo_opportunity_url:null},canWrite:true,onSaved:async()=>{refreshed++;}});
+  nodes(view.render()).find(node=>node.type==="Button").props.onClick();
+  const editor=nodes(view.render()).find(node=>node.type==="EditForm");
+  await editor.props.onSave({client_folder_url:null});
+  assert.equal(calls[0][0],"p"); assert.equal(calls[0][1],"b"); assert.equal(calls[0][2].client_folder_url,null);
+  assert.equal(refreshed,1);
+});
+
+test("register buyer includes optional links and protects link-only edits", async () => {
+  const calls=[];
+  const view=mount("BuyerForm","BuyerForm",{"@/lib/api":{ApiError,sales:{createClient:async(...args)=>{calls.push(args);return {id:"buyer"};}}}}, {projectId:"p",onSaved(){},onCancel(){}});
+  const set=(name,value)=>nodes(view.render()).find(node=>node.type==="input" && node.props.name===name).props.onChange({target:{value}});
+  set("client_folder_url","https://drive.google.com/drive/folders/example");
+  assert.equal(nodes(view.render()).find(node=>node.type==="DraftBoundary").props.dirty,true);
+  set("display_name","New client"); set("odoo_opportunity_url","https://crm.example.com/web#id=91");
+  await nodes(view.render()).find(node=>node.type==="form").props.onSubmit({preventDefault(){}});
+  assert.equal(calls[0][1].odoo_opportunity_url,"https://crm.example.com/web#id=91");
+  assert.equal(calls[0][1].client_folder_url,"https://drive.google.com/drive/folders/example");
+});
