@@ -38,6 +38,7 @@ import type { Roles } from "@/lib/roles";
  */
 
 export type ProjectSection =
+  | "training"
   | "procedure"
   | "matrix"
   | "marketing-bio"
@@ -318,6 +319,7 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "creative",
     label: "Creative",
     items: [
+      { key: "training", label: "Training", icon: "documents", description: "Training sessions, categories and learning materials.", visible: everyone },
       {
         key: "matrix",
         label: "Matrix",

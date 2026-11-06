@@ -195,6 +195,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | Table | Disposition |
 | --- | --- |
 | `project_procedures` | Manual SOP maps, created prospectively. |
+| `project_training` | Project-authored training metadata, uploaded materials and external references; created through the governed Training workflow, never legacy-imported. |
 | `project_matrices` | Project strategy inputs; created prospectively, never legacy imported. |
 | `marketing_assets` | Marketing logos, files and links; created through the governed Marketing upload workflow, never legacy-imported. |
 | `marketing_content` | New marketing content; never legacy-imported. |

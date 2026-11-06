@@ -28,7 +28,7 @@ an unchanged form. Other manual exception statuses are not overwritten by
 unrelated edits. The separate manual status form has been removed; the existing
 API remains compatible and historical exception statuses remain readable.
 
-Migration 0062 repairs active Not started/Preparing records with existing actual
+Migration 0063 repairs active Not started/Preparing records with existing actual
 dates, using the same latest-date/tie order. Deleted records, undated records and
 explicit later/exception states remain untouched. Each correction retains full
 before/after facts in a system-attributed audit event, without fabricating a human
