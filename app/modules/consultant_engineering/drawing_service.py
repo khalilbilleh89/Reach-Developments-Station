@@ -14,6 +14,7 @@ from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.consultant_engineering.drawing_schemas import (
     DrawingFields,
+    DrawingLink,
     DrawingRead,
     DrawingUpdate,
 )
@@ -22,7 +23,7 @@ from app.modules.consultant_engineering.permissions import EDITOR_ROLES, READER_
 from app.modules.projects.models import Project
 from app.modules.projects.permissions import whole_project_ids
 
-MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
 
 
 def scope(
@@ -74,7 +75,7 @@ def validate_document(filename: str, document: bytes) -> str:
     ):
         raise ValidationError("Enter a valid document filename.")
     if not 0 < len(document) <= MAX_DOCUMENT_BYTES:
-        raise ValidationError("Upload a non-empty document up to 10 MB.")
+        raise ValidationError("Upload a non-empty document up to 50 MB.")
     if not filename.lower().endswith(".pdf") or not document.startswith(b"%PDF-"):
         raise ValidationError("Upload a PDF matching its .pdf file type.")
     return filename
@@ -216,3 +217,13 @@ def preview(data: bytes, page: int) -> dict:
         }
     except (subprocess.SubprocessError, ValueError, OSError) as exc:
         raise ValidationError("Could not preview this page. Use a valid, unencrypted PDF.") from exc
+
+
+def create_link(
+    session: Session, project_id: uuid.UUID, actor: ActorContext, fields: DrawingLink
+) -> ProjectDrawing:
+    scope(session, project_id, actor, write=True)
+    row = ProjectDrawing(project_id=project_id, **fields.model_dump())
+    session.add(row)
+    audit(session, row, actor, "create")
+    return row

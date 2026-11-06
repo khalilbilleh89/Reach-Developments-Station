@@ -50,7 +50,7 @@ def render(data: bytes, page_number: int) -> tuple[int, bytes]:
 
 if __name__ == "__main__":
     try:
-        data = sys.stdin.buffer.read(10 * 1024 * 1024 + 1)
+        data = sys.stdin.buffer.read(50 * 1024 * 1024 + 1)
         if sys.argv[1] == "inspect":
             sys.stdout.buffer.write(str(inspect(data)).encode())
         else:

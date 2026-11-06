@@ -1,7 +1,7 @@
 # Drawings
 
 Development → Design → Drawings is a project library independent of consultant
-appointments. Only drawing name and PDF are required. Optional drawing number,
+appointments. A drawing title and either a PDF upload or Google Drive sharing link are required. Optional drawing number,
 category, building/floor/location, revision, status and notes support search and
 filters. Status is a library label, not consultant acceptance or authority approval.
 
@@ -19,7 +19,7 @@ and editors (Project Manager and Design / Engineering). System Administrator is
 read-only unless also assigned an editor role. All routes require whole-project
 scope, applied in SQL. Selected-phase users cannot read files or previews. Uploads
 are authorized before streaming and again under the project lock after reception.
-Each PDF is limited to 10 MB and stored as deferred binary data in PostgreSQL;
+Each PDF is limited to 50 MB and stored as deferred binary data in PostgreSQL;
 register requests never load file bytes. No new dependency or external storage.
 
 PDF bytes are immutable. Add each new revision separately and mark the old record
@@ -44,3 +44,13 @@ Uploads inspect PDF parsing, page presence and first-page geometry before persis
 Migration0060_plan_categories follows0059_marketing_assets and extends only the category constraint. No backfill, permission changes or new dependencies. Downgrade refuses active or retained records in new categories. The same versioned, reasoned removal and audit rules apply in Plans.
 
 PDFium previews use its limited image cache and encode directly from the live bitmap, avoiding redundant full-size image copies. The 4096-pixel review limit and 30-second worker timeout remain. This keeps upload validation independent of large CAD-sheet raster memory; it does not assert a fixed memory bound for arbitrary PDFs.
+
+## Large PDFs and Drive links — 2026-11-05
+
+Upload PDF accepts up to 50 MiB (52,428,800 bytes, labelled 50 MB), enforced in the browser, streaming API, database and isolated PDF worker. Files over the limit are refused without creating a record. The non-raster upload inspection and limited-cache preview behavior remain.
+
+Google Drive link is an alternative source in the same form and register. HTTPS links on drive.google.com and docs.google.com are accepted; credentials, alternate hosts/ports, control characters and other protocols are rejected. The server never fetches the link. Open plan shows its details and an explicit Open plan in Google Drive action in a new tab; Drive controls access, content and sharing. No local PDF snapshot or automatic synchronization is implied. Uploaded PDFs continue to use the in-system viewer.
+
+A plan has exactly one source, protected by a database constraint. Source bytes/URL are immutable; add another plan for a changed source. Metadata edits and reasoned removal retain their existing version, scope and audit rules for both kinds. Removed links remain as history and disappear from the register; this does not delete the external Drive file.
+
+Migration 0063_plan_sources follows 0062_project_training, preserves old uploads and adds a nullable source URL while expanding the size constraint. Downgrade refuses any active or retained link or PDF over 10 MiB. Roll forward after these sources are recorded; do not truncate files or discard links to downgrade.
