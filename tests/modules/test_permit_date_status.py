@@ -64,7 +64,7 @@ def test_legacy_date_reconciliation_migration(
         db.commit()
     db.commit()
     old_history = admin_client.get(f"{url}/{rows[0]['id']}/status-history").json()
-    command.downgrade(config, "0062_project_training")
+    command.downgrade(config, "0063_plan_sources")
     command.upgrade(config, "head")
     command.check(config)
     db.expire_all()
@@ -87,7 +87,7 @@ def test_legacy_date_reconciliation_migration(
     assert audit.after_data["issue_date"] == "2025-02-01"
     assert admin_client.get(f"{url}/{rows[0]['id']}/status-history").json() == old_history
     db.rollback()
-    command.downgrade(config, "0062_project_training")
+    command.downgrade(config, "0063_plan_sources")
     command.upgrade(config, "head")
     assert (
         len(

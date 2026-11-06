@@ -167,3 +167,47 @@ test("standalone Plans gates the library before it mounts and grants only Design
   tree = exports.PlansTab({projectId:"p",roles:new Set(["project_manager"])});
   assert.equal(find(tree,"Drawings")[0].props.canWrite,true);
 });
+
+
+test("Drive source accepts a link without a file and preserves failed drafts", async () => {
+  const h = harness(); let saved;
+  const props = {onSave: async (fields, file, sourceUrl) => { saved = {fields, file, sourceUrl}; throw new Error("Link refused"); }, onClose() {}, onSaved() {}};
+  let tree = h.render("DrawingForm", props);
+  find(tree,"input")[0].props.onChange({target:{value:"Electrical plan"}});
+  find(tree,"ChoiceCards").find(node => node.props.name === "plan-source").props.onChange("drive");
+  tree = h.render("DrawingForm", props);
+  assert.equal(find(tree,"input").some(node => node.props.type === "file"),false);
+  await find(tree,"form")[0].props.onSubmit({preventDefault(){}});
+  tree = h.render("DrawingForm", props);
+  assert.match(find(tree,"Notice")[0].props.children,/Drive/);
+  find(tree,"input").find(node => node.props.type === "url").props.onChange({target:{value:"https://drive.google.com/file/d/test/view"}});
+  tree = h.render("DrawingForm", props);
+  assert.equal(find(tree,"DraftBoundary")[0].props.dirty,true);
+  await find(tree,"form")[0].props.onSubmit({preventDefault(){}});
+  assert.equal(saved.file,null);
+  assert.equal(saved.sourceUrl,"https://drive.google.com/file/d/test/view");
+  tree = h.render("DrawingForm", props);
+  assert.equal(find(tree,"input").find(node => node.props.type === "url").props.value,saved.sourceUrl);
+  assert.equal(find(tree,"Notice")[0].props.children,"Link refused");
+});
+
+test("linked plan opens Drive without requesting a PDF preview", () => {
+  const h = harness();
+  const row = {id:"d",name:"Drive plan",category:"general",status:"reference",filename:null,source_url:"https://drive.google.com/file/d/test/view"};
+  const tree = h.render("LinkedDrawingViewer",{row,onClose(){}});
+  assert.equal(h.enabled(),undefined);
+  assert.equal(find(tree,"ExternalLink")[0].props.href,row.source_url);
+  assert.equal(find(tree,"img").length,0);
+});
+
+test("PDF client allows 50 MB exactly and refuses one byte over without sending", async () => {
+  const source = readFileSync(new URL("../src/lib/api/drawings.ts",import.meta.url),"utf8");
+  const code = ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  const exports = {}; let sent = 0;
+  runInNewContext(`(function(require,exports){${code}\n})`,{URLSearchParams})(() => ({postBinary:async()=>{sent++;}}),exports);
+  await exports.drawings.create("p",{name:"Plan"},{name:"plan.pdf",size:50*1024*1024,arrayBuffer:async()=>new ArrayBuffer(0)});
+  assert.equal(sent,1);
+  await assert.rejects(exports.drawings.create("p",{name:"Plan"},{name:"plan.pdf",size:50*1024*1024+1}),/50 MB/);
+  assert.equal(sent,1);
+  assert.equal(exports.filterDrawings([{name:"Drive",category:"architecture",status:"reference",filename:null,source_url:"https://drive.google.com/file/d/test/view",drawing_number:"",location:"",revision:"",notes:""}],"test","","").length,1);
+});

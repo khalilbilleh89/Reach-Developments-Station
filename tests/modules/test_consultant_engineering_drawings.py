@@ -172,7 +172,7 @@ def test_wrong_project_and_selected_phase_are_hidden(
         ("a.pdf", b"not PDF", 422),
         ("a.txt", b"%PDF-test", 422),
         ("../a.pdf", b"%PDF-test", 422),
-        ("a.pdf", b"%PDF-" + b"x" * (10 * 1024 * 1024), 413),
+        ("a.pdf", b"%PDF-" + b"x" * (50 * 1024 * 1024), 413),
     ],
     ids=["empty", "signature", "extension", "path", "oversized"],
 )
@@ -315,3 +315,200 @@ def test_empty_pdf_does_not_create_plan(manager_member_client: TestClient, proje
     )
     assert response.status_code == 422
     assert manager_member_client.get(root(project_id)).json() == []
+
+
+DRIVE_URL = "https://drive.google.com/file/d/test-plan-id/view?resourcekey=example"
+
+
+def test_drive_plan_lifecycle(
+    manager_member_client: TestClient, project_id: str, db: Session
+) -> None:
+    client = manager_member_client
+    response = client.post(
+        root(project_id) + "/links", json={"name": "Linked plan", "source_url": DRIVE_URL}
+    )
+    assert response.status_code == 201, response.text
+    row = response.json()
+    assert row["source_url"] == DRIVE_URL and row["filename"] is None
+    url = root(project_id) + "/" + row["id"]
+    assert client.get(root(project_id)).json()[0]["source_url"] == DRIVE_URL
+    assert client.get(url + "/document").status_code == 422
+    assert client.get(url + "/preview").status_code == 422
+    changed = client.put(url, json={"name": "Updated link label", "expected_version": 1})
+    assert changed.status_code == 200 and changed.json()["source_url"] == DRIVE_URL
+    assert client.put(url, json={"name": "Stale", "expected_version": 1}).status_code == 409
+    assert (
+        client.post(
+            url + "/delete", json={"reason": "Superseded", "expected_version": 2}
+        ).status_code
+        == 204
+    )
+    assert client.get(root(project_id)).json() == []
+    assert client.get(url + "/preview").status_code == 404
+    assert (
+        client.post(url + "/delete", json={"reason": "Again", "expected_version": 2}).status_code
+        == 404
+    )
+    db.rollback()
+    retained = db.get(ProjectDrawing, uuid.UUID(row["id"]))
+    assert retained.is_deleted and retained.source_url == DRIVE_URL and retained.document is None
+    events = list(db.scalars(select(AuditEvent).where(AuditEvent.entity_id == retained.id)))
+    assert {event.action for event in events} == {"create", "update", "delete"}
+    assert all(event.after_data["source_url"] == DRIVE_URL for event in events)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "javascript:alert(1)",
+        "http://drive.google.com/file/d/x/view",
+        "https://drive.google.com.evil.test/file",
+        "https://drive.google.com@evil.test/file",
+        "https://evil.test/file.pdf",
+        "https://drive.google.com/",
+        "https://drive.google.com/file\n/path",
+    ],
+)
+def test_bad_drive_links(manager_member_client: TestClient, project_id: str, url: str) -> None:
+    response = manager_member_client.post(
+        root(project_id) + "/links", json={"name": "Plan", "source_url": url}
+    )
+    assert response.status_code == 422
+    assert manager_member_client.get(root(project_id)).json() == []
+
+
+def test_drive_links_keep_role_and_project_scope(
+    manager_member_client: TestClient, admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    from app.modules.projects.models import UserProjectAccess
+
+    row = manager_member_client.post(
+        root(project_id) + "/links", json={"name": "Plan", "source_url": DRIVE_URL}
+    ).json()
+    user = make_user(db, email="link-finance@example.com", roles=("finance",))
+    grant_access(admin_client, project_id, user)
+    reader = client_for(user.email)
+    assert reader.get(root(project_id)).json()[0]["id"] == row["id"]
+    assert (
+        reader.post(
+            root(project_id) + "/links", json={"name": "Plan", "source_url": DRIVE_URL}
+        ).status_code
+        == 403
+    )
+    assert (
+        reader.post(
+            root(project_id) + f"/{row['id']}/delete", json={"reason": "No", "expected_version": 1}
+        ).status_code
+        == 403
+    )
+    assert (
+        manager_member_client.post(
+            root(str(uuid.uuid4())) + f"/{row['id']}/delete",
+            json={"reason": "Wrong project", "expected_version": 1},
+        ).status_code
+        == 404
+    )
+    membership = db.scalar(select(UserProjectAccess).where(UserProjectAccess.user_id == user.id))
+    membership.phase_scope = "selected"
+    db.commit()
+    assert reader.get(root(project_id)).status_code == 404
+    assert (
+        reader.post(
+            root(project_id) + "/links", json={"name": "Plan", "source_url": DRIVE_URL}
+        ).status_code
+        == 404
+    )
+
+
+def large_pdf(size: int) -> bytes:
+    # An unreferenced stream makes a valid large PDF without expensive page pixels.
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 400] >>",
+    ]
+
+    def build(padding: int) -> bytes:
+        data = bytearray(b"%PDF-1.7\n")
+        offsets = []
+        for index, obj in enumerate(
+            [
+                *objects,
+                b"<< /Length "
+                + str(padding).encode()
+                + b" >>\nstream\n"
+                + b" " * padding
+                + b"\nendstream",
+            ],
+            1,
+        ):
+            offsets.append(len(data))
+            data.extend(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
+        xref = len(data)
+        data.extend(b"xref\n0 5\n0000000000 65535 f \n")
+        for offset in offsets:
+            data.extend(f"{offset:010d} 00000 n \n".encode())
+        data.extend(f"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+        return bytes(data)
+
+    padding = size - 500
+    for _ in range(3):
+        result = build(padding)
+        padding += size - len(result)
+    assert len(result) == size
+    return result
+
+
+def test_pdf_at_50_mb_uploads_and_previews(
+    manager_member_client: TestClient, project_id: str
+) -> None:
+    data = large_pdf(50 * 1024 * 1024)
+    response = manager_member_client.post(
+        root(project_id), params={"name": "Large plan", "filename": "large.pdf"}, content=data
+    )
+    assert response.status_code == 201, response.text
+    url = root(project_id) + "/" + response.json()["id"]
+    assert manager_member_client.get(url + "/document").content == data
+    assert manager_member_client.get(url + "/preview").status_code == 200
+    too_large = manager_member_client.post(
+        root(project_id),
+        params={"name": "Over limit", "filename": "large.pdf"},
+        content=data + b" ",
+    )
+    assert too_large.status_code == 413
+    assert len(manager_member_client.get(root(project_id)).json()) == 1
+
+
+@pytest.mark.parametrize("kind", ["link", "large_pdf"])
+def test_plan_sources_migration_retains_history(
+    manager_member_client: TestClient, project_id: str, db: Session, kind: str
+) -> None:
+    db.rollback()
+    config = _alembic_config()
+    command.downgrade(config, "0062_project_training")
+    command.upgrade(config, "head")
+    command.check(config)
+    if kind == "link":
+        response = manager_member_client.post(
+            root(project_id) + "/links", json={"name": "Plan", "source_url": DRIVE_URL}
+        )
+    else:
+        response = manager_member_client.post(
+            root(project_id),
+            params={"name": "Large", "filename": "large.pdf"},
+            content=large_pdf(11 * 1024 * 1024),
+        )
+    assert response.status_code == 201, response.text
+    row = response.json()
+    assert (
+        manager_member_client.post(
+            root(project_id) + f"/{row['id']}/delete",
+            json={"reason": "Retain history", "expected_version": 1},
+        ).status_code
+        == 204
+    )
+    db.rollback()
+    with pytest.raises(RuntimeError, match="Large PDFs or Drive links exist"):
+        command.downgrade(config, "0062_project_training")
+    db.rollback()
+    assert db.get(ProjectDrawing, uuid.UUID(row["id"])).is_deleted

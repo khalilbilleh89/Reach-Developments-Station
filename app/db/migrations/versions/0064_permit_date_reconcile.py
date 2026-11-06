@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0063_permit_date_reconcile"
-down_revision = "0062_project_training"
+revision = "0064_permit_date_reconcile"
+down_revision = "0063_plan_sources"
 branch_labels = None
 depends_on = None
 
@@ -44,7 +44,7 @@ def upgrade() -> None:
         )
         SELECT gen_random_uuid(), 'permit.dates_reconciled', 'permit', id, NULL,
             'migration', gen_random_uuid(),
-            '0063: reconcile existing actual dates; no new authority decision',
+            '0064: reconcile existing actual dates; no new authority decision',
             old_data, new_data
         FROM corrected
     """)
