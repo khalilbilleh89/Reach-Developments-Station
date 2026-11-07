@@ -14,7 +14,7 @@ import {
 } from "./navigation";
 import type { NavGroup } from "./navigation";
 import type { ShellArea } from "./AppShell";
-import { hasAnyRole, PORTFOLIO_READERS, roleSet } from "@/lib/roles";
+import { hasAnyRole, LEASING_READERS, PORTFOLIO_READERS, roleSet } from "@/lib/roles";
 
 interface SidebarProps {
   user: CurrentUser;
@@ -112,6 +112,8 @@ export function SidebarContent({
             </ul>
           </nav>
         ) : null}
+
+        {hasAnyRole(roleSet(user.roles), LEASING_READERS) ? <nav className="nav-group" aria-label="Owner services"><ul className="nav-list"><li><Link href="/leasing/" className="nav-item" data-label="Leasing" aria-current={area === "leasing" ? "page" : undefined} onClick={onClose}><Icon name="leasing" className="nav-icon" /><span className="nav-label">Leasing</span></Link></li></ul></nav> : null}
 
         {groups.map((group) => (
           <nav

@@ -45,6 +45,7 @@ from app.modules.consultant_engineering.api import router as consultant_router
 from app.modules.consultant_engineering.drawing_api import router as drawing_router
 from app.modules.inventory.api import router as inventory_router
 from app.modules.inventory.masterplan_api import router as masterplan_router
+from app.modules.leasing.api import router as leasing_router
 from app.modules.management_reporting.api import router as management_reporting_router
 from app.modules.marketing.api import router as marketing_router
 from app.modules.payment_plans.api import router as payment_plans_router
@@ -275,6 +276,7 @@ def create_app() -> FastAPI:
         team_router,
         matrix_router,
         training_router,
+        leasing_router,
         procedure_router,
         escalation_router,
         agreement_router,

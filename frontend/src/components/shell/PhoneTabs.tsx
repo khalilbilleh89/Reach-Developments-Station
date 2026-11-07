@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Icon } from "@/components/ui";
 import type { IconName } from "@/components/ui";
 import type { CurrentUser } from "@/lib/api";
-import { hasAnyRole, PORTFOLIO_READERS, roleSet } from "@/lib/roles";
+import { hasAnyRole, LEASING_READERS, PORTFOLIO_READERS, roleSet } from "@/lib/roles";
 
 import { PROJECT_NAVIGATION, projectHref, settingsHref, visibleNavigation } from "./navigation";
 import type { ProjectSection } from "./navigation";
@@ -38,6 +38,7 @@ export function PhoneTabs({ user, area, projectId, section, onMore }: {
   } else {
     if (hasAnyRole(roles, PORTFOLIO_READERS)) tabs.push({ key: "portfolio", label: "Portfolio", icon: "overview", href: "/portfolio/", current: area === "portfolio" });
     tabs.push({ key: "projects", label: "Projects", icon: "projects", href: "/projects/", current: area === "projects" });
+    if (hasAnyRole(roles, LEASING_READERS)) tabs.push({ key: "leasing", label: "Leasing", icon: "leasing", href: "/leasing/", current: area === "leasing" });
     tabs.push({ key: "settings", label: "Settings", icon: "settings", href: settingsHref(), current: area === "settings" });
   }
   return (

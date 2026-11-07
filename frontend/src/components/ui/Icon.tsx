@@ -38,6 +38,7 @@ const PATHS = {
   bed: "M2 13V5M2 10h12v3M2 7h4v3M6 6h6a2 2 0 0 1 2 2v2",
   bath: "M2 8h12M3 8v2a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V8M4 13v1M12 13v1M3 8V3a1.5 1.5 0 0 1 3 0v1",
   parking: "M3 2h10v12H3ZM6.5 11V5h2a2 2 0 0 1 0 4h-2",
+  leasing: "M9.5 9a3.5 3.5 0 1 0-3-6.3A3.5 3.5 0 0 0 9.5 9ZM7 8 2 13v1h2v-2h2v-2l1-1M10.5 5h.01",
   // Places
   projects: "M2.5 5.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1Z",
   overview: "M2.5 2.5h4.5v4.5H2.5ZM9 2.5h4.5V6H9ZM9 8h4.5v5.5H9ZM2.5 9.5H7v4H2.5Z",

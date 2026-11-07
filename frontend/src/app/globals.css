@@ -7481,6 +7481,18 @@ small { font-size: var(--text-xs); }
 .procedure-detail dd { margin: 4px 0 16px; }
 @media (max-width: 48rem) { .procedure-detail-grid { grid-template-columns: minmax(0,1fr); } .procedure-intro, .procedure-step-editor { padding: 16px; } }
 
+/* Leasing owner-service register. */
+.leasing-intro { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-5); padding: var(--space-6); background: var(--surface-stage); border-inline-start: 3px solid var(--brand-gold); border-radius: var(--radius-card); }
+.leasing-intro h2 { margin: 0 0 var(--space-2); }
+.leasing-intro p { margin: 0; color: var(--text-secondary); }
+.leasing-journey { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-secondary); font-weight: 600; }
+.leasing-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.leasing-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-5); margin: var(--space-4) 0; }
+.leasing-facts dt { color: var(--text-muted); font-size: var(--text-sm); margin-bottom: var(--space-1); }
+.leasing-facts dd { margin: 0; overflow-wrap: anywhere; }
+.leasing-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.leasing-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* Reports: shared brand palette; chart geometry comes from the reporting API. */
 .analytics-workspace { --report-color-0: var(--brand-gold-strong); --report-color-1: var(--info); --report-color-2: var(--success); --report-color-3: var(--text-secondary); --report-color-4: var(--warning-mark); --report-color-5: var(--danger); }
 .analytics-screen { display: grid; gap: 1.5rem; min-width: 0; }
