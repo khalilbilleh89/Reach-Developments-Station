@@ -52,6 +52,7 @@ export function EditForm({
   closeOnSave = true,
   children,
   additionalDirty = false,
+  saveUnchanged = false,
 }: {
   fields: EditField[];
   initial: EditValues;
@@ -62,6 +63,8 @@ export function EditForm({
   closeOnSave?: boolean;
   children?: ReactNode;
   additionalDirty?: boolean;
+  /** Send an explicit Save even without edits, e.g. to reconcile legacy facts. */
+  saveUnchanged?: boolean;
 }) {
   const [values, setValues] = useState<EditValues>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +90,7 @@ export function EditForm({
         // reads as an explicit null rather than as an omission.
         changes[field.name] = next === "" ? null : next;
       }
-      if (Object.keys(changes).length > 0 || additionalDirty) await onSave(changes);
+      if (Object.keys(changes).length > 0 || additionalDirty || saveUnchanged) await onSave(changes);
       if (closeOnSave) onCancel();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not save the changes.");
