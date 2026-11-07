@@ -9,7 +9,7 @@ import type { CurrentUser } from "@/lib/api";
 import { workspace } from "@/lib/api/workspace";
 import type { SearchResult } from "@/lib/api/workspace";
 import type { IconName } from "@/components/ui";
-import { hasAnyRole, PORTFOLIO_READERS, roleSet } from "@/lib/roles";
+import { hasAnyRole, LEASING_READERS, PORTFOLIO_READERS, roleSet } from "@/lib/roles";
 
 import { PROJECT_NAVIGATION, SETTINGS_NAVIGATION, projectHref, settingsHref, visibleNavigation } from "./navigation";
 import { recordHref } from "./recordRoutes";
@@ -93,6 +93,7 @@ export function CommandPalette({ user, projectId, onClose, onSignOut }: {
       { key: "switch", group: "Actions", label: "Switch project", icon: "swap", run: () => go("/projects/") },
       { key: "signout", group: "Actions", label: "Sign out", icon: "sign-out", run: () => { onClose(); onSignOut(); } },
     ];
+    if (hasAnyRole(roles, LEASING_READERS)) screens.push({ key: "leasing", group: "Screens", label: "Leasing", icon: "leasing", run: () => go("/leasing/") });
     const lower = needle.toLowerCase();
     const local = [...screens, ...actions].filter((entry) => !lower || `${entry.label} ${entry.meta ?? ""}`.toLowerCase().includes(lower));
     const records: Entry[] = [];

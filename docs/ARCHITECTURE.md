@@ -1409,3 +1409,10 @@ It calls Cashflow's public services for cash changes and reads its movement mode
 for attribution. Cashflow owns amounts, VAT and cash state; it does not import
 Design. A named database constraint protects linked cash edits from other entry
 points. See [Design payments](DESIGN_PAYMENTS.md).
+
+## Leasing owner services
+
+Leasing is a separate global workspace beneath Projects, with project-owned
+instructions linked to Inventory units and Sales clients through narrow read
+contracts. It never changes development statuses or financial ledgers. See
+[LEASING.md](LEASING.md) for lifecycle, denomination, scope and retention.
