@@ -984,6 +984,8 @@ export interface SalesClient {
   is_active: boolean;
   created_at: string;
   /** Present only for the roles whose work needs it. */
+  client_folder_url?: string | null;
+  odoo_opportunity_url?: string | null;
   email?: string | null;
   phone?: string | null;
   address?: string | null;

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -251,4 +252,8 @@ def test_leasing_migration_retention(
     db.rollback()
     with pytest.raises(RuntimeError, match="history must be retained"):
         command.downgrade(config, "0064_permit_date_reconcile")
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0065_leasing"
+    # A refused downgrade leaves the database where it was: at the script head,
+    # whichever later revision that is.
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == (
+        ScriptDirectory.from_config(config).get_current_head()
+    )

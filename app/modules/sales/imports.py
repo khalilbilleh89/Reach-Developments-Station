@@ -27,7 +27,15 @@ from app.modules.sales.schemas import ClientCreateRequest, SalesAgentCreateReque
 Kind = Literal["buyers", "agents"]
 MAX_ROWS = 1000
 COLUMNS = {
-    "buyers": ("display_name", "email", "phone", "sole_purchaser", "agent_id"),
+    "buyers": (
+        "display_name",
+        "email",
+        "phone",
+        "sole_purchaser",
+        "agent_id",
+        "client_folder_url",
+        "odoo_opportunity_url",
+    ),
     "agents": ("display_name", "country", "branch", "branch_leader"),
 }
 
@@ -147,7 +155,12 @@ def rows(body: bytes, kind: Kind, project_id: str) -> list[tuple[int, dict[str, 
             headers = [str(cell.value or "").strip() for cell in next(iterator, ())]
             while headers and not headers[-1]:
                 headers.pop()
-            if sorted(headers) != sorted(COLUMNS[kind]):
+            expected = set(COLUMNS[kind])
+            optional = {"client_folder_url", "odoo_opportunity_url"} if kind == "buyers" else set()
+            if (
+                len(headers) != len(set(headers))
+                or not expected - optional <= set(headers) <= expected
+            ):
                 raise ValidationError(
                     "The column headers do not match the template. Keep each header exactly once."
                 )

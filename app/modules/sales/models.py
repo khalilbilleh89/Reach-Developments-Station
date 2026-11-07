@@ -449,6 +449,8 @@ class Client(Base):
     agent_branch_leader: Mapped[str | None] = mapped_column(String(200), nullable=True)
     agent_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
+    client_folder_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    odoo_opportunity_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)

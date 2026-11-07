@@ -35,6 +35,7 @@ import {
   Segmented,
   useSort,
 } from "@/components/ui";
+import { ClientLinkButtons, clientLinkFields } from "./ClientLinks";
 import { BuyerForm } from "@/components/projects/sales/BuyerForm";
 import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 import { BulkRemovalBar } from "./BulkRemoval";
@@ -153,6 +154,7 @@ export function ClientsPanel({
     { name: "display_name", label: "Buyer name" },
     { name: "email", label: "Email" }, { name: "phone", label: "Phone" },
     { name: "address", label: "Address" },
+    ...clientLinkFields,
     { name: "preferred_language_code", label: "Language code" },
     { name: "kyc_status", label: "Identity checks (KYC) status", kind: "select", options: ["not_started", "in_progress", "cleared", "rejected"].map(value => ({ value, label: value.replaceAll("_", " ") })) },
     { name: "is_active", label: "Active buyer", kind: "checkbox" },
@@ -271,7 +273,7 @@ export function ClientsPanel({
         }}
         next={buyerNext(editing, canWrite ? onConnect : undefined)}
         more={canAdmin ? <DeleteRecordButton label="buyer" recordName={editing.display_name} description="This removes a buyer with no transaction history. A buyer with contracts or payments cannot be deleted; deactivate them instead. The audit trail is retained." onDelete={reason => sales.deleteClient(projectId, editing.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : undefined}
-      ><EditForm
+      ><ClientLinkButtons client={editing}/><EditForm
         key={editing.id} fields={clientFields}
         initial={Object.fromEntries(clientFields.map(field => [field.name, asValue(editing[field.name as keyof SalesClient] as never)]))}
         onCancel={() => setEditing(null)} onSave={async changes => {
@@ -367,7 +369,7 @@ export function ClientsPanel({
                     {canWrite ? <Button data-leaves-editor onClick={() => setEditing(client)}>Edit buyer</Button> : null}
                   {canAdmin ? <DeleteRecordButton label="buyer" recordName={client.display_name} description="This removes a buyer with no transaction history. A buyer with contracts or payments cannot be deleted; deactivate them instead. The audit trail is retained." onDelete={reason => sales.deleteClient(projectId, client.id, reason)} onDeleted={async () => { setSelected(null); setEditing(null); await load(); await onChanged(); }} /> : null}
                   </RowMenu> : null}
-                </div></td>
+                <ClientLinkButtons client={client}/></div></td>
               </tr>
             ))}
           </tbody>
