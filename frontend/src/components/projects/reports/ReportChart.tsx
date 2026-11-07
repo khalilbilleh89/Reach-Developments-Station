@@ -4,6 +4,7 @@ import { useId } from "react";
 import type { CSSProperties } from "react";
 import type { ReportChart as Chart, ReportPoint } from "@/lib/api/analytics-report";
 import { money, decimalText } from "@/lib/format";
+import { Disclosure } from "@/components/ui";
 
 export function reportValue(value: string | null, unit: string): string {
   if (value === null) return "Unavailable";
@@ -54,13 +55,13 @@ export function ReportChart({ chart, print = false }: { chart: Chart; print?: bo
     {!chart.points.length ? <div className="report-empty">No matching records</div> : !hasValue ? <div className="report-empty">Source data unavailable</div> : chart.kind === "columns" ? <Columns chart={chart} /> : <div className={chart.kind === "donut" ? "report-composition" : "report-bars"}>
       {chart.kind === "donut" ? <Donut points={chart.points} title={chart.title} /> : null}
       <ul className="report-legend">{chart.points.map((point, index) => <li key={index}>
-        <div><span><i style={{ background: color(index) }} />{label(point.label)}</span><strong>{reportValue(point.value, chart.unit)}</strong></div>
+        <div><span><i style={{ "--swatch": color(index) } as CSSProperties} />{label(point.label)}</span><strong>{reportValue(point.value, chart.unit)}</strong></div>
         {chart.kind === "bars" ? <span className="report-track"><span className={point.value?.startsWith("-") ? "report-negative" : ""} style={{ width: `${point.scale_percentage}%`, "--bar-color": color(index) } as CSSProperties} /></span> : null}
       </li>)}</ul>
     </div>}
     <p className="report-insight">{chart.insight}</p>
     {chart.note ? <p className="report-note">{chart.note}</p> : null}
-    {chart.kind === "columns" && chart.points.length ? print ? <div className="report-print-values">{chart.points.map((point, index) => <span key={index}>{point.label}: <b>{reportValue(point.value, chart.unit)}</b></span>)}</div> : <details className="report-data"><summary>Exact chart values</summary><dl>{chart.points.map((point, index) => <div key={index}><dt>{point.label}</dt><dd>{reportValue(point.value, chart.unit)}</dd></div>)}</dl></details> : null}
+    {chart.kind === "columns" && chart.points.length ? print ? <div className="report-print-values">{chart.points.map((point, index) => <span key={index}>{point.label}: <b>{reportValue(point.value, chart.unit)}</b></span>)}</div> : <div className="report-data"><Disclosure title="Exact chart values"><dl>{chart.points.map((point, index) => <div key={index}><dt>{point.label}</dt><dd>{reportValue(point.value, chart.unit)}</dd></div>)}</dl></Disclosure></div> : null}
     <footer>{chart.source}</footer>
   </article>;
 }

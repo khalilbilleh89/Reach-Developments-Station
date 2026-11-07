@@ -14,7 +14,8 @@ function load(path, dependencies = {}) {
   return exports;
 }
 const format = load("lib/format.ts");
-const { ReportChart, reportValue } = load("components/projects/reports/ReportChart.tsx", { "@/lib/format": format });
+const ui = load("components/ui/Disclosure.tsx", { "./Icon": { Icon: () => null } });
+const { ReportChart, reportValue } = load("components/projects/reports/ReportChart.tsx", { "@/lib/format": format, "@/components/ui": ui });
 const chart = { key:"cost",title:"Cost control",category:"Cash & cost",kind:"bars",unit:"EUR",points:[{label:"Budget",value:null,scale_percentage:"0",share_percentage:null},{label:"Outflow",value:"-123456789.01",scale_percentage:"100",share_percentage:null}],insight:"Separate measures.",source:"Construction register",note:"No budget recorded." };
 test("report preserves exact money, negative values and unavailable inputs",()=>{
  assert.equal(reportValue("123456789012.99","EUR"),"EUR 123,456,789,012.99");
@@ -25,6 +26,11 @@ test("report preserves exact money, negative values and unavailable inputs",()=>
 test("print chart includes every monthly amount without a collapsed disclosure",()=>{
  const html=renderToStaticMarkup(React.createElement(ReportChart,{chart:{...chart,kind:"columns"},print:true}));
  assert.ok(html.includes("report-print-values")); assert.ok(!html.includes("<details"));
+ assert.ok(html.includes("EUR -123,456,789.01"));
+});
+test("on screen, exact column values sit behind the shared disclosure",()=>{
+ const html=renderToStaticMarkup(React.createElement(ReportChart,{chart:{...chart,kind:"columns"}}));
+ assert.ok(html.includes('class="disclosure"')); assert.ok(html.includes("Exact chart values"));
  assert.ok(html.includes("EUR -123,456,789.01"));
 });
 test("empty report chart does not invent data",()=>{
