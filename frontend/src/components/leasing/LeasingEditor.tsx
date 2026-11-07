@@ -24,11 +24,11 @@ function UnitPicker({ projects, initialProject, onClose, onSelect }: {
   const [unit, setUnit] = useState("");
   const units = useAnswer(!!project, () => leasing.units(project, search, offset), [project, search, offset]);
   const source = useAnswer(!!project && !!unit, () => leasing.source(project, unit), [project, unit]);
-  return <RecordPage title="Choose a unit" eyebrow="New leasing instruction Â· 1 of 2" onClose={onClose}><div className="stack">
+  return <RecordPage title="Choose a unit" eyebrow="New leasing instruction · 1 of 2" onClose={onClose}><div className="stack">
     <Card><Field label="Project"><select className="input" required value={project} onChange={e => { setProject(e.target.value); setUnit(""); setOffset(0); setSearch(""); }}><option value="">Select a project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       {project ? <Field label="Search unit reference"><input className="input" type="search" value={search} onChange={e => { setSearch(e.target.value); setOffset(0); }} /></Field> : null}
       <AnswerState answer={units} />
-      {units.status === "ready" ? <>{units.data.items.length ? <Field label="Unit"><select className="input" value={unit} onChange={e => setUnit(e.target.value)}><option value="">Select a unit</option>{unit && !units.data.items.some(u => u.id === unit) ? <option value={unit}>{source.status === "ready" ? source.data.unit.unit_reference : "Selected unit"}</option> : null}{units.data.items.map(u => <option key={u.id} value={u.id}>{u.unit_reference} Â· {u.building ?? "â€”"} Â· {u.floor ?? "â€”"}</option>)}</select></Field> : <EmptyState title="No matching units" hint="Check the search or add the unit in the project's Inventory." />}<RegisterPagination offset={offset} total={units.data.total} pageSize={50} onChange={setOffset} /></> : null}
+      {units.status === "ready" ? <>{units.data.items.length ? <Field label="Unit"><select className="input" value={unit} onChange={e => setUnit(e.target.value)}><option value="">Select a unit</option>{unit && !units.data.items.some(u => u.id === unit) ? <option value={unit}>{source.status === "ready" ? source.data.unit.unit_reference : "Selected unit"}</option> : null}{units.data.items.map(u => <option key={u.id} value={u.id}>{u.unit_reference} · {u.building ?? "—"} · {u.floor ?? "—"}</option>)}</select></Field> : <EmptyState title="No matching units" hint="Check the search or add the unit in the project's Inventory." />}<RegisterPagination offset={offset} total={units.data.total} pageSize={50} onChange={setOffset} /></> : null}
     </Card>
     <AnswerState answer={source} />
     {source.status === "ready" ? <><SourceProfile source={source.data} /><Button onClick={() => onSelect(project, source.data)}>Continue with {source.data.unit.unit_reference}</Button></> : null}
@@ -52,14 +52,14 @@ export function TermsEditor({ project, source, row, onClose, onSaved }: {
 }) {
   const [values, setValues] = useState(() => initialTerms(source, row));
   const [ownerSearch, setOwnerSearch] = useState("");
+  const [selectedOwner, setSelectedOwner] = useState(row ? row.owner : source.sale_client);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const owners = useAnswer(true, () => leasing.clients(project, ownerSearch), [project, ownerSearch]);
   const set = <K extends keyof LeasingTerms>(key: K, value: LeasingTerms[K]) => setValues({ ...values, [key]: value });
   const code = row?.currency_code ?? source.currency_code;
-  const selectedOwner = row?.owner?.id === values.owner_client_id ? row.owner : source.sale_client?.id === values.owner_client_id ? source.sale_client : null;
-  return <RecordPage title={row ? `Edit ${source.unit.unit_reference}` : `Lease ${source.unit.unit_reference}`} eyebrow={row ? "Leasing instruction" : "New leasing instruction Â· 2 of 2"} subtitle={source.project_name} onClose={onClose}>
+  return <RecordPage title={row ? `Edit ${source.unit.unit_reference}` : `Lease ${source.unit.unit_reference}`} eyebrow={row ? "Leasing instruction" : "New leasing instruction · 2 of 2"} subtitle={source.project_name} onClose={onClose}>
     <DraftBoundary dirty={JSON.stringify(values) !== JSON.stringify(initialTerms(source, row)) || !!reason} busy={busy}><form className="stack" onSubmit={async e => {
       e.preventDefault(); if (busy) return; setBusy(true); setError(null);
       try { if (row) await leasing.update(row, values, reason); else await leasing.create(project, source.unit.id, values); onSaved(); }
@@ -71,7 +71,7 @@ export function TermsEditor({ project, source, row, onClose, onSaved }: {
         <SourceProfile source={source} />
         <FormSection title="Owner instruction" description="Confirm who is asking us to let the unit. The active sale's buyer is preselected where available.">
           <FieldRow><Field label="Find project client" optional hint="Search by client name or number; up to 50 matches."><input className="input" type="search" value={ownerSearch} onChange={e => setOwnerSearch(e.target.value)} /></Field>
-            <Field label="Instructing owner" optional><select className="input" value={values.owner_client_id ?? ""} onChange={e => set("owner_client_id", e.target.value || null)}><option value="">Not yet linked</option>{selectedOwner && (owners.status !== "ready" || !owners.data.some(c => c.id === selectedOwner.id)) ? <option value={selectedOwner.id}>{selectedOwner.display_name}</option> : null}{owners.status === "ready" ? owners.data.map(c => <option value={c.id} key={c.id}>{c.display_name} Â· {c.client_number}</option>) : null}</select></Field></FieldRow>
+            <Field label="Instructing owner" optional><select className="input" value={values.owner_client_id ?? ""} onChange={e => { set("owner_client_id", e.target.value || null); setSelectedOwner(owners.status === "ready" ? owners.data.find(c => c.id === e.target.value) ?? null : null); }}><option value="">Not yet linked</option>{selectedOwner && (owners.status !== "ready" || !owners.data.some(c => c.id === selectedOwner.id)) ? <option value={selectedOwner.id}>{selectedOwner.display_name}</option> : null}{owners.status === "ready" ? owners.data.map(c => <option value={c.id} key={c.id}>{c.display_name} · {c.client_number}</option>) : null}</select></Field></FieldRow>
           <AnswerState answer={owners} />
           <p className="muted">Missing client? Add the owner in the project’s Buyers register, then return here. Save as Instruction while details are pending.</p>
           <FieldRow><Field label="Instruction date" optional><input className="input" type="date" value={values.mandate_date ?? ""} onChange={e => set("mandate_date", e.target.value || null)} /></Field><Field label="Instruction / mandate reference" optional><input className="input" maxLength={200} value={values.mandate_reference} onChange={e => set("mandate_reference", e.target.value)} /></Field></FieldRow>
@@ -93,7 +93,7 @@ export function TermsEditor({ project, source, row, onClose, onSaved }: {
         </FormSection>
         {row ? <Field label="Reason for change"><input required className="input" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} /></Field> : null}
       </fieldset>
-      <FormActions><Button type="submit" disabled={busy}>{busy ? "Savingâ€¦" : "Save instruction"}</Button><Button variant="default" data-leaves-editor disabled={busy} onClick={onClose}>Cancel</Button></FormActions>
+      <FormActions><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save instruction"}</Button><Button variant="default" data-leaves-editor disabled={busy} onClick={onClose}>Cancel</Button></FormActions>
     </form></DraftBoundary>
   </RecordPage>;
 }

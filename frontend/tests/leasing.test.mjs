@@ -63,3 +63,17 @@ test("register read failure remains an explicit retryable error",()=>{
   find(tree,"Button")[0].props.onClick();assert.equal(retried,true);
   assert.equal(find(tree,"EmptyState").length,0);
 });
+
+test("a chosen owner stays selected when a later client search excludes them",()=>{
+  const chosen={...owner,id:"other-owner",display_name:"Chosen owner"};
+  let matches=[owner,chosen];
+  const h=harness("LeasingEditor",{"@/lib/answer":{useAnswer:()=>({status:"ready",data:matches,retry(){}})}});
+  const props={project:"project-id",source,onClose(){},onSaved(){}};
+  let tree=h.render("TermsEditor",props);
+  find(tree,"select")[0].props.onChange({target:{value:chosen.id}});
+  matches=[];
+  tree=h.render("TermsEditor",props);
+  const select=find(tree,"select")[0];
+  assert.equal(select.props.value,chosen.id);
+  assert.equal(find(select,"option").find(option=>option.props.value===chosen.id).props.children,chosen.display_name);
+});

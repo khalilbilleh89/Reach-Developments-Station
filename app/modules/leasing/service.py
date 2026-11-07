@@ -116,7 +116,7 @@ def attention(row: LeasingInstruction, as_at: date) -> list[str]:
         items.append("Follow-up due")
     if row.status == "leased" and row.lease_end:
         if row.lease_end < as_at:
-            items.append("Lease ended â€” review")
+            items.append("Lease ended — review")
         elif row.lease_end <= as_at + timedelta(days=60):
             items.append("Expires within 60 days")
     return items
