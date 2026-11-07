@@ -10,14 +10,14 @@ permissions:
 
 jobs:
   full:
-    name: Full Backend Shadow ${{ matrix.shard }}/8
+    name: Full Backend Shadow ${{ matrix.shard }}/10
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'ci:full'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     services:
       postgres:
         image: postgres:16
@@ -58,7 +58,7 @@ jobs:
       - name: Apply migrations
         run: alembic upgrade head
       - name: Assign complete suite
-        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 8 --out selected-tests.txt
+        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 10 --out selected-tests.txt
       - name: Run complete assigned shard
         shell: bash
         run: |

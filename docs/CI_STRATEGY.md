@@ -55,7 +55,7 @@ changes scheduling only; it neither removes selected tests nor broadens to Full.
 Foundational behavior changed: `app/core`, authentication/access core, shared
 database base/session infrastructure, Alembic environment semantics, dependency
 files, pytest configuration, or the shared test harness. Required Backend runs
-static/migration checks and the complete backend suite across eight shards.
+static/migration checks and the complete backend suite across ten shards.
 
 Routine router registration in `app/main.py`, an ordinary domain migration, and
 CI tooling changes are not System risk.

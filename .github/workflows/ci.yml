@@ -182,10 +182,10 @@ jobs:
       - name: Test CI and repository invariants
         run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py tests/test_test_isolation.py tests/test_deletion_contracts.py tests/test_pr_quality.py
       - name: Validate complete system-risk assignment
-        run: python scripts/ci_backend_shards.py --count 8
+        run: python scripts/ci_backend_shards.py --count 10
 
   backend_system_full:
-    name: Backend system Full ${{ matrix.shard }}/8
+    name: Backend system Full ${{ matrix.shard }}/10
     runs-on: ubuntu-latest
     needs: [scope, backend_system_static]
     if: needs.scope.outputs.full_required == 'true' && needs.backend_system_static.result == 'success'
@@ -193,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     services:
       postgres:
         image: postgres:16
@@ -234,7 +234,7 @@ jobs:
       - name: Apply migrations to this shard's database
         run: alembic upgrade head
       - name: Assign every test file exactly once
-        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 8 --out selected-tests.txt
+        run: python scripts/ci_backend_shards.py --shard ${{ matrix.shard }} --count 10 --out selected-tests.txt
       - name: Test every assigned file
         run: pytest -q $(tr '\n' ' ' < selected-tests.txt) --durations=20
 
