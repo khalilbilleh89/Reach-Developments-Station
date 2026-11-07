@@ -65,8 +65,8 @@ def test_issued_retains_its_label_and_completion_is_a_distinct_status() -> None:
     permits = (ROOT / "frontend/src/components/projects/PermitsTab.tsx").read_text(encoding="utf-8")
     assert 'issued: "Obtained / Issued"' in permits
     assert 'completed: "Completed"' in permits
-    assert 'issued: ["completed", "expired", "renewed"]' in permits
-    assert "completed: []" in permits
+    assert "projects.transitionPermit(" not in permits
+    assert 'name: "issue_date"' in permits
 
 
 def test_new_project_keeps_normalized_contextual_configuration() -> None:

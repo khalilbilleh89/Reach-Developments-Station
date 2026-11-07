@@ -71,24 +71,42 @@ test("Sales guide separates confirmed specification and buyer value without empt
   assert.ok(nodes(render()).some(n => n.type === "EmptyState" && n.props.title === "No matching specifications"));
 });
 
-test("Issued permits offer Completed and submit without a mandatory reason", async () => {
-  const calls = [];
-  const permit = { id: "permit", permit_code: "TEST", status: "issued", prerequisite_satisfied: true };
+test("Permit dates are the only workflow and unchanged Save reconciles legacy status", async () => {
+  const calls = []; let updated;
+  const permit = { id: "permit", permit_code: "TEST", status: "preparing", issue_date: "2025-01-10", prerequisite_satisfied: true };
   const render = mount("projects/PermitsTab", "PermitFile", {
-    "@/lib/api": { projects: { permitHistory: async () => [], transitionPermit: async (...args) => { calls.push(args); return { ...permit, status: "completed" }; } } },
-    "@/lib/format": { todayISO: () => "2026-09-12", businessDate: value => value },
+    "@/lib/api": { projects: { permitHistory: async () => [], updatePermit: async (...args) => { calls.push(args); return { ...permit, status: "completed" }; } } },
+    "@/lib/format": { businessDate: value => value },
+    "@/components/projects/EditForm": { EditForm: "EditForm", asValue: value => value ?? "" },
   }, { projectId: "project", permit, types: [], permits: [], canWrite: true, canDelete: false,
-    typeLabel: value => value, onClose() {}, onNotice() {}, onChanged: async () => {} });
+    typeLabel: value => value, onClose() {}, onNotice() {}, onChanged: async value => { updated = value; } });
   render(); await settle();
-  const choice = nodes(render()).find(n => n.type === "Field" && n.props.label === "Move to").props.children;
-  assert.ok(nodes(choice).some(n => n.type === "option" && n.props.value === "completed" && n.props.children === "Completed"));
-  choice.props.onChange({ target: { value: "completed" } });
-  const reason = nodes(render()).find(n => n.type === "Field" && n.props.label === "Reason");
-  assert.equal(reason.props.optional, true);
-  assert.ok(!reason.props.children.props.required);
-  await nodes(render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
-  assert.equal(calls[0][2].to_status, "completed");
-  assert.ok(!("reason" in calls[0][2]));
+  assert.ok(!JSON.stringify(render()).includes("Other status changes"));
+  const header = nodes(render()).find(n => n.type === "PageHeader");
+  nodes(header.props.actions).find(n => n.type === "Button" && n.props.children === "Edit permit").props.onClick();
+  const form = nodes(render()).find(n => n.type === "EditForm");
+  assert.equal(form.props.saveUnchanged, true);
+  assert.equal(form.props.additionalDirty, undefined);
+  assert.ok(!form.props.fields.some(field => field.name === "status"));
+  await form.props.onSave({});
+  assert.equal(calls.length, 1);
+  assert.equal(updated.status, "completed");
+});
+
+test("Explicit unchanged Save does not falsely mark a form dirty", async () => {
+  for (const saveUnchanged of [false, true]) {
+    let calls = 0, closed = 0;
+    const render = mount("projects/EditForm", "EditForm", {
+      "@/components/ui/UnsavedChangesGuard": { UnsavedChangesGuard: "UnsavedChangesGuard" },
+    }, { fields: [{ name: "issue_date", kind: "date", label: "Issued" }],
+      initial: { issue_date: "2025-01-10" }, saveUnchanged,
+      onSave: async () => { calls++; }, onCancel: () => { closed++; } });
+    const tree = render();
+    assert.equal(nodes(tree).find(n => n.type === "UnsavedChangesGuard").props.dirty, false);
+    await nodes(tree).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+    assert.equal(calls, saveUnchanged ? 1 : 0);
+    assert.equal(closed, 1);
+  }
 });
 
 test("Permit deletion waits for confirmation and keeps server refusal visible", async () => {
