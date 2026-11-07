@@ -54,7 +54,7 @@ before/after audit. Delete appears on the full-page instruction and removes
 it from registers while retaining its data and references. It works for drafts.
 No source record is cascaded or physically erased.
 
-Migration `0064_leasing` follows `0063_plan_sources`. It adds one table,
+Migration `0065_leasing` follows `0064_permit_date_reconcile`. It adds one table,
 same-project composite foreign keys, lifecycle constraints and a partial
 unique index. Empty downgrade is supported; any retained instruction blocks
 downgrade. The table is excluded from legacy intake. No backfill is needed.

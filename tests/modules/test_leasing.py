@@ -240,7 +240,7 @@ def test_leasing_migration_retention(
 ) -> None:
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     db.rollback()
-    command.downgrade(config, "0063_plan_sources")
+    command.downgrade(config, "0064_permit_date_reconcile")
     command.upgrade(config, "head")
     command.check(config)
     row = create(admin_client, project_id, unit_id)
@@ -250,5 +250,5 @@ def test_leasing_migration_retention(
     )
     db.rollback()
     with pytest.raises(RuntimeError, match="history must be retained"):
-        command.downgrade(config, "0063_plan_sources")
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0064_leasing"
+        command.downgrade(config, "0064_permit_date_reconcile")
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0065_leasing"

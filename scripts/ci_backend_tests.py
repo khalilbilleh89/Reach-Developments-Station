@@ -487,7 +487,7 @@ def domain_of_migration(path: str) -> str | None:
             return domain
     if stem == "0054_specification_images":
         return "construction"
-    if stem == "0064_leasing":
+    if stem == "0065_leasing":
         return "leasing"
     if stem == "0062_project_training":
         return "projects"
