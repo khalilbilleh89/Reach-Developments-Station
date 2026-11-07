@@ -38,6 +38,7 @@ import type { Roles } from "@/lib/roles";
  */
 
 export type ProjectSection =
+  | "analytics"
   | "training"
   | "procedure"
   | "matrix"
@@ -334,6 +335,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         description: "Map SOPs and objectives into clear Yes / No workflows.",
         visible: everyone,
       },
+    ],
+  },
+  {
+    key: "reports",
+    label: "Reports",
+    items: [
+      { key: "analytics", label: "Analytics", icon: "economics", description: "Project performance in charts, with management PDF reporting.", visible: roles => hasAnyRole(roles, PROJECT_FINANCIAL_READERS) },
     ],
   },
   {

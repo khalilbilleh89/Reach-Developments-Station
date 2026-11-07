@@ -52,6 +52,7 @@ import { MarketingAssets } from "./marketing/MarketingAssets";
 import { MarketingContentTab } from "@/components/projects/marketing/MarketingContentTab";
 import { MarketingEconomicsTab } from "@/components/projects/marketing/MarketingEconomicsTab";
 import { TrainingTab } from "@/components/projects/TrainingTab";
+import { ReportsAnalyticsTab } from "@/components/projects/ReportsAnalyticsTab";
 import { ProcedureTab } from "./ProcedureTab";
 import { MatrixTab } from "@/components/projects/MatrixTab";
 import { PriceEscalationTab } from "./PriceEscalationTab";
@@ -322,6 +323,7 @@ export function ProjectWorkspace({
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
         {section === "training" ? <TrainingTab key={projectId} projectId={projectId} roles={roles} /> : null}
+        {section === "analytics" ? <ReportsAnalyticsTab key={projectId} projectId={projectId} roles={roles} currencies={Object.values(currencyCodes)} /> : null}
         {section === "procedure" ? <ProcedureTab key={projectId} projectId={projectId} /> : null}
         {section === "matrix" ? <MatrixTab key={projectId} projectId={projectId} /> : null}
         {section === "team" ? <TeamTab key={projectId} projectId={projectId} /> : null}

@@ -614,6 +614,7 @@ class TestOnlyEntitledReadersAsk:
             "delivery",
             "finance",
             "creative",
+            "reports",
             "governance",
         ]
         items = re.findall(r'\n        key: "([a-z-]+)",', block)
