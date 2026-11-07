@@ -22,9 +22,10 @@ def test_sales_change_runs_sales_and_direct_consumers_only() -> None:
     result = chosen("app/modules/sales/service.py")
     assert result.risk == "module"
     assert result.changed_domains == ["sales"]
-    assert result.domains == ["payment_plans", "sales", "unit_economics"]
+    assert result.domains == ["leasing", "payment_plans", "sales", "unit_economics"]
     assert not result.full and not result.error
     assert any("test_sales_" in path for path in result.paths)
+    assert "tests/modules/test_leasing.py" in result.paths
     assert any("test_payment_plan" in path for path in result.paths)
     assert any("test_unit_economics" in path for path in result.paths)
     assert not any("test_collection_" in path for path in result.paths)
@@ -33,7 +34,7 @@ def test_sales_change_runs_sales_and_direct_consumers_only() -> None:
 
 def test_projects_change_stops_after_the_direct_neighbours() -> None:
     result = chosen("app/modules/projects/service.py")
-    assert result.domains == ["cutover", "inventory", "management_actions", "projects"]
+    assert result.domains == ["cutover", "inventory", "leasing", "management_actions", "projects"]
     assert "pricing" not in result.domains
     assert "sales" not in result.domains
     assert not any("test_project_analysis" in path for path in result.paths)
@@ -44,6 +45,7 @@ def test_projects_change_stops_after_the_direct_neighbours() -> None:
 def test_projects_consumers_use_their_registered_edge_contracts() -> None:
     result = chosen("app/modules/projects/service.py")
     expected = {
+        "tests/modules/test_leasing.py",
         "tests/modules/test_inventory_hierarchy.py",
         "tests/modules/test_management_actions_concurrency.py",
         "tests/modules/test_cutover_batch.py",

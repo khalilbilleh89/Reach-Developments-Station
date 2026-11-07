@@ -509,7 +509,7 @@
     "status": "retained",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Immutable permit status history; correct the current status through a permitted transition."
+    "notes": "Immutable permit status history; actual-date saves append movements and audit corrections. Legacy preparation reconciliation retains system audit evidence; removal never erases prior history."
   },
   {
     "handler": "sales.create_adjustment",
@@ -950,5 +950,13 @@
     "removal_route": "POST /projects/{project_id}/drawings/{drawing_id}/delete",
     "ui_file": "frontend/src/components/projects/design/Drawings.tsx",
     "notes": "Delivery > Plans (also Design > Drawings): project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes or Drive URL, metadata and audit. No downstream records reference drawings."
+  },
+  {
+    "handler": "leasing.create_instruction",
+    "create_route": "POST /projects/{project_id}/leasing",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/leasing/{record_id}/delete",
+    "ui_file": "frontend/src/components/leasing/LeasingWorkspace.tsx",
+    "notes": "Whole-project Leasing writers remove instructions from full-page details with version and reason. All terms and audit retained; project, unit, client and sale evidence untouched. Drafts and closed cycles are removable."
   }
 ]

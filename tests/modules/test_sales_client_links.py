@@ -144,9 +144,9 @@ def test_migration_retention(sales_ops_client: TestClient, project_id: str, buye
     url = f"{sales_url(project_id)}/clients/{buyer_id}"
     assert sales_ops_client.patch(url, json=LINKS).status_code == 200
     with pytest.raises(RuntimeError, match="Client links exist"):
-        command.downgrade(config, "0063_plan_sources")
+        command.downgrade(config, "0065_leasing")
     assert sales_ops_client.get(url).json()["client_folder_url"] == LINKS["client_folder_url"]
     assert sales_ops_client.patch(url, json=dict.fromkeys(LINKS)).status_code == 200
-    command.downgrade(config, "0063_plan_sources")
+    command.downgrade(config, "0065_leasing")
     command.upgrade(config, "head")
     command.check(config)

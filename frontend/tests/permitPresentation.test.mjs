@@ -47,8 +47,9 @@ test("the permit screen states one rule about dates and status, and states it co
  // date is the whole action.
  assert.ok(!/name: "status"/.test(source));
  for(const field of ["actual_submission_date","accepted_for_review_date","comments_received_date","resubmission_date","issue_date","renewal_date"]) assert.ok(source.includes(field),`${field} is not offered on the permit form`);
- // Manual transition survives for the exceptions no date can express.
- assert.match(source,/Other status changes \(optional\)/);
+ // Dates are the only editing workflow; old exception labels remain readable.
+ assert.ok(!source.includes("Other status changes (optional)"));
+ assert.ok(!source.includes("projects.transitionPermit("));
  assert.match(source,/on hold/i);
 });
 test("the saved permit reports the status the server derived, and never one the browser worked out",()=>{
