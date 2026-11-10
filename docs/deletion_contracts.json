@@ -958,5 +958,21 @@
     "removal_route": "POST /projects/{project_id}/leasing/{record_id}/delete",
     "ui_file": "frontend/src/components/leasing/LeasingWorkspace.tsx",
     "notes": "Whole-project Leasing writers remove instructions from full-page details with version and reason. All terms and audit retained; project, unit, client and sale evidence untouched. Drafts and closed cycles are removable."
+  },
+  {
+    "handler": "consultant_engineering.create_report",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/technical-reports/{report_id}/delete",
+    "ui_file": "frontend/src/components/projects/ReportsTab.tsx",
+    "notes": "Whole-project Design editors remove with reason and expected version. Original PDF or Drive link, dated metadata and audit are retained. No downstream references or payment/certification effects."
+  },
+  {
+    "handler": "consultant_engineering.create_report_link",
+    "create_route": "POST /links",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/technical-reports/{report_id}/delete",
+    "ui_file": "frontend/src/components/projects/ReportsTab.tsx",
+    "notes": "Whole-project Design editors remove with reason and expected version. Original PDF or Drive link, dated metadata and audit are retained. No downstream references or payment/certification effects."
   }
 ]

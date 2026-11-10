@@ -491,7 +491,7 @@ def domain_of_migration(path: str) -> str | None:
         return "leasing"
     if stem == "0062_project_training":
         return "projects"
-    if stem in {"0060_plan_categories", "0063_plan_sources"}:
+    if stem in {"0060_plan_categories", "0063_plan_sources", "0067_site_reports"}:
         return "consultant_engineering"
     if stem == "0052_design_payments":
         return "consultant_engineering"
