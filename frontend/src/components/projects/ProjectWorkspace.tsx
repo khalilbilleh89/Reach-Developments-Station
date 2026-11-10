@@ -38,6 +38,7 @@ import { FaqTab } from "@/components/projects/FaqTab";
 import { OperationsTab } from "@/components/projects/OperationsTab";
 import { CommissionsTab } from "@/components/projects/CommissionsTab";
 import { ConsultantEngineerTab } from "@/components/projects/ConsultantEngineerTab";
+import { ReportsTab } from "@/components/projects/ReportsTab";
 import { PlansTab } from "@/components/projects/PlansTab";
 import { TechnicalSpecificationsTab } from "@/components/projects/TechnicalSpecificationsTab";
 import { ConstructionTab } from "@/components/projects/ConstructionTab";
@@ -316,6 +317,7 @@ export function ProjectWorkspace({
         {section === "operations" ? <OperationsTab projectId={projectId} roles={roles} /> : null}
         {section === "commissions" ? <CommissionsTab projectId={projectId} roles={roles} userId={user.id} currencyCodes={currencyCodes} /> : null}
         {section === "technical-specifications" ? <TechnicalSpecificationsTab key={projectId} projectId={projectId} roles={roles} /> : null}
+        {section === "site-reports" ? <ReportsTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "plans" ? <PlansTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "construction" ? <ConstructionTab projectId={projectId} roles={roles} currencyId={project.base_currency_id} currencyCode={project.base_currency_code} /> : null}
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}

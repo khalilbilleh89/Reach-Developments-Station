@@ -74,6 +74,7 @@ export type ProjectSection =
   | "emails"
   | "plans"
   | "technical-specifications"
+  | "site-reports"
   | "construction"
   | "economics"
   | "cashflow"
@@ -286,6 +287,11 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         key: "technical-specifications", label: "Technical Specifications", icon: "blueprint",
         description: "The project specification guide for Sales, with optional reference images.",
         visible: (roles) => hasAnyRole(roles, SPECIFICATION_READERS),
+      },
+      {
+        key: "site-reports", label: "Reports", icon: "documents",
+        description: "Dated technical reports from the site engineer, as PDFs or Drive links.",
+        visible: (roles) => hasAnyRole(roles, CONSULTANT_READERS),
       },
     ],
   },

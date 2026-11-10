@@ -648,6 +648,7 @@ class TestOnlyEntitledReadersAsk:
             "plans",
             "construction",
             "technical-specifications",
+            "site-reports",
             "price-escalation",
             "economics",
             "cashflow",
