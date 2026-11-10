@@ -1,7 +1,6 @@
 "use client";
 
 import * as ui from "@/components/ui";
-import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -13,7 +12,7 @@ import type {
   PermitStatusEvent,
   PermitType,
 } from "@/lib/api";
-import { businessDate, money, todayISO } from "@/lib/format";
+import { businessDate, money } from "@/lib/format";
 import { sectionDescription } from "@/components/shell/navigation";
 import {
   Badge,
@@ -26,12 +25,8 @@ import {
   ConfirmDialog,
   DataToolbar,
   DensitySwitch,
-  Disclosure,
   EmptyState,
-  Field,
-  FieldRow,
   FilterChips,
-  FormActions,
   Icon,
   KeyValue,
   KeyValueGrid,
@@ -58,52 +53,6 @@ import { PermitCreatePage } from "./PermitCreatePage";
 import { permitReviewNotes, permitJourneyPosition } from "./permits/presentation";
 import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
-
-/**
- * The moves the API will accept from each state. Mirrored here only so the
- * form offers plausible choices — the API validates every transition itself and
- * is the authority on what is allowed.
- */
-const TRANSITIONS: Record<string, string[]> = {
-  not_started: ["preparing", "on_hold", "withdrawn"],
-  preparing: ["submitted", "on_hold", "withdrawn"],
-  submitted: ["accepted_for_review", "comments_received", "rejected", "on_hold", "withdrawn"],
-  accepted_for_review: [
-    "comments_received",
-    "approved_with_conditions",
-    "issued",
-    "rejected",
-    "on_hold",
-    "withdrawn",
-  ],
-  comments_received: ["resubmission", "rejected", "on_hold", "withdrawn"],
-  resubmission: [
-    "accepted_for_review",
-    "comments_received",
-    "approved_with_conditions",
-    "issued",
-    "rejected",
-    "on_hold",
-    "withdrawn",
-  ],
-  approved_with_conditions: ["issued", "expired", "on_hold", "withdrawn"],
-  issued: ["completed", "expired", "renewed"],
-  expired: ["renewed"],
-  renewed: ["completed", "expired"],
-  completed: [],
-  rejected: ["preparing", "withdrawn"],
-  on_hold: [
-    "preparing",
-    "submitted",
-    "accepted_for_review",
-    "comments_received",
-    "resubmission",
-    "approved_with_conditions",
-    "issued",
-    "withdrawn",
-  ],
-  withdrawn: [],
-};
 
 const STATUS_LABELS: Record<string, string> = {
   not_started: "Not started",
@@ -158,7 +107,7 @@ function slaLabel(permit: Permit): string {
  * The permit fields an ordinary update may carry.
  *
  * `status` and `permit_code` are absent by construction: status moves only
- * through a transition that records why, and a permit code is immutable. The
+ * from saved actual milestone dates, and a permit code is immutable. The
  * API rejects either outright, so they cannot be sent from here at all.
  *
  * Identity fields are still offered before submission; once the application is
@@ -221,8 +170,7 @@ type Filter = "" | "blocking" | "critical" | "overdue";
  * criticality of their own: the flags are the server's, the statutory clock
  * is the server's, and the register only draws them where a project manager
  * looks first. Status is deliberately not an editable field anywhere here. It
- * follows saved actual milestone dates, with optional manual exception changes.
- * Both paths retain the history of what the authority actually did.
+ * follows saved actual milestone dates, with retained audit history.
  */
 export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost = false, currencyCode = null }: { projectId: string; canWrite: boolean; canDelete?: boolean; canSeeCost?: boolean; currencyCode?: string | null }) {
   const [register, setRegister] = useState<PermitRegister | null>(null);
@@ -346,7 +294,6 @@ export function PermitsTab({ projectId, canWrite, canDelete = false, canSeeCost 
 
       <div className="stack">
         {error ? <Notice tone="error">{error}</Notice> : null}
-
         {register ? (
           <StatStrip>
             <StatStripItem label="Permits" value={register.total} />
@@ -562,9 +509,6 @@ function PermitFile({
   const [section, setSection] = useState("permit");
   const [history, setHistory] = useState<PermitStatusEvent[] | null>(null);
   const [editing, setEditing] = useState(false);
-  const [moveBaseline, setMoveBaseline] = useState({ to_status: "", effective_date: todayISO(), reason: "" });
-  const [move, setMove] = useState(moveBaseline);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [historyError, setHistoryError] = useState(false);
@@ -584,30 +528,6 @@ function PermitFile({
     })();
   }, [loadHistory]);
 
-  const transition = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await projects.transitionPermit(projectId, permit.id, {
-        to_status: move.to_status,
-        effective_date: move.effective_date,
-        ...(move.reason ? { reason: move.reason } : {}),
-      });
-      onNotice(`${updated.permit_code} moved to ${STATUS_LABELS[updated.status] ?? updated.status}.`);
-      const emptyMove = { to_status: "", effective_date: todayISO(), reason: "" };
-      setMove(emptyMove);
-      setMoveBaseline(emptyMove);
-      await onChanged(updated);
-      await loadHistory();
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not change the status.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const moves = TRANSITIONS[permit.status] ?? [];
 
   return (
     <article className="record-workspace">
@@ -637,7 +557,6 @@ function PermitFile({
       </NextBar>
       <Tabs label="Permit sections" tabs={SECTIONS} active={section} onSelect={setSection} />
       <TabPanel group="Permit sections" tab={section}>
-      {error ? <Notice tone="error">{error}</Notice> : null}
 
       {section === "permit" ? (
         <>
@@ -662,6 +581,7 @@ function PermitFile({
               <EditForm
                 fields={permitFields(permit, types, permits)}
                 columns={2}
+                saveUnchanged
                 initial={Object.fromEntries(
                   permitFields(permit, types, permits).map((field) => [
                     field.name,
@@ -744,59 +664,6 @@ function PermitFile({
             </KeyValueGrid>
           </section>
 
-          {canWrite && moves.length > 0 ? (
-            <Disclosure title="Other status changes (optional)">
-              <SectionHeader
-                title="Change status"
-                description="Most permit progress is recorded by entering the actual milestone dates above; the status follows them. Use a manual change only for an exception no milestone date can express — putting the permit on hold, withdrawing it, or recording a rejection. Recorded with the date it took effect and kept in the history. You may add a reason, but it is optional."
-              />
-              <DraftBoundary dirty={JSON.stringify(move) !== JSON.stringify(moveBaseline)} busy={busy} onDiscard={() => setMove(moveBaseline)}>
-                <form onSubmit={transition}>
-                  <FieldRow columns={3}>
-                    <Field label="Move to">
-                      <select
-                        className="input"
-                        required
-                        value={move.to_status}
-                        onChange={(event) => setMove({ ...move, to_status: event.target.value })}
-                      >
-                        <option value="">Choose…</option>
-                        {moves.map((value) => (
-                          <option key={value} value={value}>
-                            {STATUS_LABELS[value]}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="Effective date">
-                      <input
-                        className="input input-short"
-                        type="date"
-                        required
-                        value={move.effective_date}
-                        onChange={(event) => setMove({ ...move, effective_date: event.target.value })}
-                      />
-                    </Field>
-                    <Field
-                      label="Reason"
-                      optional
-                    >
-                      <input
-                        className="input"
-                        value={move.reason}
-                        onChange={(event) => setMove({ ...move, reason: event.target.value })}
-                      />
-                    </Field>
-                  </FieldRow>
-                  <FormActions>
-                    <Button variant="primary" type="submit" disabled={busy}>
-                      {busy ? "Recording…" : "Record status change"}
-                    </Button>
-                  </FormActions>
-                </form>
-              </DraftBoundary>
-            </Disclosure>
-          ) : null}
         </>
       ) : null}
 

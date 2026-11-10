@@ -166,7 +166,7 @@ def test_email_categories(sales_ops_client: TestClient, project_id: str, categor
 
 def test_rich_email_migration(postgres: None) -> None:
     config = Config("alembic.ini")
-    command.downgrade(config, "0059_marketing_assets")
+    command.downgrade(config, "0066_client_links")
     command.upgrade(config, "head")
     command.check(config)
 
@@ -217,7 +217,7 @@ def test_rich_email_downgrade_retains_content(admin_client: TestClient, project_
         == 201
     )
     with pytest.raises(RuntimeError, match="Retained email formatting"):
-        command.downgrade(Config("alembic.ini"), "0059_marketing_assets")
+        command.downgrade(Config("alembic.ini"), "0066_client_links")
     assert admin_client.get(url(project_id)).json()["items"][0]["body_html"] == "<b>Hello</b>"
 
 

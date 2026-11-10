@@ -89,6 +89,7 @@ ALWAYS_RUN = (
 #: that no domain claims is caught by ``unclaimed_test_files`` below, so this
 #: map cannot silently rot as files are added.
 DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
+    "leasing": ("leasing",),
     "marketing": ("marketing",),
     "access": ("auth", "authorization", "phase_access", "project_access"),
     "audit": ("audit",),
@@ -102,6 +103,8 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
         "project_images",
         "project_team",
         "project_matrix",
+        "project_training",
+        "project_procedure",
         "project_price_escalation",
         "project_documents",
         "project_agreements",
@@ -156,14 +159,15 @@ DOMAIN_TEST_PREFIXES: dict[str, tuple[str, ...]] = {
 #: beyond one edge. A pricing change can break sales' use of pricing; it does not
 #: automatically re-prove payment plans, collections and cashflow.
 DOWNSTREAM: dict[str, tuple[str, ...]] = {
+    "leasing": (),
     "settings": ("projects",),
     # ``inventory`` for the obvious reason; ``cutover`` because a batch takes
     # the project row lock through ``lock_project`` and resolves the project a
     # manifest names, so this module's contract is one the cutover depends on.
-    "projects": ("inventory", "cutover", "management_actions"),
-    "inventory": ("pricing",),
+    "projects": ("inventory", "cutover", "management_actions", "leasing"),
+    "inventory": ("pricing", "leasing"),
     "pricing": ("sales", "marketing"),
-    "sales": ("payment_plans", "unit_economics"),
+    "sales": ("payment_plans", "unit_economics", "leasing"),
     # Construction calls payment plans' milestone certification contract, so a
     # change to that contract can break construction. The edge is the code
     # relationship and not the roadmap order: construction came later, but that
@@ -483,6 +487,12 @@ def domain_of_migration(path: str) -> str | None:
             return domain
     if stem == "0054_specification_images":
         return "construction"
+    if stem == "0065_leasing":
+        return "leasing"
+    if stem == "0062_project_training":
+        return "projects"
+    if stem in {"0060_plan_categories", "0063_plan_sources"}:
+        return "consultant_engineering"
     if stem == "0052_design_payments":
         return "consultant_engineering"
     if stem == "0034_unit_current_costs":
@@ -522,6 +532,7 @@ def domain_of_migration(path: str) -> str | None:
         "0044_team_job_description",
         "0049_price_escalation",
         "0050_project_matrices",
+        "0061_project_procedures",
         "0041_project_agreements",
         "0047_company_documents",
     }:

@@ -38,6 +38,9 @@ import type { Roles } from "@/lib/roles";
  */
 
 export type ProjectSection =
+  | "analytics"
+  | "training"
+  | "procedure"
   | "matrix"
   | "marketing-bio"
   | "marketing-economics"
@@ -69,6 +72,7 @@ export type ProjectSection =
   | "operations"
   | "faqs"
   | "emails"
+  | "plans"
   | "technical-specifications"
   | "construction"
   | "economics"
@@ -264,6 +268,13 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     label: "Delivery",
     items: [
       {
+        key: "plans",
+        label: "Plans",
+        icon: "blueprint",
+        description: "Your project plan library. Open a PDF, inspect every page and return whenever you need it.",
+        visible: (roles) => hasAnyRole(roles, CONSULTANT_READERS),
+      },
+      {
         key: "construction",
         label: "Construction",
         icon: "permits",
@@ -309,6 +320,7 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
     key: "creative",
     label: "Creative",
     items: [
+      { key: "training", label: "Training", icon: "documents", description: "Training sessions, categories and learning materials.", visible: everyone },
       {
         key: "matrix",
         label: "Matrix",
@@ -316,6 +328,20 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
         description: "Create visual SWOT, PESTEL, Porter, BCG, Ansoff and Fishbone analyses.",
         visible: everyone,
       },
+      {
+        key: "procedure",
+        label: "Procedure",
+        icon: "overview",
+        description: "Map SOPs and objectives into clear Yes / No workflows.",
+        visible: everyone,
+      },
+    ],
+  },
+  {
+    key: "reports",
+    label: "Reports",
+    items: [
+      { key: "analytics", label: "Analytics", icon: "economics", description: "Project performance in charts, with management PDF reporting.", visible: roles => hasAnyRole(roles, PROJECT_FINANCIAL_READERS) },
     ],
   },
   {

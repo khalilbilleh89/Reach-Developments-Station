@@ -292,7 +292,12 @@ def parse(body: bytes, project_id: str) -> list[tuple[int, str, dict]]:
             headers = [str(cell.value or "").strip() for cell in next(iterator, ())]
             while headers and not headers[-1]:
                 headers.pop()
-            if sorted(headers) != sorted(columns):
+            expected = set(columns)
+            optional = {"client_folder_url", "odoo_opportunity_url"} if name == "Buyer" else set()
+            if (
+                len(headers) != len(set(headers))
+                or not expected - optional <= set(headers) <= expected
+            ):
                 raise ValidationError(f"{name}: keep each template header exactly once.")
             for number, cells in enumerate(iterator, 2):
                 if number > MAX_ROWS + 1000:

@@ -509,7 +509,7 @@
     "status": "retained",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Immutable permit status history; correct the current status through a permitted transition."
+    "notes": "Immutable permit status history; actual-date saves append movements and audit corrections. Legacy preparation reconciliation retains system audit evidence; removal never erases prior history."
   },
   {
     "handler": "sales.create_adjustment",
@@ -525,7 +525,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{project_id}/sales/clients/{client_id}",
     "ui_file": "frontend/src/components/projects/sales/ClientsPanel.tsx",
-    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract. Re-import skips existing records; only newly created rows use this removal flow."
+    "notes": "Unused buyer only; administrator; contracts and payments protected. Excel-imported buyers use this same removal and audit contract. Re-import skips existing records; only newly created rows use this removal flow. Optional client folder/Odoo links can be cleared through Edit buyer or Sales client links; link URLs are not retained in audit, only changed field names."
   },
   {
     "handler": "sales.create_handover",
@@ -877,7 +877,7 @@
     "status": "implemented",
     "removal_route": "POST /projects/{project_id}/drawings/{drawing_id}/delete",
     "ui_file": "frontend/src/components/projects/design/Drawings.tsx",
-    "notes": "Design > Drawings: project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes, metadata and audit. No downstream records reference drawings."
+    "notes": "Delivery > Plans (also Design > Drawings): project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes or Drive URL, metadata and audit. No downstream records reference drawings."
   },
   {
     "handler": "construction.add_specification_image",
@@ -918,5 +918,45 @@
     "removal_route": "DELETE /{draft_id}?version=...&reason=...",
     "ui_file": "frontend/src/components/projects/sales/SalesDrafts.tsx",
     "notes": "Unposted drafts can be physically removed with version, Boss authority and retained deletion audit. Added drafts retain source evidence and link to the preparing transaction, which uses existing cancellation/removal controls. No posted cash or legal event is created."
+  },
+  {
+    "handler": "projects.create_link",
+    "create_route": "POST /links",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/training/{asset_id}/delete",
+    "ui_file": "frontend/src/components/projects/TrainingTab.tsx",
+    "notes": "Project managers and administrators remove training with a reason and version. Files, metadata and audit retained; external targets unchanged. Categories are editable labels, not separate records."
+  },
+  {
+    "handler": "projects.upload_asset",
+    "create_route": "POST /upload",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/training/{asset_id}/delete",
+    "ui_file": "frontend/src/components/projects/TrainingTab.tsx",
+    "notes": "Project managers and administrators remove training with a reason and version. Files, metadata and audit retained; external targets unchanged. Categories are editable labels, not separate records."
+  },
+  {
+    "handler": "projects.create_procedure",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{procedure_id}/delete",
+    "ui_file": "frontend/src/components/projects/ProcedureTab.tsx",
+    "notes": "Whole-project manager/admin; version and reason required; map and audit retained. Steps removed on parent save with audit and invalid references rejected."
+  },
+  {
+    "handler": "consultant_engineering.create_drawing_link",
+    "create_route": "POST /links",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/drawings/{drawing_id}/delete",
+    "ui_file": "frontend/src/components/projects/design/Drawings.tsx",
+    "notes": "Delivery > Plans (also Design > Drawings): project-scoped editor deletion requires a reason and expected version, hides the row and retains PDF bytes or Drive URL, metadata and audit. No downstream records reference drawings."
+  },
+  {
+    "handler": "leasing.create_instruction",
+    "create_route": "POST /projects/{project_id}/leasing",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/leasing/{record_id}/delete",
+    "ui_file": "frontend/src/components/leasing/LeasingWorkspace.tsx",
+    "notes": "Whole-project Leasing writers remove instructions from full-page details with version and reason. All terms and audit retained; project, unit, client and sale evidence untouched. Drafts and closed cycles are removable."
   }
 ]

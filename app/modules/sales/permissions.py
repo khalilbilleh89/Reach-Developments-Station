@@ -106,7 +106,9 @@ PARTY_PII_FIELDS = frozenset(
 )
 
 #: Columns on a client that are personal data.
-CLIENT_PII_FIELDS = frozenset({"email", "phone", "address"})
+CLIENT_PII_FIELDS = frozenset(
+    {"email", "phone", "address", "client_folder_url", "odoo_opportunity_url"}
+)
 
 # --------------------------------------------------------------------------- #
 # Writing

@@ -38,6 +38,7 @@ import { FaqTab } from "@/components/projects/FaqTab";
 import { OperationsTab } from "@/components/projects/OperationsTab";
 import { CommissionsTab } from "@/components/projects/CommissionsTab";
 import { ConsultantEngineerTab } from "@/components/projects/ConsultantEngineerTab";
+import { PlansTab } from "@/components/projects/PlansTab";
 import { TechnicalSpecificationsTab } from "@/components/projects/TechnicalSpecificationsTab";
 import { ConstructionTab } from "@/components/projects/ConstructionTab";
 import { ProjectStages } from "@/components/projects/construction/StageWorkspace";
@@ -50,6 +51,9 @@ import { LandTab } from "@/components/projects/LandTab";
 import { MarketingAssets } from "./marketing/MarketingAssets";
 import { MarketingContentTab } from "@/components/projects/marketing/MarketingContentTab";
 import { MarketingEconomicsTab } from "@/components/projects/marketing/MarketingEconomicsTab";
+import { TrainingTab } from "@/components/projects/TrainingTab";
+import { ReportsAnalyticsTab } from "@/components/projects/ReportsAnalyticsTab";
+import { ProcedureTab } from "./ProcedureTab";
 import { MatrixTab } from "@/components/projects/MatrixTab";
 import { PriceEscalationTab } from "./PriceEscalationTab";
 
@@ -312,11 +316,15 @@ export function ProjectWorkspace({
         {section === "operations" ? <OperationsTab projectId={projectId} roles={roles} /> : null}
         {section === "commissions" ? <CommissionsTab projectId={projectId} roles={roles} userId={user.id} currencyCodes={currencyCodes} /> : null}
         {section === "technical-specifications" ? <TechnicalSpecificationsTab key={projectId} projectId={projectId} roles={roles} /> : null}
+        {section === "plans" ? <PlansTab key={projectId} projectId={projectId} roles={roles} /> : null}
         {section === "construction" ? <ConstructionTab projectId={projectId} roles={roles} currencyId={project.base_currency_id} currencyCode={project.base_currency_code} /> : null}
         {section === "economics" ? <UnitEconomicsTab projectId={projectId} roles={roles} /> : null}
         {section === "price-escalation" ? <PriceEscalationTab key={projectId} projectId={projectId} /> : null}
         {section === "cashflow" ? <CashflowTab project={project} roles={roles} /> : null}
         {section === "documents" ? <DocumentsTab projectId={projectId} canWrite={canWriteTechnical} /> : null}
+        {section === "training" ? <TrainingTab key={projectId} projectId={projectId} roles={roles} /> : null}
+        {section === "analytics" ? <ReportsAnalyticsTab key={projectId} projectId={projectId} roles={roles} currencies={Object.values(currencyCodes)} /> : null}
+        {section === "procedure" ? <ProcedureTab key={projectId} projectId={projectId} /> : null}
         {section === "matrix" ? <MatrixTab key={projectId} projectId={projectId} /> : null}
         {section === "team" ? <TeamTab key={projectId} projectId={projectId} /> : null}
         {section === "access" && isAdmin ? <AccessTab projectId={projectId} /> : null}

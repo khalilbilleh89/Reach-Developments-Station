@@ -32,7 +32,7 @@ storage. No business templates or factual claims are seeded.
 
 ## Migration and rollback
 
-0060_email_rich_text follows 0059_marketing_assets and adds nullable body_html.
+0067_email_rich_text follows 0066_client_links and adds nullable body_html.
 Existing body text is unchanged and treated literally, never interpreted as HTML.
 The server accepts only inert text-formatting tags with no attributes, URLs, styles,
 images or embedded content, and derives the searchable plain body from that HTML.
@@ -41,7 +41,7 @@ HTML remains in the existing audit evidence. An older API client omitting body_h
 preserves it when body is unchanged, and clears it when body changes; explicit null
 also clears formatting. No backfill is required.
 
-Downgrade of 0060 refuses while formatted templates remain. Roll application code
+Downgrade of 0067 refuses while formatted templates remain. Roll application code
 back with the additive column retained; export and explicitly resolve content before
 a schema downgrade. Native editing commands retain browser undo history without a
 new editor dependency; because execCommand is deprecated, browser compatibility

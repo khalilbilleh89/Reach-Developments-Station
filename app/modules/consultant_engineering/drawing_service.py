@@ -14,6 +14,7 @@ from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
 from app.modules.consultant_engineering.drawing_schemas import (
     DrawingFields,
+    DrawingLink,
     DrawingRead,
     DrawingUpdate,
 )
@@ -22,7 +23,7 @@ from app.modules.consultant_engineering.permissions import EDITOR_ROLES, READER_
 from app.modules.projects.models import Project
 from app.modules.projects.permissions import whole_project_ids
 
-MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
 
 
 def scope(
@@ -74,7 +75,7 @@ def validate_document(filename: str, document: bytes) -> str:
     ):
         raise ValidationError("Enter a valid document filename.")
     if not 0 < len(document) <= MAX_DOCUMENT_BYTES:
-        raise ValidationError("Upload a non-empty document up to 10 MB.")
+        raise ValidationError("Upload a non-empty document up to 50 MB.")
     if not filename.lower().endswith(".pdf") or not document.startswith(b"%PDF-"):
         raise ValidationError("Upload a PDF matching its .pdf file type.")
     return filename
@@ -184,22 +185,30 @@ def remove(
     audit(session, row, actor, "delete", before, reason.strip())
 
 
+def _run_pdf_worker(data: bytes, operation: str) -> bytes:
+    return subprocess.run(
+        [sys.executable, "-m", "app.modules.consultant_engineering.drawing_render", operation],
+        input=data,
+        capture_output=True,
+        timeout=30,
+        check=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+    ).stdout
+
+
+def inspect_document(data: bytes) -> None:
+    try:
+        if int(_run_pdf_worker(data, "inspect")) < 1:
+            raise ValueError("Empty document")
+    except (subprocess.SubprocessError, ValueError, OSError) as exc:
+        raise ValidationError(
+            "Could not read this document. Use a valid, unencrypted PDF."
+        ) from exc
+
+
 def preview(data: bytes, page: int) -> dict:
     try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "app.modules.consultant_engineering.drawing_render",
-                str(page - 1),
-            ],
-            input=data,
-            capture_output=True,
-            timeout=30,
-            check=True,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        )
-        count, image = result.stdout.split(b"\n", 1)
+        count, image = _run_pdf_worker(data, str(page - 1)).split(b"\n", 1)
         if not image.startswith(b"\x89PNG\r\n\x1a\n") or len(image) > 25 * 1024 * 1024:
             raise ValueError("Invalid preview")
         return {
@@ -208,3 +217,13 @@ def preview(data: bytes, page: int) -> dict:
         }
     except (subprocess.SubprocessError, ValueError, OSError) as exc:
         raise ValidationError("Could not preview this page. Use a valid, unencrypted PDF.") from exc
+
+
+def create_link(
+    session: Session, project_id: uuid.UUID, actor: ActorContext, fields: DrawingLink
+) -> ProjectDrawing:
+    scope(session, project_id, actor, write=True)
+    row = ProjectDrawing(project_id=project_id, **fields.model_dump())
+    session.add(row)
+    audit(session, row, actor, "create")
+    return row

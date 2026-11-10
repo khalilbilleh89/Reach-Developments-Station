@@ -32,6 +32,7 @@ from app.modules.commissions import models as commission_models  # noqa: E402,F4
 from app.modules.construction import models as construction_models  # noqa: E402,F401
 from app.modules.consultant_engineering import models as consultant_models  # noqa: E402,F401
 from app.modules.inventory import models as inventory_models  # noqa: E402,F401
+from app.modules.leasing import models as leasing_models  # noqa: E402,F401
 from app.modules.management_actions import models as management_actions_models  # noqa: E402,F401
 from app.modules.management_reporting import (  # noqa: E402
     models as management_reporting_models,  # noqa: F401
@@ -44,7 +45,9 @@ from app.modules.projects import (  # noqa: E402
     company_models,  # noqa: F401
     escalation_models,  # noqa: F401
     matrix_models,  # noqa: F401
+    procedure_models,  # noqa: F401
     team_models,  # noqa: F401
+    training_models,  # noqa: F401
 )
 from app.modules.projects import models as projects_models  # noqa: E402,F401
 from app.modules.sales import (  # noqa: E402

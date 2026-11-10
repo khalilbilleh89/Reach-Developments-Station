@@ -279,13 +279,20 @@ class ProjectDrawing(Base):
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="name_present"),
         CheckConstraint(
-            "category IN ('general','architecture','structure','mep','landscape','interiors')",
+            "category IN ('general','architecture','structure','mep','landscape','interiors',"
+            "'electrical','mechanical','shop_drawing')",
             name="valid_category",
         ),
         CheckConstraint(
             "status IN ('reference','for_review','issued','superseded')", name="valid_status"
         ),
-        CheckConstraint("octet_length(document) BETWEEN 1 AND 10485760", name="document_size"),
+        CheckConstraint("octet_length(document) BETWEEN 1 AND 52428800", name="document_size"),
+        CheckConstraint(
+            "(source_url IS NULL AND document IS NOT NULL AND filename IS NOT NULL "
+            "AND sha256 IS NOT NULL) OR (source_url IS NOT NULL AND length(trim(source_url)) > 0 "
+            "AND document IS NULL AND filename IS NULL AND sha256 IS NULL)",
+            name="one_source",
+        ),
         CheckConstraint("version > 0", name="positive_version"),
     )
 
@@ -305,9 +312,10 @@ class ProjectDrawing(Base):
     revision: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     notes: Mapped[str] = mapped_column(String(2000), nullable=False)
-    filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    document: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, deferred=True)
-    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    filename: Mapped[str | None] = mapped_column(String(255))
+    document: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    source_url: Mapped[str | None] = mapped_column(String(2000))
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
     )

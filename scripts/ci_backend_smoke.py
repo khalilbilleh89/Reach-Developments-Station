@@ -70,6 +70,10 @@ BACKBONE = (
 # Node IDs intentionally name a few existing, real PostgreSQL cases, not whole
 # expensive domain files. A new module must register its contract here.
 DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
+    "leasing": (
+        "tests/modules/test_leasing.py::test_instruction_lifecycle",
+        "tests/modules/test_leasing.py::test_leasing_access",
+    ),
     "workspace": (
         "tests/modules/test_workspace.py::test_a_view_is_saved_listed_renamed_and_removed_by_its_owner",
         "tests/modules/test_workspace.py::test_another_persons_view_is_not_found",
@@ -194,9 +198,31 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
 # Exact reviewed ownership: names alone must not certify an arbitrary migration.
 # New revisions register BOTH their owner and their own integrity test(s).
 MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "0060_email_rich_text.py": (
+    "0067_email_rich_text.py": (
         "sales",
         ("tests/modules/test_sales_emails.py::test_rich_email_migration",),
+    ),
+    "0066_client_links.py": (
+        "sales",
+        ("tests/modules/test_sales_client_links.py::test_migration_retention",),
+    ),
+    "0065_leasing.py": (
+        "leasing",
+        ("tests/modules/test_leasing.py::test_leasing_migration_retention",),
+    ),
+    "0064_permit_date_reconcile.py": (
+        "projects",
+        ("tests/modules/test_permit_date_status.py::test_legacy_date_reconciliation_migration",),
+    ),
+    "0063_plan_sources.py": (
+        "consultant_engineering",
+        (
+            "tests/modules/test_consultant_engineering_drawings.py::test_plan_sources_migration_retains_history",
+        ),
+    ),
+    "0061_project_procedures.py": (
+        "projects",
+        ("tests/modules/test_project_procedure.py::test_migration_roundtrip_and_retention",),
     ),
     "0058_sales_import_drafts.py": (
         "sales",
@@ -263,6 +289,16 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "0053_marketing_economics.py": (
         "marketing",
         ("tests/modules/test_marketing.py::test_economics_migration_retention",),
+    ),
+    "0062_project_training.py": (
+        "projects",
+        ("tests/modules/test_project_training.py::test_training_migration_retention",),
+    ),
+    "0060_plan_categories.py": (
+        "consultant_engineering",
+        (
+            "tests/modules/test_consultant_engineering_drawings.py::test_plan_categories_migration_retains_history",
+        ),
     ),
     "0059_marketing_assets.py": (
         "marketing",

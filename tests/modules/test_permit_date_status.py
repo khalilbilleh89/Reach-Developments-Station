@@ -1,12 +1,102 @@
 """Actual date entry drives status atomically without a second user action."""
 
+import uuid
+from pathlib import Path
+
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.modules.audit.models import AuditEvent
 from tests.modules.conftest import PROJECTS, permit_payload
+
+
+@pytest.mark.parametrize("changes", [{}, {"notes": "Reviewed"}])
+def test_save_reconciles_legacy_preparing_with_unchanged_dates(
+    admin_client: TestClient, project_id: str, db: Session, changes: dict
+) -> None:
+    url = f"{PROJECTS}/{project_id}/permits"
+    row = admin_client.post(url, json=permit_payload(issue_date="2025-01-10")).json()
+    db.execute(text("UPDATE permits SET status='preparing' WHERE id=:id"), {"id": row["id"]})
+    db.commit()
+    saved = admin_client.patch(f"{url}/{row['id']}", json=changes)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["status"] == "completed"
+    assert saved.json()["status_effective_date"] == "2025-01-10"
+    history = admin_client.get(f"{url}/{row['id']}/status-history").json()
+    assert any(
+        event["from_status"] == "preparing" and event["to_status"] == "completed"
+        for event in history
+    )
+    assert admin_client.patch(f"{url}/{row['id']}", json=changes).status_code == 200
+    assert admin_client.get(f"{url}/{row['id']}/status-history").json() == history
+    register = admin_client.get(url, params={"status": "completed"}).json()
+    assert any(permit["id"] == row["id"] for permit in register["permits"])
+
+
+def test_legacy_date_reconciliation_migration(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    url = f"{PROJECTS}/{project_id}/permits"
+    rows = []
+    for code, status, issue in [
+        ("ISSUED", "preparing", "2025-02-01"),
+        ("SUBMITTED", "not_started", None),
+        ("HELD", "on_hold", "2025-02-01"),
+        ("DELETED", "preparing", "2025-02-01"),
+        ("UNDATED", "preparing", None),
+    ]:
+        fields = {"issue_date": issue}
+        if code == "SUBMITTED":
+            fields["actual_submission_date"] = "2025-01-01"
+        row = admin_client.post(url, json=permit_payload(permit_code=code, **fields)).json()
+        db.execute(
+            text("UPDATE permits SET status=:status WHERE id=:id"),
+            {"status": status, "id": row["id"]},
+        )
+        if code == "DELETED":
+            db.execute(text("UPDATE permits SET deleted_at=now() WHERE id=:id"), {"id": row["id"]})
+        rows.append(row)
+        db.commit()
+    db.commit()
+    old_history = admin_client.get(f"{url}/{rows[0]['id']}/status-history").json()
+    command.downgrade(config, "0063_plan_sources")
+    command.upgrade(config, "head")
+    command.check(config)
+    db.expire_all()
+    states = dict(db.execute(text("SELECT permit_code, status FROM permits")).all())
+    assert states == {
+        "ISSUED": "completed",
+        "SUBMITTED": "submitted",
+        "HELD": "on_hold",
+        "DELETED": "preparing",
+        "UNDATED": "preparing",
+    }
+    audits = db.scalars(
+        select(AuditEvent).where(AuditEvent.action == "permit.dates_reconciled")
+    ).all()
+    assert len(audits) == 2
+    audit = next(item for item in audits if item.entity_id == uuid.UUID(rows[0]["id"]))
+    assert audit.actor_user_id is None and audit.source == "migration"
+    assert audit.before_data["status"] == "preparing"
+    assert audit.after_data["status"] == "completed"
+    assert audit.after_data["issue_date"] == "2025-02-01"
+    assert admin_client.get(f"{url}/{rows[0]['id']}/status-history").json() == old_history
+    db.rollback()
+    command.downgrade(config, "0063_plan_sources")
+    command.upgrade(config, "head")
+    assert (
+        len(
+            db.scalars(
+                select(AuditEvent).where(AuditEvent.action == "permit.dates_reconciled")
+            ).all()
+        )
+        == 2
+    )
 
 
 @pytest.mark.parametrize(

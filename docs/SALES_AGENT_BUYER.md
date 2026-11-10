@@ -43,3 +43,25 @@ connecting a buyer to a unit creates a reservation/sale, and signed or
 collection-active contracts must use governed cancellation rather than Delete.
 See [DELETION_POLICY.md](DELETION_POLICY.md) and
 [RECORD_CORRECTION_CATALOGUE.md](RECORD_CORRECTION_CATALOGUE.md).
+
+
+## Client folder and Odoo opportunity links
+
+Each project buyer can hold optional `client_folder_url` (Google Drive) and
+`odoo_opportunity_url` (HTTPS, including custom Odoo domains and record fragments).
+Register/Edit buyer and Sales > Overview/Buyers expose these links. Edit client
+links from the sale to update the shared buyer record across its transactions.
+Blank/null clears either link; omission leaves it unchanged. No new link record
+or external content copy is created. Links open explicitly in a separate tab;
+Drive/Odoo permissions still apply and the server never fetches these URLs.
+
+Links follow contact-data visibility, including assigned-advisor scope. Summary
+readers do not receive the fields. Existing buyer writers may edit them; changes
+are audited by field name without copying URLs into audit. Existing buyer deletion
+and linked-history protection continue to apply.
+
+Buyer Excel templates and the Sales draft Buyer sheet include both columns.
+Previously downloaded templates without these optional columns remain valid.
+Re-importing an existing buyer retains the existing duplicate-skip behavior;
+edit that buyer to change its links. Migration 0064 adds nullable columns without
+backfill and refuses downgrade while any saved links remain.

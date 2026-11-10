@@ -54,7 +54,7 @@ def test_targeted_runner_count_is_planned_without_expanding_to_full_coverage() -
     assert "fromJSON(needs.scope.outputs.targeted_shards)" in targeted
     assert "fail-fast: false" in targeted
     assert "full_required == 'true'" in full
-    assert "matrix:" in full and "shard: [1, 2, 3, 4, 5, 6, 7, 8]" in full
+    assert "matrix:" in full and "shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]" in full
     assert "backend_system_static.result == 'success'" in full
 
 
@@ -82,8 +82,8 @@ def test_system_risk_can_still_require_complete_regression() -> None:
     static = block("backend_system_static")
     full = block("backend_system_full")
     assert "full_required == 'true'" in static
-    assert "ci_backend_shards.py --count 8" in static
-    assert "--shard ${{ matrix.shard }} --count 8" in full
+    assert "ci_backend_shards.py --count 10" in static
+    assert "--shard ${{ matrix.shard }} --count 10" in full
     assert "pytest -q $(tr" in full
     assert "--ignore" not in full and "--maxfail" not in full
     assert "fail-fast: false" in full
