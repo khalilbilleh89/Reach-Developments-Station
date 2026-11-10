@@ -11,6 +11,7 @@ from app.modules.audit.service import record_event
 from app.modules.projects.models import Project
 from app.modules.projects.permissions import whole_project_ids
 from app.modules.projects.service import lock_project
+from app.modules.sales.email_content import clean_email_html
 from app.modules.sales.email_models import CommercialEmail
 from app.modules.sales.email_schemas import EmailInput, EmailList, EmailRead, EmailUpdate
 from app.modules.sales.permissions import require_sales_reader
@@ -88,6 +89,8 @@ def create(
 ) -> EmailRead:
     _write(session, project, actor)
     row = CommercialEmail(project_id=project.id, **payload.model_dump())
+    if payload.body_html is not None:
+        row.body_html, row.body = clean_email_html(payload.body_html)
     session.add(row)
     session.flush()
     _audit(session, project, actor, "created", row)
@@ -106,7 +109,13 @@ def update(
     _write(session, project, actor)
     row = _row(session, project, email_id, payload.expected_version)
     before = _read(row).model_dump(mode="json")
-    row.title, row.body = payload.title, payload.body
+    if payload.body_html is not None:
+        row.body_html, body = clean_email_html(payload.body_html)
+    else:
+        body = payload.body
+        if "body_html" in payload.model_fields_set or body != row.body:
+            row.body_html = None
+    row.title, row.body = payload.title, body
     row.subject, row.category = payload.subject, payload.category
     row.version += 1
     _audit(session, project, actor, "updated", row, before)

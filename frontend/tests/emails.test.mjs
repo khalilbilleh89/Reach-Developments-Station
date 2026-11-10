@@ -21,11 +21,12 @@ const text = tree => tree == null ? "" : Array.isArray(tree) ? tree.map(text).jo
 const row = {id:"email-1", category:"internal", title:"Visit", subject:"Hello [Name]", body:"First line\nSecond line — مرحباً", version:2};
 
 test("compose copies customized Unicode text without changing the saved template", async () => {
-  let copied;
-  const render = mount("EmailsTab", "EmailComposer", {}, {row, onClose(){}}, {navigator:{clipboard:{writeText:async value => {copied=value;}}}});
-  nodes(render()).find(n=>n.type==="textarea").props.onChange({target:{value:"Dear Khalil\nمرحبا"}});
+  let copied, copiedHtml;
+  const render = mount("EmailsTab", "EmailComposer", {"@/lib/emailFormatting": {plainEmailHtml:value=>value, copyFormattedEmail:async(html,plain)=>{copied=plain;copiedHtml=html;return "formatted";}}}, {row, onClose(){}}, {navigator:{clipboard:{writeText:async value => {copied=value;}}}});
+  nodes(render()).find(n=>n.type==="EmailBodyEditor").props.onChange("Dear Khalil\nمرحبا", "<b>Dear Khalil</b><br>مرحبا");
   await nodes(render()).find(n=>text(n)==="Copy body").props.onClick();
   assert.equal(copied,"Dear Khalil\nمرحبا");
+  assert.equal(copiedHtml,"<b>Dear Khalil</b><br>مرحبا");
   assert.equal(row.body,"First line\nSecond line — مرحباً");
   assert.match(text(render()),/Email body copied/);
   assert.equal(nodes(render()).find(n=>n.type==="DraftBoundary").props.dirty,true);
@@ -56,12 +57,13 @@ test("failed template saves retain draft and expected version", async () => {
   let saved,closed=false;
   class ApiError extends Error {}
   const render=mount("EmailsTab","EmailEditor",{"@/lib/api":{ApiError},"@/lib/api/emails":{emails:{update:async(...args)=>{saved=args;throw new ApiError("Changed. Reload first.");}}}}, {projectId:"p",row,category:"internal",onClose(){},async onSaved(){closed=true;}});
-  nodes(render()).find(n=>n.type==="textarea").props.onChange({target:{value:"New\nbody"}});
+  nodes(render()).find(n=>n.type==="EmailBodyEditor").props.onChange("New\nbody", "<b>New</b><br>body");
   await nodes(render()).find(n=>n.type==="form").props.onSubmit({preventDefault(){}});
   assert.equal(saved[1].version,2);
   assert.equal(saved[2].body,"New\nbody");
   assert.equal(saved[2].category,"internal");
+  assert.equal(saved[2].body_html,"<b>New</b><br>body");
   assert.equal(closed,false);
-  assert.equal(nodes(render()).find(n=>n.type==="textarea").props.value,"New\nbody");
+  assert.equal(nodes(render()).find(n=>n.type==="EmailBodyEditor").props.body,"New\nbody");
   assert.match(text(render()),/Changed. Reload first/);
 });
