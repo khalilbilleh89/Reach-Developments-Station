@@ -202,7 +202,7 @@ def test_migration_roundtrip_and_retention(
 ) -> None:
     db.rollback()
     config = _alembic_config()
-    command.downgrade(config, "0066_client_links")
+    command.downgrade(config, "0067_email_rich_text")
     command.upgrade(config, "head")
     command.check(config)
     row = upload(manager_member_client, project_id).json()
@@ -215,7 +215,7 @@ def test_migration_roundtrip_and_retention(
     )
     db.rollback()
     with pytest.raises(RuntimeError, match="Site reports exist"):
-        command.downgrade(config, "0066_client_links")
+        command.downgrade(config, "0067_email_rich_text")
     db.rollback()
     assert db.get(ProjectSiteReport, uuid.UUID(row["id"])).is_deleted
 

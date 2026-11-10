@@ -1,14 +1,14 @@
 """Site report PDFs with metadata and retained removal.
 
-Revision ID: 0067_site_reports
-Revises: 0066_client_links
+Revision ID: 0068_site_reports
+Revises: 0067_email_rich_text
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0067_site_reports"
-down_revision = "0066_client_links"
+revision = "0068_site_reports"
+down_revision = "0067_email_rich_text"
 branch_labels = None
 depends_on = None
 

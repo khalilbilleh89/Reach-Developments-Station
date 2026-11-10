@@ -725,7 +725,7 @@
     "status": "implemented",
     "removal_route": "DELETE /{email_id}",
     "ui_file": "frontend/src/components/projects/EmailsTab.tsx",
-    "notes": "Whole-project email template writers delete after named reasoned confirmation. Version check and project lock prevent stale edits; full content remains in audit. No dependent records are created."
+    "notes": "Whole-project email template writers delete after named reasoned confirmation. Version check and project lock prevent stale edits; full content, including sanitized email formatting, remains in audit. No dependent records are created."
   },
   {
     "handler": "marketing.create_bio",

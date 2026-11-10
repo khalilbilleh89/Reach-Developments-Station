@@ -19,9 +19,13 @@ class CommercialEmail(Base):
     category: Mapped[str] = mapped_column(String(20), nullable=False)
     subject: Mapped[str] = mapped_column(String(500), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     __table_args__ = (
+        CheckConstraint(
+            "body_html IS NULL OR length(body_html) <= 100000", name="body_html_length"
+        ),
         CheckConstraint("category IN ('internal', 'clients', 'external')", name="category_valid"),
         CheckConstraint("length(trim(subject)) > 0", name="subject_nonempty"),
         CheckConstraint("length(trim(title)) > 0", name="title_nonempty"),

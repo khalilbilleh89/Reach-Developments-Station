@@ -25,7 +25,7 @@ removes the report from the register while retaining its original source,
 metadata and audit history. Reports do not certify a completion stage, approve
 an invoice or record a contractor payment.
 
-Storage is additive: migration 0067_site_reports follows 0066_client_links.
+Storage is additive: migration 0068_site_reports follows 0067_email_rich_text.
 Downgrade refuses a populated report table, including removed reports.
 Roll application code back while retaining the table when evidence exists.
 The new table is explicitly outside the legacy intake bundle.

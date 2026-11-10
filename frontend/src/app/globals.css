@@ -7455,6 +7455,20 @@ small { font-size: var(--text-xs); }
 
 .marketing-asset-preview { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: var(--surface-secondary); }
 
+
+/* Email authoring and pasted email fragments share native semantic formatting. */
+.email-format-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.email-rich-body { overflow-wrap: anywhere; line-height: 1.6; }
+.input.email-rich-editor { min-height: 20rem; max-height: 36rem; overflow-y: auto; white-space: pre-wrap; }
+.email-rich-body p, .email-rich-body div { margin: 0 0 0.6em; }
+.email-rich-body ul { list-style: disc; padding-inline-start: 1.8em; }
+.email-rich-body ol { list-style: decimal; padding-inline-start: 1.8em; }
+.email-rich-body li { display: list-item; margin-block: 0.25em; }
+.email-rich-body strong, .email-rich-body b { font-weight: 700; }
+.email-rich-body em, .email-rich-body i { font-style: italic; }
+.email-rich-body u { text-decoration: underline; }
+.email-rich-body s, .email-rich-body strike { text-decoration: line-through; }
+
 /* Procedure maps: labelled decisions and readable manual walkthroughs. */
 .procedure-intro { padding: 32px; border-radius: var(--radius-card); background: var(--accent-soft); border: 1px solid var(--line-default); }
 .procedure-intro h2 { font-size: var(--title-page); max-width: 34rem; }
