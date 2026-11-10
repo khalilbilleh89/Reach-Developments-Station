@@ -677,7 +677,7 @@
     "status": "implemented",
     "removal_route": "POST /{company_id}/delete",
     "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
-    "notes": "Whole-project authorized writers remove records after reasoned confirmation. Company removal blocks active bank accounts; rows and audit history are retained."
+    "notes": "Whole-project company writers remove records after reasoned confirmation. Active bank accounts, documents, logos and related companies block removal until explicitly removed or unlinked. Rows and audit history are retained."
   },
   {
     "handler": "projects.create_bank_account",
@@ -685,7 +685,7 @@
     "status": "implemented",
     "removal_route": "POST /{company_id}/bank-accounts/{account_id}/delete",
     "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
-    "notes": "Whole-project authorized writers remove records after reasoned confirmation. Company removal blocks active bank accounts; rows and audit history are retained."
+    "notes": "Finance and administrators with whole-project access remove accounts after reasoned confirmation. Bank details are hidden from other company readers. Rows and audit history are retained; removing a default releases the default slot."
   },
   {
     "notes": "Delete unused stages; retire stages with buyer entries. Audit and optimistic concurrency retained. Pipeline is a project-owned container, not a separately created record.",
@@ -974,5 +974,21 @@
     "removal_route": "POST /projects/{project_id}/technical-reports/{report_id}/delete",
     "ui_file": "frontend/src/components/projects/ReportsTab.tsx",
     "notes": "Whole-project Design editors remove with reason and expected version. Original PDF or Drive link, dated metadata and audit are retained. No downstream references or payment/certification effects."
+  },
+  {
+    "handler": "projects.create_company_document_link",
+    "create_route": "POST /{company_id}/documents/link",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/companies/{company_id}/documents/{document_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyDocuments.tsx",
+    "notes": "Drive links use the same versioned, reasoned retained removal as uploaded PDFs; no external content is deleted."
+  },
+  {
+    "handler": "projects.create_company_logo",
+    "create_route": "POST /{company_id}/logos",
+    "status": "implemented",
+    "removal_route": "POST /projects/{project_id}/companies/{company_id}/logos/{logo_id}/delete",
+    "ui_file": "frontend/src/components/projects/CompanyLogo.tsx",
+    "notes": "Finance/admin/project manager can remove logos with a reason; immutable normalized image and audit retained. Project/company scope checked; delete logo before deleting company."
   }
 ]

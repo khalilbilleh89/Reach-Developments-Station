@@ -20,7 +20,8 @@ bank address, correspondent bank and correspondent bank SWIFT.
 
 Whole-project membership is required. Master/System Administrators bypass membership.
 Project financial readers may read; administrators, project managers and Finance
-may create, edit and delete. Phase-only membership cannot read or change these
+may create, edit and delete company profiles and evidence. Bank reads and writes require
+Finance or an administrator; other company readers receive no bank rows. Phase-only membership cannot read or change these
 project-wide bank details. The UI gates requests before loading.
 
 Every company and bank account exposes Delete with a named, reasoned confirmation.
@@ -68,3 +69,35 @@ version, hides the entry and retains its PDF/history. Replace by uploading anoth
 removing the superseded one. Active documents block company removal. Migration
 0047_company_documents is additive and refuses downgrade if any PDF entry exists, including
 removed entries. No backfill or new dependencies.
+
+
+## Extended company profile (0069_company_profile)
+
+Optional project role and corporate relationship use named dropdowns. Related companies
+must be active in the same project, cannot reference themselves or form cycles, and block
+removal until unlinked. Ownership share in the project is an exact 0–100 percentage with
+up to four decimal places, transported as a string, with no browser arithmetic. Incorporation
+date and status are optional. No screenshot example is imported as business data.
+
+Bank entries add purpose, registered currency, default-for-payments, last verified date,
+status and country. At most one active register entry per company can be the payment default;
+an inactive account cannot be the default. Clear the old default explicitly before switching.
+These are instructions only; no payment is initiated. Changes remain auditable.
+
+Documents accept exactly one immutable source: uploaded PDF or HTTPS Google Drive/Docs
+sharing link. The application does not fetch Drive content or change sharing permissions.
+Category, project/land reference text, issue/expiry/reminder dates and verification status are
+optional metadata. The current company owns the document. A reminder date requires an expiry
+on or after that date; expiry cannot precede issue. Server UTC calendar dates determine
+renewal-due/expired badges in the register. No email or background notification is sent.
+Metadata edits and retained deletion keep the existing optimistic version check.
+
+Optional company logos accept PNG/JPEG/WebP up to 5 MiB / 4 million pixels. The server verifies
+and re-encodes fresh PNG pixels, strips metadata, serves only after project authorization,
+and never exposes bytes in list/audit responses. Delete with a reason before replacement;
+removed images remain retained. Active logos block company deletion.
+
+Migration 0069 adds nullable fields, permits the PDF-or-link source constraint and adds
+company_logos. Existing PDF bytes and hashes are unchanged. Empty new fields can downgrade;
+any new profile value, source link or retained logo blocks downgrade to prevent evidence loss.
+Roll forward after using the feature. No new dependency or environment variable is needed.

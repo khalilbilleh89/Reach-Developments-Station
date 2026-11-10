@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.projects import company_document_service as documents
+from app.modules.projects import company_logo_service as logos
 from app.modules.projects import company_service as service
 from app.modules.projects.company_models import CompanyBankAccount, ProjectCompany
 from app.modules.projects.company_schemas import (
@@ -17,6 +18,7 @@ from app.modules.projects.company_schemas import (
     BankAccountWrite,
     CompanyDetail,
     CompanyWrite,
+    DocumentLink,
     DocumentRead,
     DocumentRemoval,
     DocumentUpdate,
@@ -37,7 +39,7 @@ def list_companies(
         .where(ProjectCompany.project_id == project_id, ProjectCompany.is_deleted.is_(False))
         .order_by(ProjectCompany.created_at, ProjectCompany.id)
     ).all()
-    return [service.detail(session, row) for row in rows]
+    return [service.detail(session, row, actor) for row in rows]
 
 
 @router.post("", response_model=CompanyDetail, status_code=201)
@@ -47,7 +49,7 @@ def create_company(
     service.scope(session, project_id, actor, write=True)
     row = ProjectCompany(project_id=project_id)
     service.save(session, row, body.model_dump(), actor, creating=True)
-    return service.detail(session, row)
+    return service.detail(session, row, actor)
 
 
 @router.patch("/{company_id}", response_model=CompanyDetail)
@@ -61,7 +63,7 @@ def update_company(
     service.scope(session, project_id, actor, write=True)
     row = service.company(session, project_id, company_id)
     service.save(session, row, body.model_dump(exclude_unset=True), actor, creating=False)
-    return service.detail(session, row)
+    return service.detail(session, row, actor)
 
 
 @router.post("/{company_id}/delete", status_code=204)
@@ -86,6 +88,7 @@ def create_bank_account(
     actor: ActiveActor,
 ) -> BankAccountRead:
     service.scope(session, project_id, actor, write=True)
+    service.bank_permission(actor)
     service.company(session, project_id, company_id)
     row = CompanyBankAccount(company_id=company_id)
     service.save(session, row, body.model_dump(), actor, creating=True)
@@ -102,6 +105,7 @@ def update_bank_account(
     actor: ActiveActor,
 ) -> BankAccountRead:
     service.scope(session, project_id, actor, write=True)
+    service.bank_permission(actor)
     service.company(session, project_id, company_id)
     row = service.account(session, company_id, account_id)
     service.save(session, row, body.model_dump(exclude_unset=True), actor, creating=False)
@@ -118,6 +122,7 @@ def delete_bank_account(
     actor: ActiveActor,
 ) -> Response:
     service.scope(session, project_id, actor, write=True)
+    service.bank_permission(actor)
     service.company(session, project_id, company_id)
     service.remove(session, service.account(session, company_id, account_id), actor, body.reason)
     return Response(status_code=204)
@@ -158,6 +163,7 @@ async def create_company_document(
         fields.label,
         fields.filename,
         bytes(data),
+        fields.model_dump(exclude={"label", "filename"}),
     )
     return DocumentRead.model_validate(row)
 
@@ -174,7 +180,14 @@ def update_company_document(
     service.scope(session, project_id, actor, write=True)
     service.company(session, project_id, company_id)
     row = documents.document(session, company_id, document_id)
-    documents.change(session, row, actor, body.expected_version, label=body.label)
+    documents.change(
+        session,
+        row,
+        actor,
+        body.expected_version,
+        label=body.label,
+        metadata=body.model_dump(exclude={"label", "expected_version"}, exclude_unset=True),
+    )
     return DocumentRead.model_validate(row)
 
 
@@ -189,6 +202,8 @@ def download_company_document(
     service.scope(session, project_id, actor)
     service.company(session, project_id, company_id)
     row = documents.document(session, company_id, document_id)
+    if row.source_url:
+        raise HTTPException(status_code=409, detail="Open the Google Drive link for this document.")
     return Response(
         content=row.document,
         media_type="application/octet-stream",
@@ -218,4 +233,68 @@ def delete_company_document(
         body.expected_version,
         reason=body.reason,
     )
+    return Response(status_code=204)
+
+
+@router.post("/{company_id}/documents/link", response_model=DocumentRead, status_code=201)
+def create_company_document_link(
+    project_id: uuid.UUID,
+    company_id: uuid.UUID,
+    body: DocumentLink,
+    session: DbSession,
+    actor: ActiveActor,
+) -> DocumentRead:
+    return DocumentRead.model_validate(
+        documents.create_link(session, project_id, company_id, actor, body.model_dump())
+    )
+
+
+@router.post("/{company_id}/logos", status_code=201)
+async def create_company_logo(
+    project_id: uuid.UUID,
+    company_id: uuid.UUID,
+    request: Request,
+    session: DbSession,
+    actor: ActiveActor,
+) -> dict:
+    await run_in_threadpool(documents.authorize_upload, session, project_id, company_id, actor)
+    data = bytearray()
+    async for chunk in request.stream():
+        if len(data) + len(chunk) > logos.MAX_LOGO_BYTES:
+            raise HTTPException(status_code=413, detail="Choose a logo up to 5 MB.")
+        data.extend(chunk)
+    row = await run_in_threadpool(logos.create, session, project_id, company_id, actor, bytes(data))
+    return {"id": row.id}
+
+
+@router.get("/{company_id}/logos/{logo_id}")
+def read_company_logo(
+    project_id: uuid.UUID,
+    company_id: uuid.UUID,
+    logo_id: uuid.UUID,
+    session: DbSession,
+    actor: ActiveActor,
+) -> Response:
+    service.scope(session, project_id, actor)
+    service.company(session, project_id, company_id)
+    row = logos.get_logo(session, company_id, logo_id)
+    return Response(
+        content=row.image,
+        media_type="image/png",
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
+    )
+
+
+@router.post("/{company_id}/logos/{logo_id}/delete", status_code=204)
+def delete_company_logo(
+    project_id: uuid.UUID,
+    company_id: uuid.UUID,
+    logo_id: uuid.UUID,
+    body: RemovalRequest,
+    session: DbSession,
+    actor: ActiveActor,
+) -> Response:
+    service.scope(session, project_id, actor, write=True)
+    service.company(session, project_id, company_id)
+    logos.remove(session, logos.get_logo(session, company_id, logo_id), actor, body.reason)
     return Response(status_code=204)
