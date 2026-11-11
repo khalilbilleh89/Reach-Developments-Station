@@ -38,6 +38,11 @@ class CurrencyFieldPolicy:
 # This is a review boundary, not a mutation map. Every project-scoped currency
 # column is listed, including the fields that correction deliberately preserves.
 FIELD_POLICIES: dict[str, dict[str, CurrencyFieldPolicy]] = {
+    "operations_commissions": {
+        "currency_id": CurrencyFieldPolicy(
+            "Commissions", "fixed operations commission denomination at entry", "preserve"
+        )
+    },
     "leasing_instructions": {
         "currency_id": CurrencyFieldPolicy(
             "Leasing", "frozen denomination of owner instruction and tenancy terms", "preserve"

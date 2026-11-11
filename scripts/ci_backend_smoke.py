@@ -180,6 +180,8 @@ DOMAIN_SMOKE: dict[str, tuple[str, ...]] = {
         "tests/modules/test_consultant_engineering.py::test_commercial_reader_is_refused",
     ),
     "commissions": (
+        "tests/modules/test_commissions_operations.py::test_operations_lifecycle_and_retention",
+        "tests/modules/test_commissions_operations.py::test_operations_phase_scope_denied",
         "tests/modules/test_commissions_review.py::test_financial_independence_and_immutable_history",
         "tests/modules/test_commissions.py::test_150k_golden_decimal_calculation",
         "tests/modules/test_commissions.py::test_reconciliation_and_maker_checker",
@@ -371,6 +373,10 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "0026_common_areas.py": (
         "inventory",
         ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
+    ),
+    "0070_operations_commissions.py": (
+        "commissions",
+        ("tests/modules/test_commissions_operations.py::test_operations_migration_roundtrip",),
     ),
     "0069_company_profile.py": (
         "projects",

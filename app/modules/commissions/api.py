@@ -9,9 +9,11 @@ from fastapi import APIRouter, status
 
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.commissions import schemas, service
+from app.modules.commissions.operations_api import router as operations_router
 from app.modules.commissions.permissions import CommissionProject
 
 router = APIRouter(prefix="/projects/{project_id}/commissions", tags=["commissions"])
+router.include_router(operations_router)
 
 
 @router.get("", response_model=list[schemas.GrantOut])

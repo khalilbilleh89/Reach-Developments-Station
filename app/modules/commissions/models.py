@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -155,4 +156,43 @@ class CommissionAllocation(Base):
         CheckConstraint("rate_fraction > 0 AND rate_fraction <= 1", name="rate_range"),
         CheckConstraint("calculated_amount > 0", name="amount_positive"),
         CheckConstraint("sequence > 0", name="sequence_positive"),
+    )
+
+
+class OperationsCommission(Base):
+    """A fixed client-linked commission entry; recording it is not a cash payment."""
+
+    __tablename__ = "operations_commissions"
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    client_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    client_display: Mapped[str] = mapped_column(String(300), nullable=False)
+    beneficiary_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(2000), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    currency_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("currencies.id", ondelete="RESTRICT"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["client_id", "project_id"],
+            ["clients.id", "clients.project_id"],
+            ondelete="RESTRICT",
+            name="fk_ops_commission_client",
+        ),
+        CheckConstraint("amount > 0 AND amount < 'Infinity'::numeric", name="amount_positive"),
+        CheckConstraint("length(trim(beneficiary_name)) > 0", name="beneficiary_present"),
+        CheckConstraint("length(trim(reason)) > 0", name="reason_present"),
+        CheckConstraint("version > 0", name="version_positive"),
     )
