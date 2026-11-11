@@ -19,6 +19,7 @@ function harness() {
       const i = cursor++; slots[i] ??= { value: typeof initial === "function" ? initial() : initial };
       return [slots[i].value, value => { slots[i].value = value; }];
     }};
+    if (key === "@/lib/format") return { businessDate: value => value };
     if (key === "@/lib/api") return { ApiError };
     if (key === "@/lib/api/companies") return { companyDocuments: {} };
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
@@ -88,3 +89,31 @@ test("multiple labeled PDFs have independent edit and delete actions; readers ca
   assert.equal(find(tree, "Button").filter(node => node.props.children === "Download PDF").length, 2);
 });
 
+
+
+test("Drive source submits a link with optional metadata and no PDF", async () => {
+  const h = harness(); let saved;
+  const props = { onSave: async (...args) => { saved = args; }, onClose() {}, onSaved() {} };
+  let tree = h.render("CompanyDocumentForm", props);
+  find(tree, "input")[0].props.onChange({ target: { value: "Registration" } });
+  tree = h.render("CompanyDocumentForm", props);
+  find(tree, "select")[0].props.onChange({ target: { value: "drive" } });
+  tree = h.render("CompanyDocumentForm", props);
+  assert.ok(!find(tree, "input").some(node => node.props.type === "file"));
+  find(tree, "input").find(node => node.props.type === "url").props.onChange({ target: { value: "https://drive.google.com/file/d/example/view" } });
+  tree = h.render("CompanyDocumentForm", props);
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(saved[0], "Registration");
+  assert.equal(saved[1], null);
+  assert.equal(saved[2].expiry_date, null);
+  assert.equal(saved[3], "https://drive.google.com/file/d/example/view");
+});
+
+test("Drive document renders an external link and renewal state without a download action", () => {
+  const h = harness();
+  h.setAnswer({ status: "ready", data: [{ id: "link", label: "Licence", filename: null, source_url: "https://drive.google.com/file/d/example/view", version: 1, reminder_status: "expired" }] });
+  const tree = h.render("CompanyDocuments", { projectId: "project", companyId: "company", canWrite: true });
+  assert.equal(find(tree, "a")[0].props.rel, "noopener noreferrer");
+  assert.ok(!find(tree, "Button").some(node => String(node.props["aria-label"]).startsWith("Download PDF")));
+  assert.equal(find(tree, "CardRow")[0].props.facts.find(fact => fact.label === "Renewal").value, "Expired");
+});

@@ -372,6 +372,10 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "inventory",
         ("tests/modules/test_feasibility.py::test_common_area_migration_roundtrip",),
     ),
+    "0069_company_profile.py": (
+        "projects",
+        ("tests/modules/test_project_company.py::test_profile_migration_retains_legacy_pdf",),
+    ),
     "0047_company_documents.py": (
         "projects",
         ("tests/modules/test_project_company.py::test_document_migration_preserves_retained_pdf",),

@@ -425,3 +425,225 @@ def test_document_stream_does_not_lock_project_and_rechecks_parent(
     )
     assert lock_attempts == [True]
     assert result.status_code == 404
+
+
+def test_profile_fields_relationships_and_bank_privacy(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    parent = create(admin_client, project_id, legal_name="Parent")
+    child = create(
+        admin_client,
+        project_id,
+        project_role="project_company_spv",
+        relationship="subsidiary",
+        related_company_id=parent["id"],
+        ownership_percentage="25.1250",
+        incorporation_date="2020-02-29",
+        status="under_review",
+    )
+    base = f"{url(project_id)}/{child['id']}"
+    assert child["ownership_percentage"] == "25.1250"
+    for payload in (
+        {"project_role": "bad"},
+        {"ownership_percentage": "100.0001"},
+        {"incorporation_date": "2020-02-30"},
+        {"related_company_id": child["id"]},
+    ):
+        assert admin_client.patch(base, json=payload).status_code == 422
+    assert (
+        admin_client.patch(
+            f"{url(project_id)}/{parent['id']}", json={"related_company_id": child["id"]}
+        ).status_code
+        == 422
+    )
+    assert (
+        admin_client.post(
+            f"{url(project_id)}/{parent['id']}/delete", json={"reason": "linked"}
+        ).status_code
+        == 409
+    )
+    account = admin_client.post(
+        f"{base}/bank-accounts",
+        json={
+            "default_for_payments": True,
+            "currency_code": "JOD",
+            "status": "active",
+            "account_purpose": "escrow",
+            "last_verified_date": "2026-01-01",
+            "bank_country": "Example",
+        },
+    )
+    assert account.status_code == 201, account.text
+    assert (
+        admin_client.post(f"{base}/bank-accounts", json={"default_for_payments": True}).status_code
+        == 409
+    )
+    account_url = f"{base}/bank-accounts/{account.json()['id']}"
+    assert admin_client.patch(account_url, json={"status": "inactive"}).status_code == 422
+    assert (
+        admin_client.patch(
+            account_url, json={"default_for_payments": False, "status": "inactive"}
+        ).status_code
+        == 200
+    )
+    user = make_user(db, email="company-pm@example.test", roles=("project_manager",))
+    grant_access(admin_client, project_id, user)
+    client = client_for(user.email)
+    assert all(row["bank_accounts"] == [] for row in client.get(url(project_id)).json())
+    assert client.post(f"{base}/bank-accounts", json={}).status_code == 403
+    assert client.patch(account_url, json={}).status_code == 403
+    assert client.post(f"{account_url}/delete", json={"reason": "denied"}).status_code == 403
+    assert (
+        admin_client.patch(
+            base, json={"related_company_id": None, "ownership_percentage": None}
+        ).status_code
+        == 200
+    )
+    assert (
+        admin_client.post(
+            f"{url(project_id)}/{parent['id']}/delete", json={"reason": "unlinked"}
+        ).status_code
+        == 204
+    )
+
+
+def test_document_drive_metadata_and_retention(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    company = create(admin_client, project_id)
+    base = f"{url(project_id)}/{company['id']}"
+    payload = {
+        "label": "Certificate",
+        "source_url": "https://drive.google.com/file/d/example/view",
+        "category": "Registration",
+        "linked_record": "Project record",
+        "issue_date": "2020-01-01",
+        "expiry_date": "2021-01-01",
+        "reminder_date": "2020-12-01",
+        "verification_status": "verified",
+    }
+    result = admin_client.post(f"{base}/documents/link", json=payload)
+    assert result.status_code == 201, result.text
+    row = result.json()
+    assert row["reminder_status"] == "expired" and row["filename"] is None
+    item = f"{base}/documents/{row['id']}"
+    assert admin_client.get(f"{item}/file").status_code == 409
+    assert (
+        admin_client.patch(
+            item, json={"label": "Certificate", "expected_version": 1, "expiry_date": "2019-01-01"}
+        ).status_code
+        == 422
+    )
+    updated = admin_client.patch(
+        item,
+        json={
+            "label": "Updated",
+            "expected_version": 1,
+            "category": None,
+            "verification_status": "needs_review",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["category"] is None and updated.json()["issue_date"] == "2020-01-01"
+    assert (
+        admin_client.post(
+            f"{item}/delete", json={"reason": "old", "expected_version": 1}
+        ).status_code
+        == 409
+    )
+    assert (
+        admin_client.post(
+            f"{item}/delete", json={"reason": "old", "expected_version": 2}
+        ).status_code
+        == 204
+    )
+    retained = db.get(CompanyDocument, uuid.UUID(row["id"]))
+    assert retained.is_deleted and retained.source_url == payload["source_url"]
+    for link in (
+        "javascript:alert(1)",
+        "http://drive.google.com/file/d/one",
+        "https://drive.google.com.evil.test/file",
+        "https://evil@drive.google.com/file",
+        "https://drive.google.com/",
+    ):
+        assert (
+            admin_client.post(
+                f"{base}/documents/link", json={"label": "Bad", "source_url": link}
+            ).status_code
+            == 422
+        )
+    uploaded = admin_client.post(
+        f"{base}/documents",
+        params={
+            "label": "PDF",
+            "filename": "certificate.pdf",
+            "expiry_date": "2030-01-01",
+            "verification_status": "needs_review",
+        },
+        content=PDF,
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["expiry_date"] == "2030-01-01"
+
+
+def test_logo_scope_validation_and_retained_removal(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    import io
+
+    from PIL import Image
+
+    from app.modules.projects.company_models import CompanyLogo
+
+    company = create(admin_client, project_id)
+    other = create(admin_client, project_id)
+    base = f"{url(project_id)}/{company['id']}"
+    assert admin_client.post(f"{base}/logos", content=b"<svg></svg>").status_code == 422
+    image = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(image, format="PNG")
+    result = admin_client.post(f"{base}/logos", content=image.getvalue())
+    assert result.status_code == 201, result.text
+    logo_id = result.json()["id"]
+    logo = f"{base}/logos/{logo_id}"
+    assert admin_client.get(logo).content.startswith(b"\x89PNG")
+    assert admin_client.get(f"{url(project_id)}/{other['id']}/logos/{logo_id}").status_code == 404
+    assert admin_client.post(f"{base}/logos", content=image.getvalue()).status_code == 409
+    assert admin_client.post(f"{base}/delete", json={"reason": "logo"}).status_code == 409
+    user = make_user(db, email="company-logo-read@example.test", roles=("auditor",))
+    grant_access(admin_client, project_id, user)
+    reader = client_for(user.email)
+    assert reader.get(logo).status_code == 200
+    assert reader.post(f"{base}/logos", content=image.getvalue()).status_code == 403
+    assert reader.post(f"{logo}/delete", json={"reason": "denied"}).status_code == 403
+    assert admin_client.post(f"{logo}/delete", json={"reason": "replace"}).status_code == 204
+    assert admin_client.post(f"{logo}/delete", json={"reason": "again"}).status_code == 404
+    assert admin_client.get(logo).status_code == 404
+    assert db.get(CompanyLogo, uuid.UUID(logo_id)).image
+    audit = db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.entity_type == "company_logo",
+            AuditEvent.entity_id == uuid.UUID(logo_id),
+            AuditEvent.action == "delete",
+        )
+    )
+    assert audit.reason == "replace"
+    assert admin_client.post(f"{base}/delete", json={"reason": "done"}).status_code == 204
+
+
+def test_profile_migration_retains_legacy_pdf(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    company = create(admin_client, project_id)
+    base = f"{url(project_id)}/{company['id']}"
+    row = upload_document(admin_client, base).json()
+    db.rollback()
+    command.downgrade(config, "0068_site_reports")
+    command.upgrade(config, "head")
+    command.check(config)
+    assert db.get(CompanyDocument, uuid.UUID(row["id"])).document == PDF
+    db.rollback()
+    assert admin_client.patch(base, json={"project_role": "developer"}).status_code == 200
+    with pytest.raises(RuntimeError, match="Company profile data exists"):
+        command.downgrade(config, "0068_site_reports")
+    command.upgrade(config, "head")

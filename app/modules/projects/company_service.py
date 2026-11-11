@@ -8,10 +8,16 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
-from app.modules.projects.company_models import CompanyBankAccount, CompanyDocument, ProjectCompany
+from app.modules.projects.company_models import (
+    CompanyBankAccount,
+    CompanyDocument,
+    CompanyLogo,
+    ProjectCompany,
+)
 from app.modules.projects.company_schemas import BankAccountRead, CompanyDetail
 from app.modules.projects.models import Project
 from app.modules.projects.permissions import FINANCIAL_ROLES, whole_project_ids
+from app.modules.settings.models import Currency
 
 COMPANY_READERS = FINANCIAL_ROLES
 COMPANY_WRITERS = frozenset({"system_admin", "project_manager", "finance"})
@@ -63,7 +69,7 @@ def account(session: Session, company_id: uuid.UUID, account_id: uuid.UUID) -> C
     return row
 
 
-def detail(session: Session, row: ProjectCompany) -> CompanyDetail:
+def detail(session: Session, row: ProjectCompany, actor: ActorContext) -> CompanyDetail:
     accounts = session.scalars(
         select(CompanyBankAccount)
         .where(
@@ -72,10 +78,64 @@ def detail(session: Session, row: ProjectCompany) -> CompanyDetail:
         )
         .order_by(CompanyBankAccount.created_at, CompanyBankAccount.id)
     ).all()
+    if not can_access_bank(actor):
+        accounts = []
     return CompanyDetail(
-        **{key: getattr(row, key) for key in CompanyDetail.model_fields if key != "bank_accounts"},
+        **{
+            key: getattr(row, key)
+            for key in CompanyDetail.model_fields
+            if key not in {"bank_accounts", "logo_id"}
+        },
         bank_accounts=[BankAccountRead.model_validate(item) for item in accounts],
+        logo_id=session.scalar(
+            select(CompanyLogo.id).where(
+                CompanyLogo.company_id == row.id, CompanyLogo.is_deleted.is_(False)
+            )
+        ),
     )
+
+
+def can_access_bank(actor: ActorContext) -> bool:
+    return actor.is_system_admin or bool(actor.role_keys.intersection({"system_admin", "finance"}))
+
+
+def bank_permission(actor: ActorContext) -> None:
+    if not can_access_bank(actor):
+        raise PermissionDeniedError(
+            "Bank details are available to finance and administrators only."
+        )
+
+
+def validate_profile(session: Session, row: ProjectCompany | CompanyBankAccount) -> None:
+    if isinstance(row, ProjectCompany):
+        seen = {row.id}
+        related_id = row.related_company_id
+        while related_id is not None:
+            if related_id in seen:
+                raise ValidationError(
+                    "Company relationships must not link a company to itself or form a cycle."
+                )
+            seen.add(related_id)
+            related = company(session, row.project_id, related_id)
+            related_id = related.related_company_id
+    else:
+        if row.currency_code and not session.scalar(
+            select(Currency.id).where(Currency.code == row.currency_code)
+        ):
+            raise ValidationError("Select a registered currency.")
+        if row.default_for_payments:
+            if row.status == "inactive":
+                raise ValidationError("An inactive bank account cannot be the payment default.")
+            existing = session.scalar(
+                select(CompanyBankAccount.id).where(
+                    CompanyBankAccount.company_id == row.company_id,
+                    CompanyBankAccount.id != row.id,
+                    CompanyBankAccount.is_deleted.is_(False),
+                    CompanyBankAccount.default_for_payments.is_(True),
+                )
+            )
+            if existing:
+                raise ConflictError("Clear the existing default account before choosing another.")
 
 
 def snapshot(row: ProjectCompany | CompanyBankAccount) -> dict:
@@ -93,6 +153,8 @@ def save(
     before = None if creating else snapshot(row)
     for key, value in values.items():
         setattr(row, key, value.strip() or None if isinstance(value, str) else value)
+    with session.no_autoflush:
+        validate_profile(session, row)
     if creating:
         session.add(row)
     session.flush()
@@ -137,6 +199,19 @@ def remove(
         is not None
     ):
         raise ConflictError("Delete this company's documents before deleting the company.")
+    if isinstance(row, ProjectCompany):
+        if session.scalar(
+            select(ProjectCompany.id).where(
+                ProjectCompany.related_company_id == row.id, ProjectCompany.is_deleted.is_(False)
+            )
+        ):
+            raise ConflictError("Unlink related companies before deleting this company.")
+        if session.scalar(
+            select(CompanyLogo.id).where(
+                CompanyLogo.company_id == row.id, CompanyLogo.is_deleted.is_(False)
+            )
+        ):
+            raise ConflictError("Delete this company's logo before deleting the company.")
     before = snapshot(row)
     row.is_deleted = True
     session.flush()

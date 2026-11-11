@@ -98,6 +98,7 @@ def create_locked(
     label: str,
     filename: str,
     data: bytes,
+    metadata: dict | None = None,
 ) -> CompanyDocument:
     company_service.scope(session, project_id, actor, write=True)
     company_service.company(session, project_id, company_id)
@@ -121,6 +122,7 @@ def create_locked(
         document=data,
         sha256=hashlib.sha256(data).hexdigest(),
     )
+    apply_metadata(row, metadata or {})
     session.add(row)
     audit(session, row, actor, "create")
     return row
@@ -134,6 +136,7 @@ def change(
     *,
     label: str | None = None,
     reason: str | None = None,
+    metadata: dict | None = None,
 ) -> None:
     if row.version != expected_version:
         raise ConflictError("This document changed. Reload the register before trying again.")
@@ -144,5 +147,31 @@ def change(
         row.is_deleted = True
     else:
         row.label = label
+        apply_metadata(row, metadata or {})
     row.version += 1
     audit(session, row, actor, "delete" if reason is not None else "update", before, reason)
+
+
+def apply_metadata(row: CompanyDocument, values: dict) -> None:
+    for key, value in values.items():
+        setattr(row, key, value.strip() or None if isinstance(value, str) else value)
+    if row.issue_date and row.expiry_date and row.issue_date > row.expiry_date:
+        raise ValidationError("Expiry date must be on or after the issue date.")
+    if row.reminder_date and (not row.expiry_date or row.reminder_date > row.expiry_date):
+        raise ValidationError("A renewal reminder needs an expiry date on or after the reminder.")
+
+
+def create_link(
+    session: Session,
+    project_id: uuid.UUID,
+    company_id: uuid.UUID,
+    actor: ActorContext,
+    values: dict,
+) -> CompanyDocument:
+    company_service.scope(session, project_id, actor, write=True)
+    company_service.company(session, project_id, company_id)
+    row = CompanyDocument(company_id=company_id)
+    apply_metadata(row, values)
+    session.add(row)
+    audit(session, row, actor, "create")
+    return row
