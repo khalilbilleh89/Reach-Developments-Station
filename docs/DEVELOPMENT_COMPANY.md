@@ -101,3 +101,23 @@ Migration 0069 adds nullable fields, permits the PDF-or-link source constraint a
 company_logos. Existing PDF bytes and hashes are unchanged. Empty new fields can downgrade;
 any new profile value, source link or retained logo blocks downgrade to prevent evidence loss.
 Roll forward after using the feature. No new dependency or environment variable is needed.
+
+## Parent-company entry and profile layout
+
+Company details and editors group identity/registration, project/ownership, contacts and notes.
+Bank editors group account information separately from routing/verification. Company removal
+remains available through Delete company with the existing reason and retained audit history.
+
+Within Edit/Add company, Add parent company opens optional registration and contact fields
+inside the full-page editor. Existing selections expose Edit parent company details. The
+original company draft stays mounted. Parent saves use existing scoped company endpoints;
+the saved parent is selected immediately, and saving the original company confirms the link.
+Cancelling the original form does not delete an already-saved parent; this is explained before
+and after the parent save. The parent remains accessible through the company selector and
+has the same retained Delete path as every other company. Cancel/Back protects unsaved drafts.
+The relationship describes the current company: select Subsidiary when linking to its parent.
+Open parent / related company navigates to the linked profile from the saved details.
+
+The proposed Accounting & Tax field specification is in
+[COMPANY_ACCOUNTING_PROPOSAL.md](COMPANY_ACCOUNTING_PROPOSAL.md). It is a recommendation for
+review, not an implemented tax register or a determination of any company's tax liability.

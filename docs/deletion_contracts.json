@@ -677,7 +677,7 @@
     "status": "implemented",
     "removal_route": "POST /{company_id}/delete",
     "ui_file": "frontend/src/components/projects/CompanyTab.tsx",
-    "notes": "Whole-project company writers remove records after reasoned confirmation. Active bank accounts, documents, logos and related companies block removal until explicitly removed or unlinked. Rows and audit history are retained."
+    "notes": "Whole-project company writers remove records through Delete company after reasoned confirmation. Add parent company uses this same company creation route; its saved record remains in the company selector even if the original draft is cancelled, with the same Delete action. Active bank accounts, documents, logos and related companies block removal until explicitly removed or unlinked. Rows and audit history are retained."
   },
   {
     "handler": "projects.create_bank_account",
