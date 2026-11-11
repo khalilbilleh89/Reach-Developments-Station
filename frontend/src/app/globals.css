@@ -7590,3 +7590,9 @@ small { font-size: var(--text-xs); }
   .analytics-cover h2 { margin-top: 8mm; font-size: 14pt; }
   .analytics-cover > p { font-size: 9pt; line-height: 1.5; }
 }
+
+/* Company records: identity first, then clearly separated business sections. */
+.company-profile-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-block: var(--space-4) var(--space-5); color: var(--text-secondary); }
+.company-profile-sections { display: grid; gap: var(--space-5); }
+.company-profile-section { min-width: 0; border-top: 1px solid var(--line-soft); padding-top: var(--space-5); }
+.company-relationship-tools { margin-top: var(--space-4); }

@@ -81,7 +81,7 @@ test("two accounts appear independently and denied readers do not request compan
   ] }] });
   const tree = h.render("CompanyTab", { projectId: "project", roles: new Set(["finance"]) });
   assert.equal(h.enabled(), true);
-  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Company Information", "Bank Details", "First Bank", "Second Bank"]);
+  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Example", "Identity & registration", "Project & ownership", "Address & contacts", "Notes", "Bank Details", "First Bank", "Second Bank"]);
   assert.equal(find(tree, "DeleteRecordButton").length, 3);
   h.setAnswer({ status: "off" });
   h.render("CompanyTab", { projectId: "project", roles: new Set(["sales_advisor"]) });
@@ -113,4 +113,54 @@ test("non-finance readers never render bank details even if a response contains 
   h.setAnswer({ status: "ready", data: [{ id: "company", legal_name: "Example", bank_accounts: [{ id: "bank", account_number: "secret" }] }] });
   const tree = h.render("CompanyTab", { projectId: "project", roles: new Set(["project_manager"]) });
   assert.ok(!find(tree, "SectionHeader").some(node => node.props.title === "Bank Details"));
+});
+
+test("adding a parent selects the saved record and preserves the company draft", async () => {
+  const h = harness(); let saved; let parentValues;
+  const parent = { id: "parent-1", legal_name: "Parent Ltd", registration_number: "0012", bank_accounts: [] };
+  const props = { title: "Edit company", fields: h.exports.COMPANY_FIELDS, initial: { legal_name: "Original" }, relatedCompanies: [],
+    onSaveRelated: async values => { parentValues = values; return parent; }, onSave: async values => { saved = values; }, onClose() {} };
+  let tree = h.render("CompanyEntryForm", props);
+  find(tree, "Field").find(node => node.props.label === "Legal company name").props.children.props.onChange({ target: { value: "Draft company" } });
+  tree = h.render("CompanyEntryForm", props);
+  find(tree, "Button").find(node => node.props.children === "Add parent company").props.onClick();
+  tree = h.render("CompanyEntryForm", props);
+  assert.equal(find(tree, "Button").find(node => node.props.type === "submit").props.disabled, true);
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(saved, undefined);
+  const editor = find(tree, h.exports.RelatedCompanyEditor)[0];
+  await editor.props.onSave({ legal_name: "Parent Ltd", registration_number: "0012" });
+  editor.props.onClose();
+  tree = h.render("CompanyEntryForm", props);
+  assert.equal(parentValues.registration_number, "0012");
+  const relation = find(tree, "Field").find(node => node.props.label === "Parent or related company").props.children;
+  assert.equal(relation.props.value, parent.id);
+  assert.ok(find(relation, "option").some(node => node.props.children === "Parent Ltd"));
+  find(tree, "Button").find(node => node.props.children === "Edit parent company details").props.onClick();
+  tree = h.render("CompanyEntryForm", props);
+  const edit = find(tree, h.exports.RelatedCompanyEditor)[0];
+  assert.equal(edit.props.row.id, parent.id);
+  edit.props.onClose();
+  tree = h.render("CompanyEntryForm", props);
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(saved.legal_name, "Draft company");
+  assert.equal(saved.related_company_id, parent.id);
+});
+
+test("parent save failure retains entries and never submits a nested form", async () => {
+  const h = harness(); let closed = false; const busyStates = [];
+  const props = { onSave: async () => { throw new h.ApiError("Parent save refused"); }, onClose() { closed = true; }, onBusy(value) { busyStates.push(value); } };
+  let tree = h.render("RelatedCompanyEditor", props);
+  assert.equal(find(tree, "form").length, 0);
+  assert.ok(find(tree, "Field").every(field => field.props.optional));
+  find(tree, "input")[0].props.onChange({ target: { value: "Unsaved parent" } });
+  tree = h.render("RelatedCompanyEditor", props);
+  await find(tree, "Button").find(node => node.props.children === "Save parent company").props.onClick();
+  tree = h.render("RelatedCompanyEditor", props);
+  assert.equal(find(tree, "input")[0].props.value, "Unsaved parent");
+  assert.equal(find(tree, "DraftBoundary")[0].props.dirty, true);
+  assert.ok(find(tree, "Notice")[0].props.children.includes("Parent save refused"));
+  assert.deepEqual(busyStates, [true, false]);
+  assert.equal(closed, false);
+  assert.equal(find(tree, "Button").find(node => node.props.children === "Cancel parent details").props["data-leaves-editor"], true);
 });
