@@ -37,7 +37,8 @@ an invoice or record a contractor payment.
 
 Storage is additive: migration 0068_site_reports follows 0067_email_rich_text.
 Downgrade refuses a populated report table, including removed reports.
-Roll application code back while retaining the table when evidence exists.
+Once new report kinds exist, retain the schema and roll forward; older application
+versions do not filter the new kinds and must not be restored against that data.
 Migration 0071_report_sections follows 0070_operations_commissions and classifies
 existing rows as site_report without changing their source or date. It adds
 retained unit links with same-project foreign keys. A unit linked to a current or
