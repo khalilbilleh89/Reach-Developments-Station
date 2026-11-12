@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { businessDate } from "@/lib/format";
+import { businessDate, decimalText } from "@/lib/format";
 import { sectionIcon } from "@/components/shell/navigation";
 import { ApiError, settings } from "@/lib/api";
 import { companies, type Company, type CompanyFields, type BankFields, type BankAccount } from "@/lib/api/companies";
@@ -60,7 +60,7 @@ function display(key: string, value: unknown, rows: Company[] = []): string {
   if (value === null || value === undefined || value === "") return "Not entered";
   if (key === "related_company_id") { const related = rows.find(row => row.id === value); return related?.legal_name || related?.trading_name || "Linked company"; }
   if (key.endsWith("_date")) return businessDate(String(value));
-  if (key === "ownership_percentage") return `${value}%`;
+  if (key === "ownership_percentage") return `${decimalText(String(value))}%`;
   return OPTIONS[key]?.find(([code]) => code === String(value))?.[1] ?? String(value);
 }
 
@@ -110,8 +110,8 @@ function entryFields(fields: [string, string][], values: Record<string, string>,
     hint={key === "relationship" ? "Describe this company’s relationship to the company selected below. Choose Subsidiary when linking to its parent." : undefined}>
     {SEGMENTED.has(key) ? <Segmented label={label} value={values[key]} onChange={value => { if (!busy) setValues({ ...values, [key]: value }); }}
       options={[{ value: "", label: "Not entered" }, ...(options[key] ?? OPTIONS[key]).map(([code, text]) => ({ value: code, label: text }))]} />
-    : options[key] || OPTIONS[key] ? <select className="input" value={values[key]} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}>
-      <option value="">Not entered</option>{(options[key] ?? OPTIONS[key]).map(([code, text]) => <option key={code} value={code}>{text}</option>)}
+    : key === "related_company_id" || options[key] || OPTIONS[key] ? <select className="input" value={values[key]} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}>
+      <option value="">{key === "related_company_id" ? "No parent or related company" : "Not entered"}</option>{(options[key] ?? OPTIONS[key] ?? []).map(([code, text]) => <option key={code} value={code}>{text}</option>)}
     </select> : ["notes", "registered_address", "bank_address"].includes(key)
       ? <textarea className="input" disabled={busy} rows={3} value={values[key]} maxLength={2000} onChange={event => setValues({ ...values, [key]: event.target.value })} />
       : <input className="input" type={key.endsWith("_date") ? "date" : "text"} inputMode={key === "ownership_percentage" ? "decimal" : undefined} disabled={busy} value={values[key]} maxLength={320} onChange={event => setValues({ ...values, [key]: event.target.value })} />}
@@ -149,7 +149,10 @@ export function CompanyEntryForm({ title, fields, initial, options = {}, related
   relatedCompanies?: Company[]; onSaveRelated?: (values: EntryValues, row?: Company) => Promise<Company>;
   onSave: (values: Record<string, string | null>) => Promise<unknown>; onClose: () => void;
 }) {
-  const [original] = useState(() => Object.fromEntries(fields.map(([key]) => [key, String((initial as Record<string, unknown> | undefined)?.[key] ?? "")])));
+  const [original] = useState(() => Object.fromEntries(fields.map(([key]) => {
+    const value = String((initial as Record<string, unknown> | undefined)?.[key] ?? "");
+    return [key, key === "ownership_percentage" && value ? decimalText(value) : value];
+  })));
   const [values, setValues] = useState(original);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,8 +194,8 @@ export function CompanyEntryForm({ title, fields, initial, options = {}, related
               {selectedRelated ? <KeyValueGrid><KeyValue label="Selected company" value={companyName(selectedRelated)} /><KeyValue label="Registration number" value={selectedRelated.registration_number || "Not entered"} /><KeyValue label="Country of registration" value={selectedRelated.country || "Not entered"} /><KeyValue label="Contact person" value={selectedRelated.contact_name || "Not entered"} /></KeyValueGrid> : null}
             </> : <RelatedCompanyEditor key={relatedEditor.row?.id ?? "new-parent"} row={relatedEditor.row} onClose={() => setRelatedEditor(null)} onBusy={setBusy} onSave={async parentValues => {
               const saved = await onSaveRelated(parentValues, relatedEditor.row);
-              setSavedRelated([...savedRelated.filter(row => row.id !== saved.id), saved]);
-              setValues({ ...values, related_company_id: saved.id });
+              setSavedRelated(rows => [...rows.filter(row => row.id !== saved.id), saved]);
+              setValues(current => ({ ...current, related_company_id: saved.id }));
               setRelatedNotice("Parent company saved in the register. Save this company to confirm the link; cancelling this form will keep the parent company in the register.");
             }} />}
           </div> : null}
