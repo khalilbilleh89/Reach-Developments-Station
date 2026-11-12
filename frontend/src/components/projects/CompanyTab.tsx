@@ -48,6 +48,8 @@ export const BANK_FIELDS: [keyof BankFields, string][] = [
   ["status", "Account status"], ["bank_country", "Bank country"],
 ];
 const WRITERS = new Set(["system_admin", "project_manager", "finance"]);
+const NO_RELATED_COMPANY = "none";
+const NO_RELATED_COMPANY_LABEL = "No parent or related company";
 
 const OPTIONS: Record<string, [string, string][]> = {
   project_role: [["developer", "Developer"], ["landowner", "Landowner"], ["investor", "Investor"], ["project_company_spv", "Project company / SPV"], ["contractor", "Contractor"], ["other", "Other role"]],
@@ -104,6 +106,7 @@ const BANK_STATE_KEYS = new Set(["default_for_payments", "status", "currency_cod
 const companyName = (row: Company) => row.legal_name || row.trading_name || "Unnamed company";
 const PARENT_FIELDS = COMPANY_FIELDS.filter(([key]) => !COMPANY_GROUPS[1].keys.includes(key));
 type EntryValues = Record<string, string | null>;
+type CompanyEntryValues = EntryValues & { no_related_company?: boolean };
 
 function entryFields(fields: [string, string][], values: Record<string, string>, setValues: (values: Record<string, string>) => void, busy: boolean, options: Record<string, [string, string][]>) {
   return <FieldRow>{fields.filter(([key]) => key !== "other_role" || values.project_role === "other" || values.other_role).map(([key, label]) => <Field key={key} label={label} optional
@@ -111,7 +114,9 @@ function entryFields(fields: [string, string][], values: Record<string, string>,
     {SEGMENTED.has(key) ? <Segmented label={label} value={values[key]} onChange={value => { if (!busy) setValues({ ...values, [key]: value }); }}
       options={[{ value: "", label: "Not entered" }, ...(options[key] ?? OPTIONS[key]).map(([code, text]) => ({ value: code, label: text }))]} />
     : key === "related_company_id" || options[key] || OPTIONS[key] ? <select className="input" value={values[key]} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}>
-      <option value="">{key === "related_company_id" ? "No parent or related company" : "Not entered"}</option>{(options[key] ?? OPTIONS[key] ?? []).map(([code, text]) => <option key={code} value={code}>{text}</option>)}
+      <option value="" hidden={key === "related_company_id"}>Not entered</option>
+      {key === "related_company_id" ? <option value={NO_RELATED_COMPANY}>{NO_RELATED_COMPANY_LABEL}</option> : null}
+      {(options[key] ?? OPTIONS[key] ?? []).map(([code, text]) => <option key={code} value={code}>{text}</option>)}
     </select> : ["notes", "registered_address", "bank_address"].includes(key)
       ? <textarea className="input" disabled={busy} rows={3} value={values[key]} maxLength={2000} onChange={event => setValues({ ...values, [key]: event.target.value })} />
       : <input className="input" type={key.endsWith("_date") ? "date" : "text"} inputMode={key === "ownership_percentage" ? "decimal" : undefined} disabled={busy} value={values[key]} maxLength={320} onChange={event => setValues({ ...values, [key]: event.target.value })} />}
@@ -147,9 +152,10 @@ export function RelatedCompanyEditor({ row, onSave, onClose, onBusy }: {
 export function CompanyEntryForm({ title, fields, initial, options = {}, relatedCompanies = [], onSaveRelated, onSave, onClose }: {
   title: string; fields: [string, string][]; initial?: object; options?: Record<string, [string, string][]>;
   relatedCompanies?: Company[]; onSaveRelated?: (values: EntryValues, row?: Company) => Promise<Company>;
-  onSave: (values: Record<string, string | null>) => Promise<unknown>; onClose: () => void;
+  onSave: (values: CompanyEntryValues) => Promise<unknown>; onClose: () => void;
 }) {
   const [original] = useState(() => Object.fromEntries(fields.map(([key]) => {
+    if (key === "related_company_id" && (initial as Partial<CompanyFields> | undefined)?.no_related_company) return [key, NO_RELATED_COMPANY];
     const value = String((initial as Record<string, unknown> | undefined)?.[key] ?? "");
     return [key, key === "ownership_percentage" && value ? decimalText(value) : value];
   })));
@@ -173,7 +179,12 @@ export function CompanyEntryForm({ title, fields, initial, options = {}, related
         if (busy || relatedEditor) return;
         setBusy(true); setError(null);
         try {
-          await onSave(Object.fromEntries(fields.map(([key]) => [key, values[key].trim() || null])));
+          const payload: CompanyEntryValues = Object.fromEntries(fields.map(([key]) => [key, values[key].trim() || null]));
+          if (fields.some(([key]) => key === "related_company_id")) {
+            payload.no_related_company = values.related_company_id === NO_RELATED_COMPANY;
+            if (payload.no_related_company) payload.related_company_id = null;
+          }
+          await onSave(payload);
           onClose();
         } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save. Your entries have been kept."); }
         finally { setBusy(false); }
@@ -259,7 +270,10 @@ export function CompanyTab({ projectId, roles }: { projectId: string; roles: Set
           items={[
             roleText ? { label: "Role in the project", value: roleText } : notEntered("Role in the project"),
             selected.relationship ? { label: "Relationship", value: display("relationship", selected.relationship) } : notEntered("Relationship"),
-            related ? { label: "Parent or related company", value: <Button variant="link" onClick={() => setSelectedId(related.id)}>{name(related)}</Button> } : notEntered("Parent or related company"),
+            related ? { label: "Parent or related company", value: <Button variant="link" onClick={() => setSelectedId(related.id)}>{name(related)}</Button> }
+              : selected.no_related_company ? { label: "Parent or related company", value: NO_RELATED_COMPANY_LABEL }
+              : selected.related_company_id ? { label: "Parent or related company", value: "Linked company" }
+              : notEntered("Parent or related company"),
           ]} />
         <div className="split split-even company-details">
           {COMPANY_DETAIL_GROUPS.map(group => <section key={group.title}>

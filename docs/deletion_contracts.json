@@ -845,7 +845,7 @@
     "status": "implemented",
     "removal_route": "POST /{company_id}/documents/{document_id}/delete",
     "ui_file": "frontend/src/components/projects/CompanyDocuments.tsx",
-    "notes": "Company-scoped writers remove with reason and version; bytes, hash and audit retained. Active documents block company removal."
+    "notes": "Company-scoped writers remove with reason and version; bytes, hash, registration metadata and audit retained. Active documents block company removal."
   },
   {
     "handler": "projects.create_price_escalation",
@@ -981,7 +981,7 @@
     "status": "implemented",
     "removal_route": "POST /projects/{project_id}/companies/{company_id}/documents/{document_id}/delete",
     "ui_file": "frontend/src/components/projects/CompanyDocuments.tsx",
-    "notes": "Drive links use the same versioned, reasoned retained removal as uploaded PDFs; no external content is deleted."
+    "notes": "Drive links and registration metadata use the same versioned, reasoned retained removal as uploaded PDFs; no external content is deleted."
   },
   {
     "handler": "projects.create_company_logo",

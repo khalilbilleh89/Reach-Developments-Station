@@ -86,11 +86,17 @@ These are instructions only; no payment is initiated. Changes remain auditable.
 
 Documents accept exactly one immutable source: uploaded PDF or HTTPS Google Drive/Docs
 sharing link. The application does not fetch Drive content or change sharing permissions.
-Category, project/land reference text, issue/expiry/reminder dates and verification status are
-optional metadata. The current company owns the document. A reminder date requires an expiry
-on or after that date; expiry cannot precede issue. Server UTC calendar dates determine
-renewal-due/expired badges in the register. No email or background notification is sent.
+New documents require a category. Selecting Other requires a category description.
+The issue date can be left blank or marked Not stated. The expiry can be a date,
+Not stated on document, To verify, or blank. When an expiry date exists, a reminder
+can be set for 30, 60 or 90 days before expiry. The server computes the reminder date
+and uses UTC calendar dates for renewal badges in the register. New documents default
+to Needs review. Superseded documents are excluded from renewal attention.
+Existing free-text categories and reminder dates are carried forward.
 Metadata edits and retained deletion keep the existing optimistic version check.
+
+The parent or related company field stores an explicit no-company selection separately
+from an unanswered field. Existing related-company links keep their original IDs.
 
 Optional company logos accept PNG/JPEG/WebP up to 5 MiB / 4 million pixels. The server verifies
 and re-encodes fresh PNG pixels, strips metadata, serves only after project authorization,

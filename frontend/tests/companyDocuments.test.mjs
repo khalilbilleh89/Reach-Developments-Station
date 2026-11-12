@@ -38,6 +38,7 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props?.children), ...nodes(tree.props?.actions)];
 }
 const find = (tree, type) => nodes(tree).filter(node => node.type === type);
+const control = (tree, label) => find(tree, "Field").find(node => node.props.label === label).props.children;
 
 test("document upload requires a label and file; failures retain the draft", async () => {
   const h = harness(); let saved; let closed = false;
@@ -53,6 +54,8 @@ test("document upload requires a label and file; failures retain the draft", asy
   assert.match(find(tree, "Notice")[0].props.children, /PDF/);
   const file = { name: "registration.pdf", size: 42 };
   find(tree, "input").find(node => node.props.type === "file").props.onChange({ target: { files: [file] } });
+  tree = h.render("CompanyDocumentForm", props);
+  control(tree, "Document category").props.onChange({ target: { value: "Company registration certificate" } });
   tree = h.render("CompanyDocumentForm", props);
   assert.equal(find(tree, "DraftBoundary")[0].props.dirty, true);
   await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
@@ -92,7 +95,7 @@ test("multiple labeled PDFs have independent edit and delete actions; readers ca
 
 
 
-test("Drive source submits a link with optional metadata and no PDF", async () => {
+test("Drive source submits a link and category with no PDF", async () => {
   const h = harness(); let saved;
   const props = { onSave: async (...args) => { saved = args; }, onClose() {}, onSaved() {} };
   let tree = h.render("CompanyDocumentForm", props);
@@ -103,11 +106,37 @@ test("Drive source submits a link with optional metadata and no PDF", async () =
   assert.ok(!find(tree, "input").some(node => node.props.type === "file"));
   find(tree, "input").find(node => node.props.type === "url").props.onChange({ target: { value: "https://drive.google.com/file/d/example/view" } });
   tree = h.render("CompanyDocumentForm", props);
+  control(tree, "Document category").props.onChange({ target: { value: "Tax/VAT certificate" } });
+  tree = h.render("CompanyDocumentForm", props);
   await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
   assert.equal(saved[0], "Registration");
   assert.equal(saved[1], null);
+  assert.equal(saved[2].category, "Tax/VAT certificate");
   assert.equal(saved[2].expiry_date, null);
   assert.equal(saved[3], "https://drive.google.com/file/d/example/view");
+});
+
+test("saved custom category and reminder reopen; replacing expiry with a note clears the reminder", async () => {
+  const h = harness();
+  let saved;
+  const props = {
+    row: { id: "doc", label: "Licence", category: "Other", other_category: "Licence", filename: "licence.pdf", version: 2,
+      issue_date_not_stated: true, expiry_date: "2027-01-01", reminder_days: 60, verification_status: "superseded" },
+    onSave: async (_label, _file, metadata) => { saved = metadata; },
+    onClose() {}, onSaved() {},
+  };
+  let tree = h.render("CompanyDocumentForm", props);
+  assert.equal(control(tree, "Specify category").props.value, "Licence");
+  assert.equal(control(tree, "Issue date").props.disabled, true);
+  assert.equal(control(tree, "Renewal reminder").props.value, "60");
+  assert.equal(control(tree, "Document status").props.value, "superseded");
+  control(tree, "Expiry information").props.onChange({ target: { value: "to_verify" } });
+  tree = h.render("CompanyDocumentForm", props);
+  assert.equal(control(tree, "Renewal reminder").props.disabled, true);
+  await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(saved.expiry_date, null);
+  assert.equal(saved.expiry_note, "to_verify");
+  assert.equal(saved.reminder_days, null);
 });
 
 test("Drive document renders an external link and renewal state without a download action", () => {

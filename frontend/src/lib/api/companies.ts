@@ -17,6 +17,7 @@ export interface CompanyFields {
   other_role: string | null;
   relationship: string | null;
   related_company_id: string | null;
+  no_related_company: boolean;
   ownership_percentage: string | null;
   incorporation_date: string | null;
   status: string | null;
@@ -56,6 +57,8 @@ export const companies = {
 export interface DocumentMetadata {
   category?: string | null; linked_record?: string | null; issue_date?: string | null;
   expiry_date?: string | null; reminder_date?: string | null; verification_status?: string | null;
+  other_category?: string | null; issue_date_not_stated?: boolean;
+  expiry_note?: "not_stated" | "to_verify" | null; reminder_days?: 30 | 60 | 90 | null;
 }
 export interface CompanyDocument extends DocumentMetadata { id: string; label: string; filename: string | null; source_url?: string | null; version: number; reminder_status?: string | null }
 export const companyLogos = {
@@ -73,7 +76,7 @@ export const companyDocuments = {
     if (!file.size || file.size > 10 * 1024 * 1024) throw new Error("Upload a non-empty PDF up to 10 MB.");
     if (!file.name.toLowerCase().endsWith(".pdf")) throw new Error("Choose a PDF file.");
     const query = new URLSearchParams({ label: label.trim(), filename: file.name });
-    for (const [key, value] of Object.entries(metadata)) if (value) query.set(key, value);
+    for (const [key, value] of Object.entries(metadata)) if (value != null) query.set(key, String(value));
     return postBinary<CompanyDocument>(`${documentsRoot(projectId, companyId)}?${query}`, await file.arrayBuffer());
   },
   link: (projectId: string, companyId: string, label: string, source_url: string, metadata: DocumentMetadata) => post<CompanyDocument>(`${documentsRoot(projectId, companyId)}/link`, { label, source_url, ...metadata }),

@@ -26,6 +26,11 @@ from app.db.base import Base
 
 class ProjectCompany(Base):
     __tablename__ = "project_companies"
+    __table_args__ = (
+        CheckConstraint(
+            "NOT no_related_company OR related_company_id IS NULL", name="related_company_choice"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -54,6 +59,7 @@ class ProjectCompany(Base):
     related_company_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("project_companies.id", ondelete="RESTRICT")
     )
+    no_related_company: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     ownership_percentage: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
     incorporation_date: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str | None] = mapped_column(String(32))
@@ -137,10 +143,14 @@ class CompanyDocument(Base):
     sha256: Mapped[str | None] = mapped_column(String(64))
     source_url: Mapped[str | None] = mapped_column(String(2000))
     category: Mapped[str | None] = mapped_column(String(320))
+    other_category: Mapped[str | None] = mapped_column(String(320))
     linked_record: Mapped[str | None] = mapped_column(String(500))
     issue_date: Mapped[date | None] = mapped_column(Date)
+    issue_date_not_stated: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     expiry_date: Mapped[date | None] = mapped_column(Date)
+    expiry_note: Mapped[str | None] = mapped_column(String(32))
     reminder_date: Mapped[date | None] = mapped_column(Date)
+    reminder_days: Mapped[int | None] = mapped_column(Integer)
     verification_status: Mapped[str | None] = mapped_column(String(32))
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
