@@ -133,7 +133,7 @@ test("adding a parent selects the saved record and preserves the company draft",
   const emptyRelation = find(tree, "Field").find(node => node.props.label === "Parent or related company").props.children;
   assert.equal(emptyRelation.type, "select");
   assert.equal(emptyRelation.props.value, "");
-  assert.deepEqual(find(emptyRelation, "option").map(node => node.props.children), ["No parent or related company"]);
+  assert.deepEqual(find(emptyRelation, "option").filter(node => !node.props.hidden).map(node => node.props.children), ["No parent or related company"]);
   find(tree, "Field").find(node => node.props.label === "Legal company name").props.children.props.onChange({ target: { value: "Draft company" } });
   tree = h.render("CompanyEntryForm", props);
   find(tree, "Button").find(node => node.props.children === "Add parent company").props.onClick();
@@ -181,10 +181,22 @@ test("a saved link reopens selected and the existing-company selector can clear 
   relation(tree).props.onChange({ target: { value: other.id } });
   tree = render();
   assert.equal(relation(tree).props.value, other.id);
-  relation(tree).props.onChange({ target: { value: "" } });
+  const noParent = find(relation(tree), "option").find(node => node.props.children === "No parent or related company");
+  relation(tree).props.onChange({ target: { value: noParent.props.value } });
   await find(render(), "form")[0].props.onSubmit({ preventDefault() {} });
   assert.equal(saved.related_company_id, null);
+  assert.equal(saved.no_related_company, true);
   assert.equal(saved.ownership_percentage, "100");
+  const reopened = harness().render("CompanyEntryForm", { ...props, initial: saved });
+  assert.equal(relation(reopened).props.value, noParent.props.value);
+});
+
+test("company details show an explicit no-parent selection", () => {
+  const h = harness();
+  h.setAnswer({ status: "ready", data: [{ id: "company", legal_name: "Example", no_related_company: true, bank_accounts: [] }] });
+  const tree = h.render("CompanyTab", { projectId: "project", roles: new Set(["project_manager"]) });
+  const related = find(tree, "RecordStrip")[0].props.items.find(item => item.label === "Parent or related company");
+  assert.equal(related.value, "No parent or related company");
 });
 
 test("parent save failure retains entries and never submits a nested form", async () => {

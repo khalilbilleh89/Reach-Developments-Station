@@ -189,7 +189,11 @@ def upload_document(
 ) -> Response:
     return client.post(
         f"{base}/documents",
-        params={"label": label, "filename": "registration.pdf"},
+        params={
+            "label": label,
+            "filename": "registration.pdf",
+            "category": "Company registration certificate",
+        },
         content=kwargs.get("content", PDF),
         headers={"Content-Type": "application/octet-stream"},
     )
@@ -380,7 +384,7 @@ def test_document_migration_preserves_retained_pdf(
         f"{base}/documents/{row['id']}/delete", json={"reason": "retained", "expected_version": 1}
     )
     db.rollback()
-    with pytest.raises(RuntimeError, match="Company documents exist"):
+    with pytest.raises(RuntimeError, match="Company profile data exists"):
         command.downgrade(config, "0046_project_documents")
     command.upgrade(config, "head")
     assert db.get(CompanyDocument, uuid.UUID(row["id"])).document == PDF
@@ -425,6 +429,57 @@ def test_document_stream_does_not_lock_project_and_rechecks_parent(
     )
     assert lock_attempts == [True]
     assert result.status_code == 404
+
+
+def test_address_certificate_metadata_migration(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    parent = create(admin_client, project_id)
+    company = create(admin_client, project_id, related_company_id=parent["id"])
+    base = f"{url(project_id)}/{company['id']}"
+    certificate = upload_document(admin_client, base, "Aqarat Development Address Certificate")
+    assert certificate.status_code == 201, certificate.text
+    other = upload_document(admin_client, base).json()
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    db.rollback()
+    command.downgrade(config, "0071_report_sections")
+    command.upgrade(config, "head")
+    command.check(config)
+    rows = {row["id"]: row for row in admin_client.get(f"{base}/documents").json()}
+    migrated = rows[certificate.json()["id"]]
+    assert migrated["category"] == "Registered office/address certificate"
+    assert migrated["issue_date"] == "2024-07-04"
+    assert migrated["expiry_date"] is None and migrated["expiry_note"] == "not_stated"
+    assert migrated["verification_status"] == "needs_review"
+    assert rows[other["id"]] == other
+    assert admin_client.get(f"{base}/documents/{migrated['id']}/file").content == PDF
+    companies = {row["id"]: row for row in admin_client.get(url(project_id)).json()}
+    assert companies[company["id"]]["related_company_id"] == parent["id"]
+    assert companies[company["id"]]["no_related_company"] is False
+
+
+def test_explicit_no_parent_round_trips_and_existing_links_remain_selectable(
+    admin_client: TestClient, project_id: str
+) -> None:
+    parent = create(admin_client, project_id)
+    child = create(admin_client, project_id, related_company_id=parent["id"])
+    base = f"{url(project_id)}/{child['id']}"
+    assert parent["related_company_id"] is None and parent["no_related_company"] is False
+    assert (
+        admin_client.patch(
+            base, json={"related_company_id": parent["id"], "no_related_company": True}
+        ).status_code
+        == 422
+    )
+    result = admin_client.patch(base, json={"no_related_company": True})
+    assert result.status_code == 200, result.text
+    rows = {row["id"]: row for row in admin_client.get(url(project_id)).json()}
+    assert rows[child["id"]]["related_company_id"] is None
+    assert rows[child["id"]]["no_related_company"] is True
+    result = admin_client.patch(base, json={"related_company_id": parent["id"]})
+    assert result.status_code == 200, result.text
+    assert result.json()["related_company_id"] == parent["id"]
+    assert result.json()["no_related_company"] is False
 
 
 def test_profile_fields_relationships_and_bank_privacy(
@@ -515,17 +570,31 @@ def test_document_drive_metadata_and_retention(
     payload = {
         "label": "Certificate",
         "source_url": "https://drive.google.com/file/d/example/view",
-        "category": "Registration",
+        "category": "Other",
+        "other_category": "Registration",
         "linked_record": "Project record",
         "issue_date": "2020-01-01",
         "expiry_date": "2021-01-01",
-        "reminder_date": "2020-12-01",
+        "reminder_days": 30,
         "verification_status": "verified",
     }
     result = admin_client.post(f"{base}/documents/link", json=payload)
     assert result.status_code == 201, result.text
     row = result.json()
     assert row["reminder_status"] == "expired" and row["filename"] is None
+    assert row["reminder_date"] == "2020-12-02"
+    assert row["other_category"] == "Registration"
+    for invalid in (
+        {"category": None},
+        {"other_category": " "},
+        {"expiry_date": None},
+        {"expiry_note": "to_verify"},
+        {"issue_date_not_stated": True},
+        {"reminder_days": 45},
+    ):
+        assert (
+            admin_client.post(f"{base}/documents/link", json=payload | invalid).status_code == 422
+        )
     item = f"{base}/documents/{row['id']}"
     assert admin_client.get(f"{item}/file").status_code == 409
     assert (
@@ -545,6 +614,24 @@ def test_document_drive_metadata_and_retention(
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["category"] is None and updated.json()["issue_date"] == "2020-01-01"
+    updated = admin_client.patch(
+        item,
+        json={
+            "label": "Updated",
+            "expected_version": 2,
+            "issue_date": None,
+            "issue_date_not_stated": True,
+            "expiry_date": None,
+            "expiry_note": "to_verify",
+            "reminder_days": None,
+            "verification_status": "superseded",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    saved = admin_client.get(f"{base}/documents").json()[0]
+    assert saved["issue_date_not_stated"] is True
+    assert saved["expiry_note"] == "to_verify" and saved["reminder_date"] is None
+    assert saved["verification_status"] == "superseded"
     assert (
         admin_client.post(
             f"{item}/delete", json={"reason": "old", "expected_version": 1}
@@ -553,7 +640,7 @@ def test_document_drive_metadata_and_retention(
     )
     assert (
         admin_client.post(
-            f"{item}/delete", json={"reason": "old", "expected_version": 2}
+            f"{item}/delete", json={"reason": "old", "expected_version": 3}
         ).status_code
         == 204
     )
@@ -577,13 +664,17 @@ def test_document_drive_metadata_and_retention(
         params={
             "label": "PDF",
             "filename": "certificate.pdf",
+            "category": "Tax/VAT certificate",
             "expiry_date": "2030-01-01",
+            "reminder_days": "60",
             "verification_status": "needs_review",
         },
         content=PDF,
     )
     assert uploaded.status_code == 201, uploaded.text
     assert uploaded.json()["expiry_date"] == "2030-01-01"
+    assert uploaded.json()["reminder_days"] == 60
+    assert uploaded.json()["reminder_date"] == "2029-11-02"
 
 
 def test_logo_scope_validation_and_retained_removal(

@@ -151,6 +151,13 @@ def save(
     creating: bool,
 ) -> None:
     before = None if creating else snapshot(row)
+    if isinstance(row, ProjectCompany):
+        if values.get("no_related_company") and values.get("related_company_id"):
+            raise ValidationError("Choose either a related company or no related company.")
+        if values.get("no_related_company"):
+            row.related_company_id = None
+        elif "related_company_id" in values:
+            row.no_related_company = False
     for key, value in values.items():
         setattr(row, key, value.strip() or None if isinstance(value, str) else value)
     with session.no_autoflush:

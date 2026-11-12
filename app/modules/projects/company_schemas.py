@@ -34,6 +34,7 @@ class CompanyWrite(StrictRequest):
         | None
     ) = None
     related_company_id: uuid.UUID | None = None
+    no_related_company: bool = False
     ownership_percentage: Decimal | None = Field(default=None, ge=0, le=100, decimal_places=4)
     incorporation_date: date | None = None
     status: Literal["active", "inactive", "under_review"] | None = None
@@ -77,13 +78,34 @@ class RemovalRequest(StrictRequest):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+DOCUMENT_CATEGORIES = (
+    "Company registration certificate",
+    "Registered office/address certificate",
+    "Directors & Secretary certificate",
+    "Tax/VAT certificate",
+    "Title deed/property document",
+    "Other",
+)
+
+
 class DocumentMetadata(StrictRequest):
     category: str | None = Field(default=None, max_length=320)
+    other_category: str | None = Field(default=None, max_length=320)
     linked_record: str | None = Field(default=None, max_length=500)
     issue_date: date | None = None
+    issue_date_not_stated: bool = False
     expiry_date: date | None = None
+    expiry_note: Literal["not_stated", "to_verify"] | None = None
     reminder_date: date | None = None
-    verification_status: Literal["needs_review", "verified"] | None = None
+    reminder_days: int | None = None
+    verification_status: Literal["needs_review", "verified", "expired", "superseded"] | None = None
+
+    @field_validator("reminder_days")
+    @classmethod
+    def allowed_reminder_days(cls, value: int | None) -> int | None:
+        if value not in {None, 30, 60, 90}:
+            raise ValueError("Select a reminder of 30, 60 or 90 days before expiry.")
+        return value
 
 
 class DocumentFields(DocumentMetadata):
@@ -139,6 +161,8 @@ class DocumentRead(DocumentMetadata):
     @computed_field
     @property
     def reminder_status(self) -> str | None:
+        if self.verification_status == "superseded":
+            return None
         today = datetime.now(UTC).date()
         if self.expiry_date and self.expiry_date < today:
             return "expired"
