@@ -384,6 +384,10 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "commissions",
         ("tests/modules/test_commissions_operations.py::test_operations_migration_roundtrip",),
     ),
+    "0072_company_document_metadata.py": (
+        "projects",
+        ("tests/modules/test_project_company.py::test_address_certificate_metadata_migration",),
+    ),
     "0069_company_profile.py": (
         "projects",
         ("tests/modules/test_project_company.py::test_profile_migration_retains_legacy_pdf",),
