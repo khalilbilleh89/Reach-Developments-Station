@@ -25,7 +25,7 @@ function harness() {
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
     if (key === "@/lib/roles") return { PROJECT_FINANCIAL_READERS: new Set(["finance"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) };
     if (key === "@/components/shell/navigation") return { sectionIcon: () => undefined };
-    if (key === "./CompanyLogo") return { CompanyLogo: "CompanyLogo" };
+    if (key === "./CompanyLogo") return { CompanyLogoTile: "CompanyLogoTile", CompanyLogoActions: "CompanyLogoActions" };
     if (key === "./CompanyDocuments") return { CompanyDocuments: "CompanyDocuments" };
     if (key === "./DeleteRecordButton") return { DeleteRecordButton: "DeleteRecordButton" };
     if (key === "@/components/ui") return new Proxy({}, { get: (_, name) => name });
@@ -48,7 +48,7 @@ test("blank bank fields submit null and retain leading zero account numbers", as
   assert.equal(find(tree, "Field").length, 14);
   assert.ok(find(tree, "Field").every(field => field.props.optional));
   assert.ok([...find(tree, "input"), ...find(tree, "textarea")].every(input => !input.props.required));
-  const account = find(tree, "Field").find(field => field.props.label === "Account #").props.children;
+  const account = find(tree, "Field").find(field => field.props.label === "Account number").props.children;
   account.props.onChange({ target: { value: "00001234" } });
   tree = h.render("CompanyEntryForm", props);
   assert.equal(find(tree, "DraftBoundary")[0].props.dirty, true);
@@ -81,8 +81,12 @@ test("two accounts appear independently and denied readers do not request compan
   ] }] });
   const tree = h.render("CompanyTab", { projectId: "project", roles: new Set(["finance"]) });
   assert.equal(h.enabled(), true);
-  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Example", "Identity & registration", "Project & ownership", "Address & contacts", "Notes", "Bank Details", "First Bank", "Second Bank"]);
+  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Identity & registration", "Address & contacts", "Bank accounts"]);
+  assert.deepEqual(find(tree, "SubPanel").map(node => node.props.title), ["First Bank", "Second Bank"]);
   assert.equal(find(tree, "DeleteRecordButton").length, 3);
+  // Every delete sits behind its record's menu; Edit stays visible beside it.
+  assert.ok(find(tree, "RowMenu").every(menu => find(menu.props.children, "DeleteRecordButton").length >= 1));
+  assert.equal(find(tree, "RowMenu").length, 3);
   h.setAnswer({ status: "off" });
   h.render("CompanyTab", { projectId: "project", roles: new Set(["sales_advisor"]) });
   assert.equal(h.enabled(), false);
@@ -125,7 +129,7 @@ test("adding a parent selects the saved record and preserves the company draft",
   tree = h.render("CompanyEntryForm", props);
   find(tree, "Button").find(node => node.props.children === "Add parent company").props.onClick();
   tree = h.render("CompanyEntryForm", props);
-  assert.equal(find(tree, "Button").find(node => node.props.type === "submit").props.disabled, true);
+  assert.equal(find(tree, "StickyActions")[0].props.disabled, true);
   await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
   assert.equal(saved, undefined);
   const editor = find(tree, h.exports.RelatedCompanyEditor)[0];
@@ -163,4 +167,38 @@ test("parent save failure retains entries and never submits a nested form", asyn
   assert.deepEqual(busyStates, [true, false]);
   assert.equal(closed, false);
   assert.equal(find(tree, "Button").find(node => node.props.children === "Cancel parent details").props["data-leaves-editor"], true);
+});
+
+
+test("profile shows entered details at full weight and names missing ones once", () => {
+  const h = harness();
+  h.setAnswer({ status: "ready", data: [{ id: "company", legal_name: "Example", registration_number: "0042", ownership_percentage: "12.5000", project_role: "investor", status: "active", bank_accounts: [] }] });
+  const page = h.render("CompanyTab", { projectId: "project", roles: new Set(["project_manager"]) });
+  // Expand the profile's detail groups, which the harness leaves as component nodes.
+  const tree = [page, ...find(page, h.exports.RecordedDetails).map(node => node.type(node.props))];
+  const values = find(tree, "KeyValue");
+  assert.deepEqual([...values.map(node => node.props.label)], ["Registration number"]);
+  assert.equal(values[0].props.value, "0042");
+  assert.equal(values[0].props.mono, true);
+  assert.ok(!values.some(node => node.props.value === "Not entered"));
+  const missing = nodes(tree).filter(node => node.type === "p" && String(node.props.className).includes("company-missing"));
+  assert.equal(missing.length, 2);
+  assert.match(missing.map(node => [].concat(node.props.children).join("")).join(" "), /Tax \/ VAT number/);
+  const strip = find(page, "RecordStrip")[0].props;
+  assert.equal(strip.lead.value, "12.5000%");
+  assert.equal(strip.items[0].value, "Investor");
+  assert.equal(strip.items[1].tone, "muted");
+});
+
+test("long company form gets section links and a sticky save bar; short bank form does not", () => {
+  const h = harness();
+  let tree = h.render("CompanyEntryForm", { title: "Add company", fields: h.exports.COMPANY_FIELDS, onSave: async () => {}, onClose() {} });
+  assert.deepEqual([...find(tree, "FormOutline")[0].props.sections], ["Identity & registration", "Project & ownership", "Address & contacts", "Notes"]);
+  assert.equal(find(tree, "StickyActions").length, 1);
+  const status = find(tree, "Field").find(node => node.props.label === "Company status").props.children;
+  assert.equal(status.type, "Segmented");
+  assert.deepEqual([...status.props.options.map(option => option.value)], ["", "active", "inactive", "under_review"]);
+  tree = h.render("CompanyEntryForm", { title: "Add bank account", fields: h.exports.BANK_FIELDS, onSave: async () => {}, onClose() {} });
+  assert.equal(find(tree, "FormOutline").length, 0);
+  assert.equal(find(tree, "StickyActions").length, 0);
 });

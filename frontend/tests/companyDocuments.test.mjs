@@ -82,7 +82,8 @@ test("multiple labeled PDFs have independent edit and delete actions; readers ca
   h.setAnswer({ status: "ready", data: [{ id: "a", label: "Incorporation", filename: "one.pdf", version: 1 }, { id: "b", label: "Tax registration", filename: "two.pdf", version: 1 }] });
   let tree = h.render("CompanyDocuments", { projectId: "project", companyId: "company", canWrite: true });
   assert.equal(find(tree, "DeleteRecordButton").length, 2);
-  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Company Registration Documents"]);
+  assert.deepEqual(find(tree, "SectionHeader").map(node => node.props.title), ["Registration documents"]);
+  assert.ok(find(tree, "CardRow").every(row => row.props.facts.length <= 3));
   assert.deepEqual(find(tree, "CardRow").map(node => node.props.title), ["Incorporation", "Tax registration"]);
   tree = h.render("CompanyDocuments", { projectId: "project", companyId: "company", canWrite: false });
   assert.equal(find(tree, "DeleteRecordButton").length, 0);
@@ -97,7 +98,7 @@ test("Drive source submits a link with optional metadata and no PDF", async () =
   let tree = h.render("CompanyDocumentForm", props);
   find(tree, "input")[0].props.onChange({ target: { value: "Registration" } });
   tree = h.render("CompanyDocumentForm", props);
-  find(tree, "select")[0].props.onChange({ target: { value: "drive" } });
+  find(tree, "ChoiceCards")[0].props.onChange("drive");
   tree = h.render("CompanyDocumentForm", props);
   assert.ok(!find(tree, "input").some(node => node.props.type === "file"));
   find(tree, "input").find(node => node.props.type === "url").props.onChange({ target: { value: "https://drive.google.com/file/d/example/view" } });
@@ -113,7 +114,14 @@ test("Drive document renders an external link and renewal state without a downlo
   const h = harness();
   h.setAnswer({ status: "ready", data: [{ id: "link", label: "Licence", filename: null, source_url: "https://drive.google.com/file/d/example/view", version: 1, reminder_status: "expired" }] });
   const tree = h.render("CompanyDocuments", { projectId: "project", companyId: "company", canWrite: true });
-  assert.equal(find(tree, "a")[0].props.rel, "noopener noreferrer");
+  assert.equal(find(tree, "ExternalLink")[0].props.href, "https://drive.google.com/file/d/example/view");
   assert.ok(!find(tree, "Button").some(node => String(node.props["aria-label"]).startsWith("Download PDF")));
-  assert.equal(find(tree, "CardRow")[0].props.facts.find(fact => fact.label === "Renewal").value, "Expired");
+  const row = find(tree, "CardRow")[0].props;
+  assert.equal(row.flagged, true);
+  const pill = h.exports.renewalState({ reminder_status: "expired" });
+  assert.equal(pill.type, "Badge");
+  assert.equal(pill.props.tone, "danger");
+  assert.equal(pill.props.children, "Expired");
+  assert.equal(h.exports.renewalState({ reminder_status: "renewal_due" }).props.children, "Renewal due");
+  assert.equal(h.exports.renewalState({ reminder_status: null }), null);
 });

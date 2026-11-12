@@ -50,6 +50,12 @@ to the canonical sources; they do not replace them.
 One skill is the single source of truth for its subject. Do not copy skill content into
 this file or into `CLAUDE.md`.
 
+## Owner change requests
+
+Owner requests to add, change or remove something arrive in the format of
+`docs/CHANGE_REQUEST_TEMPLATE.md`. Its standing instructions point to the rules
+above; follow them even when a request arrives without the template.
+
 ## Agent automation
 
 CI scope is determined by code risk, not pull-request size or Draft/Ready state.

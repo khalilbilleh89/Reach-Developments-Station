@@ -7,8 +7,8 @@ import { ApiError, settings } from "@/lib/api";
 import { companies, type Company, type CompanyFields, type BankFields, type BankAccount } from "@/lib/api/companies";
 import { useAnswer } from "@/lib/answer";
 import { hasAnyRole, PROJECT_FINANCIAL_READERS } from "@/lib/roles";
-import { Badge, Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, FormSection, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, RecordPage, SectionHeader, SubPanel } from "@/components/ui";
-import { CompanyLogo } from "./CompanyLogo";
+import { Badge, Button, Card, DraftBoundary, EmptyState, Field, FieldRow, FormActions, FormOutline, FormSection, KeyValue, KeyValueGrid, Loading, Notice, PageHeader, RecordPage, RecordStrip, RowMenu, Segmented, SectionHeader, StickyActions, SubPanel } from "@/components/ui";
+import { CompanyLogoActions, CompanyLogoTile } from "./CompanyLogo";
 import { CompanyDocuments } from "./CompanyDocuments";
 import { DeleteRecordButton } from "./DeleteRecordButton";
 
@@ -35,14 +35,14 @@ export const COMPANY_FIELDS: [keyof CompanyFields, string][] = [
   ["notes", "Notes"],
 ];
 export const BANK_FIELDS: [keyof BankFields, string][] = [
-  ["beneficiary_name", "Beneficiary Name"],
-  ["beneficiary_bank", "Beneficiary Bank"],
-  ["account_number", "Account #"],
+  ["beneficiary_name", "Beneficiary name"],
+  ["beneficiary_bank", "Beneficiary bank"],
+  ["account_number", "Account number"],
   ["iban", "IBAN"],
-  ["swift_code", "SWIFT Code"],
-  ["bank_address", "Bank Address"],
-  ["correspondent_bank", "Correspondent Bank"],
-  ["correspondent_swift_code", "Correspondent Bank SWIFT"],
+  ["swift_code", "SWIFT code"],
+  ["bank_address", "Bank address"],
+  ["correspondent_bank", "Correspondent bank"],
+  ["correspondent_swift_code", "Correspondent bank SWIFT"],
   ["account_purpose", "Account purpose"], ["currency_code", "Account currency"],
   ["default_for_payments", "Default for payments"], ["last_verified_date", "Last verified"],
   ["status", "Account status"], ["bank_country", "Bank country"],
@@ -64,6 +64,26 @@ function display(key: string, value: unknown, rows: Company[] = []): string {
   return OPTIONS[key]?.find(([code]) => code === String(value))?.[1] ?? String(value);
 }
 
+/** Short fixed lists are segmented choices, not dropdowns (design system J2); "Not entered" keeps the value clearable. */
+const SEGMENTED = new Set(["status", "default_for_payments", "account_purpose"]);
+/** References a reader copies digit for digit. */
+const MONO = new Set(["registration_number", "tax_number", "account_number", "iban", "swift_code", "correspondent_swift_code"]);
+const entered = (value: unknown) => value !== null && value !== undefined && value !== "";
+
+/**
+ * One group of a company's or an account's recorded details: what was entered,
+ * at full weight, and what was not, named once in muted text — never a column
+ * of "Not entered" values competing with the facts that exist.
+ */
+export function RecordedDetails({ fields, record, rows }: { fields: [string, string][]; record: Record<string, unknown>; rows?: Company[] }) {
+  const present = fields.filter(([key]) => entered(record[key]));
+  const missing = fields.filter(([key]) => !entered(record[key]));
+  return <>
+    {present.length ? <KeyValueGrid>{present.map(([key, label]) => <KeyValue key={key} label={label} mono={MONO.has(key)} value={key === "notes" || key.endsWith("address") ? <span className="company-notes">{String(record[key])}</span> : display(key, record[key], rows)} />)}</KeyValueGrid> : null}
+    {missing.length ? <p className="muted company-missing">{present.length ? "Not entered" : "Nothing entered yet"}: {missing.map(([, label]) => label).join(", ")}.</p> : null}
+  </>;
+}
+
 const COMPANY_GROUPS = [
   { title: "Identity & registration", keys: ["legal_name", "trading_name", "registration_number", "tax_number", "legal_form", "country", "incorporation_date", "status"] },
   { title: "Project & ownership", keys: ["project_role", "other_role", "relationship", "related_company_id", "ownership_percentage"] },
@@ -74,6 +94,13 @@ const BANK_GROUPS = [
   { title: "Account information", keys: ["beneficiary_name", "beneficiary_bank", "account_number", "iban", "currency_code", "account_purpose", "default_for_payments", "status"] },
   { title: "Routing & verification", keys: ["swift_code", "bank_address", "bank_country", "correspondent_bank", "correspondent_swift_code", "last_verified_date"] },
 ];
+/** The profile's reading groups. Ownership, role and relationship lead in the strip; status and name lead in the head. */
+const COMPANY_DETAIL_GROUPS = [
+  { title: "Identity & registration", keys: ["legal_name", "trading_name", "registration_number", "tax_number", "legal_form", "country", "incorporation_date"] },
+  { title: "Address & contacts", keys: ["registered_address", "contact_name", "email", "phone", "website", "authorized_signatory"] },
+];
+/** Shown as the account's state line rather than repeated in its details. */
+const BANK_STATE_KEYS = new Set(["default_for_payments", "status", "currency_code", "account_purpose"]);
 const companyName = (row: Company) => row.legal_name || row.trading_name || "Unnamed company";
 const PARENT_FIELDS = COMPANY_FIELDS.filter(([key]) => !COMPANY_GROUPS[1].keys.includes(key));
 type EntryValues = Record<string, string | null>;
@@ -81,7 +108,9 @@ type EntryValues = Record<string, string | null>;
 function entryFields(fields: [string, string][], values: Record<string, string>, setValues: (values: Record<string, string>) => void, busy: boolean, options: Record<string, [string, string][]>) {
   return <FieldRow>{fields.filter(([key]) => key !== "other_role" || values.project_role === "other" || values.other_role).map(([key, label]) => <Field key={key} label={label} optional
     hint={key === "relationship" ? "Describe this company’s relationship to the company selected below. Choose Subsidiary when linking to its parent." : undefined}>
-    {options[key] || OPTIONS[key] ? <select className="input" value={values[key]} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}>
+    {SEGMENTED.has(key) ? <Segmented label={label} value={values[key]} onChange={value => { if (!busy) setValues({ ...values, [key]: value }); }}
+      options={[{ value: "", label: "Not entered" }, ...(options[key] ?? OPTIONS[key]).map(([code, text]) => ({ value: code, label: text }))]} />
+    : options[key] || OPTIONS[key] ? <select className="input" value={values[key]} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}>
       <option value="">Not entered</option>{(options[key] ?? OPTIONS[key]).map(([code, text]) => <option key={code} value={code}>{text}</option>)}
     </select> : ["notes", "registered_address", "bank_address"].includes(key)
       ? <textarea className="input" disabled={busy} rows={3} value={values[key]} maxLength={2000} onChange={event => setValues({ ...values, [key]: event.target.value })} />
@@ -103,7 +132,7 @@ export function RelatedCompanyEditor({ row, onSave, onClose, onBusy }: {
       {COMPANY_GROUPS.filter(group => group.title !== "Project & ownership").map(group => <FormSection key={group.title} title={group.title}>
         {entryFields(PARENT_FIELDS.filter(([key]) => group.keys.includes(key)), values, setValues, busy, {})}
       </FormSection>)}
-      <FormActions><Button type="button" disabled={busy} onClick={async () => {
+      <FormActions><Button type="button" variant="primary" disabled={busy} onClick={async () => {
         if (busy) return; setBusy(true); onBusy(true); setError(null);
         try { await onSave(Object.fromEntries(PARENT_FIELDS.map(([key]) => [key, values[key].trim() || null]))); onClose(); }
         catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save the parent company. Your entries have been kept."); }
@@ -131,9 +160,12 @@ export function CompanyEntryForm({ title, fields, initial, options = {}, related
   const selectedRelated = relatedRows.find(row => row.id === values.related_company_id);
   const fieldOptions = { ...options, ...(onSaveRelated ? { related_company_id: relatedRows.map(row => [row.id, companyName(row)] as [string, string]) } : {}) };
   const groups = fields.some(([key]) => key === "legal_name") ? COMPANY_GROUPS : BANK_GROUPS;
-  return <RecordPage title={title} onClose={onClose}>
-    <DraftBoundary dirty={JSON.stringify(values) !== JSON.stringify(original)} busy={busy}>
-      <form className="stack" onSubmit={async event => {
+  const dirty = JSON.stringify(values) !== JSON.stringify(original);
+  // A long form, three titled sections or more, gets section links and a save bar that stays in view (J3).
+  const long = groups.length >= 3;
+  return <RecordPage icon={groups === COMPANY_GROUPS ? "inventory" : undefined} title={title} subtitle="All fields are optional. Enter the information available now." onClose={onClose}>
+    <DraftBoundary dirty={dirty} busy={busy}>
+      <form className={long ? "form-layout" : "stack"} onSubmit={async event => {
         event.preventDefault();
         if (busy || relatedEditor) return;
         setBusy(true); setError(null);
@@ -143,7 +175,8 @@ export function CompanyEntryForm({ title, fields, initial, options = {}, related
         } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save. Your entries have been kept."); }
         finally { setBusy(false); }
       }}>
-        <p className="muted">All fields are optional. Enter the information available now.</p>
+        {long ? <FormOutline sections={groups.map(group => group.title)} /> : null}
+        <div className={long ? "form-layout-body stack" : "stack"}>
         {error ? <Notice tone="error">{error}</Notice> : null}
         {groups.map(group => <FormSection key={group.title} title={group.title}>
           {entryFields(fields.filter(([key]) => group.keys.includes(key)), values, setValues, busy, fieldOptions)}
@@ -164,9 +197,11 @@ export function CompanyEntryForm({ title, fields, initial, options = {}, related
             }} />}
           </div> : null}
         </FormSection>)}
-        <FormActions><Button type="submit" disabled={busy || relatedEditor !== null}>{busy ? "Saving…" : "Save"}</Button>
-          <Button variant="default" data-leaves-editor onClick={onClose} disabled={busy}>Cancel</Button>
-        </FormActions>
+        {long ? <StickyActions dirty={dirty} submitLabel="Save company" busy={busy} disabled={relatedEditor !== null} note={relatedEditor ? "Save or cancel the parent company first." : undefined} onCancel={onClose} />
+          : <FormActions><Button type="submit" variant="primary" disabled={busy || relatedEditor !== null}>{busy ? "Saving…" : "Save"}</Button>
+            <Button variant="default" data-leaves-editor onClick={onClose} disabled={busy}>Cancel</Button>
+          </FormActions>}
+        </div>
       </form>
     </DraftBoundary>
   </RecordPage>;
@@ -184,43 +219,74 @@ export function CompanyTab({ projectId, roles }: { projectId: string; roles: Set
   const selected = rows.find(row => row.id === selectedId) ?? rows[0];
   const name = companyName;
   const related = rows.find(row => row.id === selected?.related_company_id);
+  const roleText = selected ? selected.project_role === "other" && selected.other_role ? selected.other_role : selected.project_role ? display("project_role", selected.project_role) : null : null;
+  const notEntered = (label: string) => ({ label, value: "Not entered", tone: "muted" as const });
   return <div className="stack">
-    <PageHeader icon={sectionIcon("company")} title="Company" subtitle="Company information, registration documents and registered bank accounts." actions={canWrite ? <Button onClick={() => setEditor({ kind: "company" })}>Add company</Button> : undefined} />
+    <PageHeader icon={sectionIcon("company")} title="Company" subtitle="The legal entities behind this project: registration, documents and bank accounts." actions={canWrite ? <Button variant="primary" onClick={() => setEditor({ kind: "company" })}>Add company</Button> : undefined} />
     {answer.status === "loading" ? <Loading label="Loading company details…" /> : null}
     {answer.status === "off" || answer.status === "denied" ? <Notice tone="info">Company details are not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button variant="default" onClick={answer.retry}>Retry</Button></Notice> : null}
-    {answer.status === "ready" && !selected ? <Card><EmptyState title="No company recorded" hint="Add a company, then record its bank accounts. All entry fields are optional." /></Card> : null}
+    {answer.status === "ready" && !selected ? <Card><EmptyState title="No company recorded" hint="Add the developer, landowner, investor or project company, then record its documents and bank accounts. All entry fields are optional." /></Card> : null}
     {selected ? <>
-      {rows.length > 1 ? <Field label="Company"><select className="input" value={selected.id} onChange={event => setSelectedId(event.target.value)}>
+      {rows.length > 1 ? <Field label={`Company · ${rows.length} in this project`}><select className="input" value={selected.id} onChange={event => setSelectedId(event.target.value)}>
         {rows.map(row => <option key={row.id} value={row.id}>{name(row)}</option>)}
       </select></Field> : null}
       <Card>
-        <SectionHeader level={2} title={name(selected)} description="Company Information" actions={canWrite ? <>
-          <Button variant="default" onClick={() => setEditor({ kind: "company", row: selected })}>Edit company</Button>
-          <DeleteRecordButton label="company" recordName={name(selected)} confirmLabel="Delete company"
-            description="Remove this company from the register and retain its history. Remove its bank accounts, documents and logo, and unlink related companies first."
-            onDelete={reason => companies.remove(projectId, selected.id, reason)} onDeleted={refresh} />
-        </> : undefined} />
-        <CompanyLogo key={selected.id} projectId={projectId} company={selected} canWrite={canWrite} onSaved={answer.retry} />
-        <div className="company-profile-status"><Badge tone={selected.status === "active" ? "success" : "neutral"}>{display("status", selected.status)}</Badge>{selected.project_role ? <span>{display("project_role", selected.project_role)}</span> : null}{selected.country ? <span>{selected.country}</span> : null}</div>
-        <div className="company-profile-sections">{COMPANY_GROUPS.map(group => <section key={group.title} className="company-profile-section">
-          <SectionHeader title={group.title} actions={group.title === "Project & ownership" && related ? <Button variant="default" onClick={() => setSelectedId(related.id)}>Open parent / related company</Button> : undefined} />
-          <KeyValueGrid>{COMPANY_FIELDS.filter(([key]) => group.keys.includes(key) && (key !== "other_role" || selected.other_role)).map(([key, label]) => <KeyValue key={key} label={label} value={display(key, selected[key], rows)} />)}</KeyValueGrid>
-        </section>)}</div>
+        <header className="company-identity">
+          <CompanyLogoTile projectId={projectId} company={selected} />
+          <div className="company-identity-main">
+            <h2 className="company-identity-name">{name(selected)}</h2>
+            {selected.legal_name && selected.trading_name && selected.trading_name !== selected.legal_name ? <p className="company-identity-meta">Trading as {selected.trading_name}</p> : null}
+            <div className="company-identity-state">
+              {selected.status ? <Badge tone={selected.status === "active" ? "success" : selected.status === "under_review" ? "warning" : "muted"}>{display("status", selected.status)}</Badge> : <span className="muted">Status not entered</span>}
+            </div>
+          </div>
+          {canWrite ? <div className="card-actions">
+            <Button onClick={() => setEditor({ kind: "company", row: selected })}>Edit company</Button>
+            <RowMenu label={`More actions for ${name(selected)}`}>
+              <CompanyLogoActions key={`${selected.id}-${selected.logo_id ?? "none"}`} projectId={projectId} company={selected} onSaved={answer.retry} />
+              <DeleteRecordButton label="company" recordName={name(selected)} confirmLabel="Delete company"
+                description="Remove this company from the register and retain its history. Remove its bank accounts, documents and logo, and unlink related companies first."
+                onDelete={reason => companies.remove(projectId, selected.id, reason)} onDeleted={refresh} />
+            </RowMenu>
+          </div> : null}
+        </header>
+        <RecordStrip
+          lead={entered(selected.ownership_percentage) ? { label: "Ownership share in project", value: display("ownership_percentage", selected.ownership_percentage) } : notEntered("Ownership share in project")}
+          items={[
+            roleText ? { label: "Role in the project", value: roleText } : notEntered("Role in the project"),
+            selected.relationship ? { label: "Relationship", value: display("relationship", selected.relationship) } : notEntered("Relationship"),
+            related ? { label: "Parent or related company", value: <Button variant="link" onClick={() => setSelectedId(related.id)}>{name(related)}</Button> } : notEntered("Parent or related company"),
+          ]} />
+        <div className="split split-even company-details">
+          {COMPANY_DETAIL_GROUPS.map(group => <section key={group.title}>
+            <SectionHeader title={group.title} />
+            <RecordedDetails rows={rows} record={selected as unknown as Record<string, unknown>}
+              fields={COMPANY_FIELDS.filter(([key]) => group.keys.includes(key) && !(key === "legal_name" && selected.legal_name) && !(key === "trading_name" && !selected.legal_name && selected.trading_name))} />
+          </section>)}
+        </div>
+        {selected.notes ? <section className="company-notes-section"><SectionHeader title="Notes" /><p className="company-notes">{selected.notes}</p></section> : null}
       </Card>
-      <CompanyDocuments key={selected.id} projectId={projectId} companyId={selected.id} canWrite={canWrite} companyName={name(selected)} />
+      <CompanyDocuments key={selected.id} projectId={projectId} companyId={selected.id} canWrite={canWrite} />
       {canBank ? <Card>
-        <SectionHeader level={2} title="Bank Details" actions={canBank ? <Button onClick={() => setEditor({ kind: "bank", companyId: selected.id })}>Add bank account</Button> : undefined} />
+        <SectionHeader level={2} title="Bank accounts" description={selected.bank_accounts.length ? `${selected.bank_accounts.length} recorded for ${name(selected)}.` : undefined} actions={<Button onClick={() => setEditor({ kind: "bank", companyId: selected.id })}>Add bank account</Button>} />
         {selected.bank_accounts.length === 0 ? <EmptyState title="No bank accounts recorded" hint="You can add multiple accounts for this company." /> :
-          <div className="stack">{selected.bank_accounts.map((account, index) => <section key={account.id} className="form-section">
-            <SectionHeader title={account.beneficiary_bank || `Bank account ${index + 1}`} actions={canBank ? <>
-              <Button variant="default" onClick={() => setEditor({ kind: "bank", companyId: selected.id, row: account })}>Edit account</Button>
-              <DeleteRecordButton label="bank account" recordName={account.beneficiary_bank || `Bank account ${index + 1}`} confirmLabel="Delete bank account"
-                description="Remove this account from the company. Its details and audit history will be retained."
-                onDelete={reason => companies.removeBank(projectId, selected.id, account.id, reason)} onDeleted={refresh} />
-            </> : undefined} />
-            <KeyValueGrid>{BANK_FIELDS.map(([key, label]) => <KeyValue key={key} label={label} value={display(key, account[key])} />)}</KeyValueGrid>
-          </section>)}</div>}
+          <div className="stack">{selected.bank_accounts.map((account, index) => <SubPanel key={account.id} title={account.beneficiary_bank || `Bank account ${index + 1}`} actions={<>
+              <Button onClick={() => setEditor({ kind: "bank", companyId: selected.id, row: account })}>Edit account</Button>
+              <RowMenu label={`More actions for ${account.beneficiary_bank || `bank account ${index + 1}`}`}>
+                <DeleteRecordButton label="bank account" recordName={account.beneficiary_bank || `Bank account ${index + 1}`} confirmLabel="Delete bank account"
+                  description="Remove this account from the company. Its details and audit history will be retained."
+                  onDelete={reason => companies.removeBank(projectId, selected.id, account.id, reason)} onDeleted={refresh} />
+              </RowMenu>
+            </>}>
+            <div className="company-account-state">
+              {account.default_for_payments ? <Badge tone="accent">Default for payments</Badge> : null}
+              {account.status ? <Badge tone={account.status === "active" ? "success" : "muted"}>{display("status", account.status)}</Badge> : null}
+              {account.currency_code ? <Badge>{account.currency_code}</Badge> : null}
+              {account.account_purpose ? <span>{display("account_purpose", account.account_purpose)} account</span> : null}
+            </div>
+            <RecordedDetails record={account as unknown as Record<string, unknown>} fields={BANK_FIELDS.filter(([key]) => !BANK_STATE_KEYS.has(key) && !(key === "beneficiary_bank" && account.beneficiary_bank))} />
+          </SubPanel>)}</div>}
       </Card> : <Notice tone="info">Bank details are available to finance and administrators only.</Notice>}
     </> : null}
     {editor?.kind === "bank" && currencies.status === "failed" ? <Notice tone="error">Could not load currencies. <Button variant="default" onClick={currencies.retry}>Retry currencies</Button></Notice> : null}

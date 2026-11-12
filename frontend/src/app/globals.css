@@ -1359,8 +1359,7 @@ textarea {
   align-items: center;
 }
 
-.company-documents,
-.company-document-file {
+.company-documents {
   overflow-wrap: anywhere;
 }
 
@@ -7591,8 +7590,27 @@ small { font-size: var(--text-xs); }
   .analytics-cover > p { font-size: 9pt; line-height: 1.5; }
 }
 
-/* Company records: identity first, then clearly separated business sections. */
-.company-profile-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-block: var(--space-4) var(--space-5); color: var(--text-secondary); }
-.company-profile-sections { display: grid; gap: var(--space-5); }
-.company-profile-section { min-width: 0; border-top: 1px solid var(--line-soft); padding-top: var(--space-5); }
+/* Company records: the entity's identity and state first, its project position in the
+ * strip, then only the details that were entered. No hairline per group: the groups
+ * sit side by side on the card, and what is missing is named once in muted text. */
+.company-identity { display: flex; align-items: flex-start; gap: var(--space-4); margin-bottom: var(--space-4); }
+.company-identity-main { display: grid; flex: 1 1 16rem; gap: var(--space-1); min-width: 0; }
+.company-identity-name { margin: 0; font-size: var(--title-section); font-weight: 650; line-height: var(--leading-tight); overflow-wrap: anywhere; }
+.company-identity-meta { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); }
+.company-identity-state,
+.company-account-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); color: var(--text-secondary); font-size: var(--text-sm); }
+.company-account-state { margin-bottom: var(--space-3); }
+.company-logo-tile { display: grid; flex: none; place-items: center; width: 3.25rem; height: 3.25rem; border: 1px solid var(--surface-selected); border-radius: var(--radius-card); background-color: var(--accent-soft); color: var(--brand-gold-text); }
+.company-logo-tile .icon { width: 1.5rem; height: 1.5rem; }
+.company-logo-tile-image { width: 7.5rem; height: 4rem; padding: var(--space-2); border-color: var(--line-soft); background-color: var(--surface); }
+.company-logo-tile img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.company-details { margin-top: var(--space-2); }
+.company-missing { margin: var(--space-2) 0 0; font-size: var(--text-xs); }
+.company-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.company-notes-section { margin-top: var(--space-5); }
+.report-latest-title { margin: 0; font-size: var(--text-lg); font-weight: 650; overflow-wrap: anywhere; }
+@media (width < 48rem) {
+  .company-identity { flex-wrap: wrap; }
+  .company-identity > .card-actions { flex-basis: 100%; }
+}
 .company-relationship-tools { margin-top: var(--space-4); }

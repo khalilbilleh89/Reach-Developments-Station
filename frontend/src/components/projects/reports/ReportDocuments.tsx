@@ -20,7 +20,7 @@ export function SiteReportForm({ row, onSave, onClose, onSaved }: { row?: SiteRe
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reset = () => { setForm(fieldsOf(row)); setFile(null); setSource("pdf"); setSourceUrl(""); };
-  return <RecordPage icon="documents" title={row ? "Edit report details" : "Add report"} subtitle={row?.filename ?? (row?.source_url ? "Google Drive link" : "Give your report a title and choose a PDF or Google Drive link.")} onClose={onClose}>
+  return <RecordPage icon="documents" title={row ? "Edit report details" : "Add report"} subtitle={row ? row.filename ?? "Google Drive link" : undefined} onClose={onClose}>
     <Card title="Report details" description="Title, report date and a PDF or Drive link from your site engineer.">
       <DraftBoundary dirty={JSON.stringify(form) !== JSON.stringify(fieldsOf(row)) || !!file || !!sourceUrl || source !== "pdf"} busy={busy} onDiscard={reset}>
         <form className="stack" onSubmit={async event => {
@@ -42,7 +42,7 @@ export function SiteReportForm({ row, onSave, onClose, onSaved }: { row?: SiteRe
           </> : <p className="footnote">The original PDF or Drive link is retained. Add another report for a new source or revision.</p>}
           <Field label="Notes" optional><textarea className="input" maxLength={2000} rows={3} disabled={busy} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
           </fieldset>
-          <FormActions><Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : row ? "Save details" : source === "drive" ? "Save link" : "Upload report"}</Button></FormActions>
+          <FormActions><Button type="submit" variant="primary" disabled={busy}>{busy ? "Saving…" : row ? "Save details" : source === "drive" ? "Save link" : "Upload report"}</Button><Button disabled={busy} data-leaves-editor onClick={onClose}>Cancel</Button></FormActions>
         </form>
       </DraftBoundary>
     </Card>
@@ -50,10 +50,9 @@ export function SiteReportForm({ row, onSave, onClose, onSaved }: { row?: SiteRe
 }
 
 export function LinkedSiteReportViewer({ row, onClose }: { row: SiteReport; onClose: () => void }) {
-  return <RecordPage icon="documents" title={row.title} subtitle="Google Drive report" onClose={onClose}>
+  return <RecordPage icon="documents" title={row.title} subtitle={`Report date ${businessDate(row.report_date)} · Google Drive`} onClose={onClose}>
     <Card title="Open the shared report" description="This report is stored in Google Drive. Your Drive account must have permission to view it.">
       <div className="stack">
-        <p className="footnote">{businessDate(row.report_date)}</p>
         {row.notes ? <p className="drawing-notes">{row.notes}</p> : null}
         {row.source_url ? <ExternalLink href={row.source_url}>Open report in Google Drive</ExternalLink> : null}
         <p className="footnote">Opens in a new tab. The library stores the link, not a copy of the file; changes and sharing are managed in Drive.</p>
@@ -68,9 +67,8 @@ export function SiteReportViewer({ projectId, row, onClose }: { projectId: strin
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const preview = useAnswer(true, () => siteReports.preview(projectId, row, page), [projectId, row.id, page]);
-  return <RecordPage icon="documents" title={row.title} subtitle={businessDate(row.report_date)} onClose={onClose} actions={<Button disabled={downloading} onClick={async () => { setDownloading(true); setError(null); try { await siteReports.download(projectId, row); } catch (caught) { setError(message(caught)); } finally { setDownloading(false); } }}>{downloading ? "Downloading…" : "Download original PDF"}</Button>}>
+  return <RecordPage icon="documents" title={row.title} subtitle={`Report date ${businessDate(row.report_date)}${row.filename ? ` · ${row.filename}` : ""}`} onClose={onClose} actions={<Button disabled={downloading} onClick={async () => { setDownloading(true); setError(null); try { await siteReports.download(projectId, row); } catch (caught) { setError(message(caught)); } finally { setDownloading(false); } }}>{downloading ? "Downloading…" : "Download original PDF"}</Button>}>
     <div className="stack">
-      <p className="footnote">{row.filename}</p>
       {row.notes ? <p className="drawing-notes">{row.notes}</p> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className="drawing-view-controls">
