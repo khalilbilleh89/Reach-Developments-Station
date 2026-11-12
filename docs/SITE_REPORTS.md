@@ -34,3 +34,11 @@ API root: /api/v1/projects/{project_id}/technical-reports.
 PDF creation uses a streamed raw body and query metadata; Drive creation uses
 POST /links. Metadata updates and POST /{report_id}/delete use expected_version.
 Authorized document and preview routes reuse the bounded Plans PDF worker.
+
+## Presentation
+
+The library leads with the latest report, the first row of the server's
+newest-first order, with its date, source and notes and one Open action. Earlier
+reports follow as card rows (date and source); Edit and Delete sit in each row's
+menu. Search also matches the displayed date ("10 Nov") and, while applied, lists
+every match without singling one out. A single report shows no empty register.

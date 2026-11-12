@@ -121,3 +121,16 @@ Open parent / related company navigates to the linked profile from the saved det
 The proposed Accounting & Tax field specification is in
 [COMPANY_ACCOUNTING_PROPOSAL.md](COMPANY_ACCOUNTING_PROPOSAL.md). It is a recommendation for
 review, not an implemented tax register or a determination of any company's tax liability.
+
+## Profile presentation
+
+The company card leads with identity (logo tile, name, trading name, status), then a
+strip with the ownership share in the project, role, relationship and the parent or
+related company (which opens that company). Registration and contact details show
+only entered values; missing ones are named once in muted text. Logo add/remove and
+company deletion sit in the card's menu beside Edit. Registration documents show
+category, expiry and renewal reminder with an Expired / Renewal due pill from the
+server's `reminder_status`; bank accounts show a state line (default, status,
+currency, purpose) and their entered details. Short fixed choices (status, default
+for payments, account purpose, verification) are segmented controls; the company
+form has section links and a sticky save bar.
