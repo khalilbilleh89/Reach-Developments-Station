@@ -232,6 +232,7 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `consultant_payment_proofs` | Retained payment evidence; no legacy intake. |
 | `commission_grants` | Gate 0A governed distribution history sourced from a Reach sale; never fabricated by intake. |
 | `commission_allocations` | As above. |
+| `operations_commissions` | Client-linked fixed commissions entered in Reach; excluded from legacy intake. |
 | `management_report_snapshots` | Prospective immutable management captures; no backfill or legacy intake. |
 | `management_report_snapshot_projects` | Immutable authorization scope of those captures; never imported. |
 | `management_actions` | M3-02 commitments are created through the application with current project access, assignee eligibility and source validation; excluded from legacy intake. |
