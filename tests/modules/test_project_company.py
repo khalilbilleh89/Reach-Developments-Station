@@ -728,7 +728,15 @@ def test_profile_migration_retains_legacy_pdf(
     company = create(admin_client, project_id)
     base = f"{url(project_id)}/{company['id']}"
     row = upload_document(admin_client, base).json()
-    db.rollback()
+    # Reproduce a PDF that existed before the profile introduced document metadata.
+    db.execute(
+        text(
+            "UPDATE company_documents SET category = NULL, verification_status = NULL "
+            "WHERE id = :id"
+        ),
+        {"id": row["id"]},
+    )
+    db.commit()
     command.downgrade(config, "0068_site_reports")
     command.upgrade(config, "head")
     command.check(config)
