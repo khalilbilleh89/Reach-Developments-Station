@@ -21,6 +21,9 @@ Read its branch topology, sequencing, exact three-product-PR count, integration
 exceptions and final main-promotion gate before starting any Gate 0A task. Do not
 copy or invent alternate rules here. PR-ENG-04 is engineering, not product.
 
+Owner requests to add, change or remove features use
+[docs/CHANGE_REQUEST_TEMPLATE.md](docs/CHANGE_REQUEST_TEMPLATE.md).
+
 ## CI and review
 
 Engineering Rules §10a defines Smoke (integration), Fast (main Draft), and
