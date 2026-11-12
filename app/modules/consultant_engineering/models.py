@@ -22,7 +22,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import MONEY, Base, in_list
 
@@ -330,6 +330,23 @@ class ProjectDrawing(Base):
 class ProjectSiteReport(Base):
     __tablename__ = "project_site_reports"
     __table_args__ = (
+        UniqueConstraint("id", "project_id", name="report_project"),
+        ForeignKeyConstraint(
+            ["building_id", "project_id"],
+            ["buildings.id", "buildings.project_id"],
+            name="report_building",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "kind IN ('site_report', 'architect_certificate', 'client_charter')", name="report_kind"
+        ),
+        CheckConstraint(
+            "kind != 'site_report' OR (report_date IS NOT NULL AND building_id IS NULL)",
+            name="site_report_fields",
+        ),
+        CheckConstraint(
+            "kind = 'architect_certificate' OR building_id IS NULL", name="building_scope"
+        ),
         CheckConstraint("length(trim(title)) > 0", name="title_present"),
         CheckConstraint("octet_length(document) BETWEEN 1 AND 52428800", name="document_size"),
         CheckConstraint(
@@ -351,7 +368,24 @@ class ProjectSiteReport(Base):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(320), nullable=False)
-    report_date: Mapped[date] = mapped_column(Date, nullable=False)
+    report_date: Mapped[date | None] = mapped_column(Date)
+    kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="site_report", server_default="site_report"
+    )
+    building_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    building_label: Mapped[str | None] = mapped_column(String(240))
+    units: Mapped[list[ProjectReportUnit]] = relationship(
+        lazy="selectin", cascade="all, delete-orphan", order_by="ProjectReportUnit.unit_label"
+    )
+
+    @property
+    def unit_ids(self) -> list[uuid.UUID]:
+        return [link.unit_id for link in self.units]
+
+    @property
+    def unit_labels(self) -> list[str]:
+        return [link.unit_label for link in self.units]
+
     notes: Mapped[str] = mapped_column(String(2000), nullable=False)
     filename: Mapped[str | None] = mapped_column(String(255))
     document: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
@@ -366,3 +400,27 @@ class ProjectSiteReport(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class ProjectReportUnit(Base):
+    """Retained unit applicability; never cascades from inventory deletion."""
+
+    __tablename__ = "project_report_units"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["report_id", "project_id"],
+            ["project_site_reports.id", "project_site_reports.project_id"],
+            name="report",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["unit_id", "project_id"],
+            ["units.id", "units.project_id"],
+            name="unit",
+            ondelete="RESTRICT",
+        ),
+    )
+    report_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    unit_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    unit_label: Mapped[str] = mapped_column(String(64), nullable=False)

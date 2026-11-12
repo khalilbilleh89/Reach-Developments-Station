@@ -11,6 +11,7 @@ from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.consultant_engineering import report_service as service
 from app.modules.consultant_engineering.report_schemas import (
     ReportFields,
+    ReportKind,
     ReportLink,
     ReportPreview,
     ReportRead,
@@ -23,9 +24,17 @@ router = APIRouter(prefix="/projects/{project_id}/technical-reports", tags=["tec
 
 
 @router.get("", response_model=list[ReportRead])
-def list_reports(project_id: uuid.UUID, session: DbSession, actor: ActiveActor) -> list[ReportRead]:
+def list_reports(
+    project_id: uuid.UUID, session: DbSession, actor: ActiveActor, kind: ReportKind = "site_report"
+) -> list[ReportRead]:
     service.scope(session, project_id, actor)
-    return service.list_reports(session, project_id)
+    return service.list_reports(session, project_id, kind)
+
+
+@router.get("/targets")
+def report_targets(project_id: uuid.UUID, session: DbSession, actor: ActiveActor) -> dict:
+    service.scope(session, project_id, actor)
+    return service.report_targets.choices(session, project_id)
 
 
 @router.post("", response_model=ReportRead, status_code=201)

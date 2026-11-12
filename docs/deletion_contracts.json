@@ -965,7 +965,7 @@
     "status": "implemented",
     "removal_route": "POST /projects/{project_id}/technical-reports/{report_id}/delete",
     "ui_file": "frontend/src/components/projects/ReportsTab.tsx",
-    "notes": "Whole-project Design editors remove with reason and expected version. Original PDF or Drive link, dated metadata and audit are retained. No downstream references or payment/certification effects."
+    "notes": "Whole-project Design editors remove with reason and expected version. Site reports, architect certificates and client charters retain their original PDF or Drive link, metadata, building/unit applicability and audit. Linked inventory cannot be permanently purged. No contractor-payment or delivery-status effects."
   },
   {
     "handler": "consultant_engineering.create_report_link",
@@ -973,7 +973,7 @@
     "status": "implemented",
     "removal_route": "POST /projects/{project_id}/technical-reports/{report_id}/delete",
     "ui_file": "frontend/src/components/projects/ReportsTab.tsx",
-    "notes": "Whole-project Design editors remove with reason and expected version. Original PDF or Drive link, dated metadata and audit are retained. No downstream references or payment/certification effects."
+    "notes": "Whole-project Design editors remove with reason and expected version. Site reports, architect certificates and client charters retain their original PDF or Drive link, metadata, building/unit applicability and audit. Linked inventory cannot be permanently purged. No contractor-payment or delivery-status effects."
   },
   {
     "handler": "projects.create_company_document_link",

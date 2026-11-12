@@ -165,7 +165,7 @@ DOWNSTREAM: dict[str, tuple[str, ...]] = {
     # the project row lock through ``lock_project`` and resolves the project a
     # manifest names, so this module's contract is one the cutover depends on.
     "projects": ("inventory", "cutover", "management_actions", "leasing"),
-    "inventory": ("pricing", "leasing"),
+    "inventory": ("pricing", "leasing", "consultant_engineering"),
     "pricing": ("sales", "marketing"),
     "sales": ("payment_plans", "unit_economics", "leasing"),
     # Construction calls payment plans' milestone certification contract, so a
@@ -491,7 +491,12 @@ def domain_of_migration(path: str) -> str | None:
         return "leasing"
     if stem == "0062_project_training":
         return "projects"
-    if stem in {"0060_plan_categories", "0063_plan_sources", "0068_site_reports"}:
+    if stem in {
+        "0060_plan_categories",
+        "0063_plan_sources",
+        "0068_site_reports",
+        "0071_report_sections",
+    }:
         return "consultant_engineering"
     if stem == "0052_design_payments":
         return "consultant_engineering"

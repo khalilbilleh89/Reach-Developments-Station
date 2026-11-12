@@ -216,6 +216,12 @@ MIGRATIONS: dict[str, tuple[str, tuple[str, ...]]] = {
         "projects",
         ("tests/modules/test_permit_date_status.py::test_legacy_date_reconciliation_migration",),
     ),
+    "0071_report_sections.py": (
+        "consultant_engineering",
+        (
+            "tests/modules/test_consultant_engineering_report_sections.py::test_sections_migration_preserves_site_reports",
+        ),
+    ),
     "0068_site_reports.py": (
         "consultant_engineering",
         (
