@@ -6,6 +6,11 @@ import test from "node:test";
 import ts from "typescript";
 const require = createRequire(import.meta.url);
 
+const formatSource = readFileSync(new URL("../src/lib/format.ts", import.meta.url), "utf8");
+const formatCode = ts.transpileModule(formatSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const format = {};
+runInNewContext(`(function(exports){${formatCode}\n})`)(format);
+
 function harness() {
   const slots = []; let cursor = 0;
   const source = readFileSync(new URL("../src/components/projects/CompanyTab.tsx", import.meta.url), "utf8");
@@ -17,9 +22,9 @@ function harness() {
   runInNewContext(`(function(require,exports){${code}\n})`)((key) => {
     if (key === "react") return { useState(initial) {
       const i = cursor++; slots[i] ??= { value: typeof initial === "function" ? initial() : initial };
-      return [slots[i].value, value => { slots[i].value = value; }];
+      return [slots[i].value, value => { slots[i].value = typeof value === "function" ? value(slots[i].value) : value; }];
     }};
-    if (key === "@/lib/format") return { businessDate: value => value };
+    if (key === "@/lib/format") return format;
     if (key === "@/lib/api") return { ApiError, settings: { currencies() {} } };
     if (key === "@/lib/api/companies") return { companies: {} };
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
@@ -125,6 +130,10 @@ test("adding a parent selects the saved record and preserves the company draft",
   const props = { title: "Edit company", fields: h.exports.COMPANY_FIELDS, initial: { legal_name: "Original" }, relatedCompanies: [],
     onSaveRelated: async values => { parentValues = values; return parent; }, onSave: async values => { saved = values; }, onClose() {} };
   let tree = h.render("CompanyEntryForm", props);
+  const emptyRelation = find(tree, "Field").find(node => node.props.label === "Parent or related company").props.children;
+  assert.equal(emptyRelation.type, "select");
+  assert.equal(emptyRelation.props.value, "");
+  assert.deepEqual(find(emptyRelation, "option").map(node => node.props.children), ["No parent or related company"]);
   find(tree, "Field").find(node => node.props.label === "Legal company name").props.children.props.onChange({ target: { value: "Draft company" } });
   tree = h.render("CompanyEntryForm", props);
   find(tree, "Button").find(node => node.props.children === "Add parent company").props.onClick();
@@ -149,6 +158,33 @@ test("adding a parent selects the saved record and preserves the company draft",
   await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
   assert.equal(saved.legal_name, "Draft company");
   assert.equal(saved.related_company_id, parent.id);
+});
+
+test("a saved link reopens selected and the existing-company selector can clear it", async () => {
+  const h = harness(); let saved;
+  const parent = { id: "parent-1", legal_name: "Parent Ltd" };
+  const other = { id: "other-1", legal_name: "Other Ltd" };
+  const props = {
+    title: "Edit company", fields: h.exports.COMPANY_FIELDS,
+    initial: { related_company_id: parent.id, ownership_percentage: "100.0000" },
+    relatedCompanies: [parent, other], onSaveRelated: async () => parent,
+    onSave: async values => { saved = values; }, onClose() {},
+  };
+  const render = () => h.render("CompanyEntryForm", props);
+  const field = (tree, label) => find(tree, "Field").find(node => node.props.label === label).props.children;
+  let tree = render();
+  assert.equal(find(tree, "DraftBoundary")[0].props.dirty, false);
+  assert.equal(field(tree, "Ownership share in project (%)").props.value, "100");
+  const relation = tree => field(tree, "Parent or related company");
+  assert.equal(relation(tree).props.value, parent.id);
+  assert.ok(find(relation(tree), "option").some(node => node.props.value === other.id));
+  relation(tree).props.onChange({ target: { value: other.id } });
+  tree = render();
+  assert.equal(relation(tree).props.value, other.id);
+  relation(tree).props.onChange({ target: { value: "" } });
+  await find(render(), "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(saved.related_company_id, null);
+  assert.equal(saved.ownership_percentage, "100");
 });
 
 test("parent save failure retains entries and never submits a nested form", async () => {
@@ -185,7 +221,7 @@ test("profile shows entered details at full weight and names missing ones once",
   assert.equal(missing.length, 2);
   assert.match(missing.map(node => [].concat(node.props.children).join("")).join(" "), /Tax \/ VAT number/);
   const strip = find(page, "RecordStrip")[0].props;
-  assert.equal(strip.lead.value, "12.5000%");
+  assert.equal(strip.lead.value, "12.5%");
   assert.equal(strip.items[0].value, "Investor");
   assert.equal(strip.items[1].tone, "muted");
 });
