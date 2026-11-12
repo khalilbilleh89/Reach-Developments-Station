@@ -990,5 +990,13 @@
     "removal_route": "POST /projects/{project_id}/companies/{company_id}/logos/{logo_id}/delete",
     "ui_file": "frontend/src/components/projects/CompanyLogo.tsx",
     "notes": "Finance/admin/project manager can remove logos with a reason; immutable normalized image and audit retained. Project/company scope checked; delete logo before deleting company."
+  },
+  {
+    "handler": "commissions.create_operations",
+    "create_route": "POST ",
+    "status": "implemented",
+    "removal_route": "POST /{identifier}/delete",
+    "ui_file": "frontend/src/components/projects/OperationsCommissions.tsx",
+    "notes": "Whole-project commission preparers can Delete with a reason and expected version. Entry and full audit snapshots retained; client reference remains protected. No payment is created or reversed."
   }
 ]

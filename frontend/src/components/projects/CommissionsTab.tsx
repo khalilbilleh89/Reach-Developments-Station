@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { OperationsCommissions } from "./OperationsCommissions";
+import { requestFormLeave } from "@/components/ui/UnsavedChangesGuard";
+import { Tabs, TabPanel } from "@/components/ui";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRegisterFields } from "@/components/shell/registerState";
@@ -39,7 +42,23 @@ function readCommissionColumn(row: CommissionGrant, column: string): string | nu
   }
 }
 
-export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
+export function CommissionsTab(props: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
+  const params = useSearchParams();
+  const router = useRouter();
+  const active = params.get("commissionSection") === "operations" ? "operations" : "sales";
+  return <div className="stack">
+    <Tabs label="Commission sections" active={active} tabs={[{ key: "sales", label: "Sales Commissions" }, { key: "operations", label: "Operations Commission" }]} onSelect={key => requestFormLeave(document.body, () => {
+      const next = new URLSearchParams(params);
+      next.set("commissionSection", key);
+      router.push(`/projects/?${next}`, { scroll: false });
+    })} />
+    <TabPanel group="Commission sections" tab={active}>
+      {active === "sales" ? <SalesCommissions {...props} /> : <OperationsCommissions key={props.projectId} projectId={props.projectId} roles={props.roles} currencyCodes={props.currencyCodes} />}
+    </TabPanel>
+  </div>;
+}
+
+function SalesCommissions({ projectId, roles, userId, currencyCodes }: { projectId: string; roles: Roles; userId: string; currencyCodes: Record<string, string> }) {
   const [rows, setRows] = useState<CommissionGrant[]>([]); const [eligible, setEligible] = useState<CommissionEligibleSale[]>([]); const params = useSearchParams(); const router = useRouter();
   const selectedId = params.get("commission");
   const selected = rows.find(row => row.id === selectedId) ?? null;
@@ -67,7 +86,7 @@ export function CommissionsTab({ projectId, roles, userId, currencyCodes }: { pr
   const load = useCallback(async () => { try { const [grants, sales] = await Promise.all([commissions.list(projectId), commissions.eligibleSales(projectId)]); setRows(grants); setEligible(sales);  setLoaded(true); setError(null); } catch (e) { setError(e instanceof ApiError ? e.message : "Could not load commissions."); } }, [projectId]);
   useEffect(() => { void (async () => { await load(); })(); }, [load]); const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(null); try { await fn(); setDialog(null); setAllocation(null); await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "That action could not be completed."); } finally { setBusy(false); } };
   return <div className="stack">
-    <PageHeader icon="money" title="Commissions" subtitle={sectionDescription("commissions")} actions={canPrepare && eligible.length ? <Button variant="primary" onClick={() => setDialog("grant")}>Prepare commission</Button> : undefined} />
+    <PageHeader icon="money" title="Sales Commissions" subtitle={sectionDescription("commissions")} actions={canPrepare && eligible.length ? <Button variant="primary" onClick={() => setDialog("grant")}>Prepare commission</Button> : undefined} />
     {error && !dialog && !selected ? <Notice tone="error">{error}</Notice> : null}
     {loaded && rows.length ? <>
       <DataToolbar framed search={{ value: search, onChange: value => setFilters({ search: value }), placeholder: "Unit, sale or buyer", label: "Search commissions" }}
