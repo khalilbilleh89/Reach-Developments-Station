@@ -207,7 +207,8 @@ That is target-side preflight, and it is why preflight has a target half at all.
 | `inventory_masterplan_mappings` | Project-scoped traced unit footprints; excluded from legacy intake. |
 | `commercial_faqs` | Project-authored reusable sales answers maintained in Reach; excluded from legacy import. |
 | `commercial_emails` | Project-authored reusable email templates maintained in Reach; excluded from legacy import. |
-| `project_site_reports` | Dated site engineer reports uploaded or linked through Delivery > Reports; excluded from legacy import. |
+| `project_site_reports` | Site reports, architect completion certificates and client charters uploaded or linked through Delivery > Reports; excluded from legacy import. |
+| `project_report_units` | Retained unit applicability for Reports documents; created through the owning report, excluded from legacy import. |
 | `project_drawings` | Project drawing PDFs and register metadata uploaded through Design; excluded from legacy import. |
 | `project_price_escalations` | Owner-entered escalation strategy maintained in Finance; it never reprices units, and importing it would imply legacy prices followed it. Excluded from legacy intake. |
 

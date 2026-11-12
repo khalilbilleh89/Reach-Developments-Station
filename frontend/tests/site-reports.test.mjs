@@ -5,6 +5,10 @@ import { runInNewContext } from "node:vm";
 import test from "node:test";
 import ts from "typescript";
 const require = createRequire(import.meta.url);
+const apiSource = ts.transpileModule(readFileSync(new URL("../src/lib/api/siteReports.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+const apiExports = {};
+runInNewContext(`(function(require,exports){${apiSource}\n})`)((key) => ({}), apiExports);
+
 
 function harness() {
   const slots = []; let cursor = 0;
@@ -21,7 +25,10 @@ function harness() {
     }};
     if (key === "@/lib/api") return { ApiError };
     if (key === "@/lib/format") return { businessDate: value => value };
-    if (key === "@/lib/api/siteReports") return { drawings: {}, planCategories: {architecture: "Architectural", electrical: "Electrical", mechanical: "Mechanical", structure: "Structural", shop_drawing: "Shop Drawings"}, drawingCategories: {general: "General"}, drawingStatuses: {reference: "Reference"}, filterDrawings: rows => rows };
+    if (key === "@/lib/api/siteReports") return apiExports;
+    if (key === "./ReportApplicability") return { ReportApplicability: "ReportApplicability" };
+    if (key === "@/components/ui/UnsavedChangesGuard") return { requestFormLeave() {} };
+    if (key === "next/navigation") return {};
     if (key === "@/lib/answer") return { useAnswer(gate) { enabled = gate; return answer; } };
     if (key === "@/lib/roles") return { PROJECT_FINANCIAL_READERS: new Set(["finance"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) };
     if (key === "./CompanyDocuments") return { CompanyDocuments: "CompanyDocuments" };
@@ -113,7 +120,10 @@ function libraryHarness() {
       return [slots[i].value, value => { slots[i].value = value; }];
     }};
     if (key === "@/lib/format") return { businessDate: value => ({ "2026-11-10": "10 Nov 2026", "2026-10-31": "31 Oct 2026" })[value] ?? value };
-    if (key === "@/lib/api/siteReports") return { siteReports: {} };
+    if (key === "@/lib/api/siteReports") return apiExports;
+    if (key === "./ReportApplicability") return { ReportApplicability: "ReportApplicability" };
+    if (key === "@/components/ui/UnsavedChangesGuard") return { requestFormLeave() {} };
+    if (key === "next/navigation") return {};
     if (key === "@/lib/answer") return { useAnswer() { return answer; } };
     if (key === "@/lib/roles") return { CONSULTANT_READERS: new Set(["design"]), CONSULTANT_EDITORS: new Set(["design"]), hasAnyRole: (roles, allowed) => [...roles].some(role => allowed.has(role)) };
     if (key === "./DeleteRecordButton") return { DeleteRecordButton: "DeleteRecordButton" };
@@ -168,4 +178,42 @@ test("a failed read says so in words with a retry, never an empty library", () =
   const tree = h.render({ projectId: "project", canWrite: true });
   assert.equal(find(tree, "EmptyState").length, 0);
   assert.equal(find(tree, "Notice")[0].props.tone, "error");
+});
+
+
+test("architect certificates and client charters accept optional dates and require applicability", async () => {
+  for (const kind of ["architect_certificate", "client_charter"]) {
+    const h = harness(); let saved;
+    const props = { kind, projectId: "project", onSave: async (...args) => { saved = args; }, onClose() {}, onSaved() {} };
+    let tree = h.render("SiteReportForm", props);
+    find(tree, "input")[0].props.onChange({ target: { value: "Named evidence" } });
+    tree = h.render("SiteReportForm", props);
+    await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+    tree = h.render("SiteReportForm", props);
+    assert.match(find(tree, "Notice")[0].props.children, /Choose/);
+    const scope = find(tree, "ReportApplicability")[0];
+    scope.props.onChange({ ...scope.props.form, unit_ids: ["unit-1"] });
+    tree = h.render("SiteReportForm", props);
+    find(tree, "ChoiceCards")[0].props.onChange("drive");
+    tree = h.render("SiteReportForm", props);
+    find(tree, "input").find(node => node.props.type === "url").props.onChange({ target: { value: "https://drive.google.com/file/d/demo/view" } });
+    tree = h.render("SiteReportForm", props);
+    assert.equal(find(tree, "input").find(node => node.props.type === "date").props.required, false);
+    await find(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(saved[0].kind, kind);
+    assert.equal(saved[0].report_date, null);
+    assert.deepEqual([...saved[0].unit_ids], ["unit-1"]);
+  }
+});
+
+test("certificate and charter registers show applicability and retained deletion actions", () => {
+  for (const kind of ["architect_certificate", "client_charter"]) {
+    const h = libraryHarness();
+    h.setAnswer({ status: "ready", data: [{ ...reports[0], kind, report_date: null, unit_labels: ["A-101"], unit_ids: ["unit-1"] }] });
+    const tree = h.render({ projectId: "project", canWrite: true, kind });
+    assert.equal(find(tree, "CardRow")[0].props.meta, "A-101");
+    assert.equal(find(tree, "DeleteRecordButton").length, 1);
+    assert.equal(find(tree, "PageHeader")[0].props.title, apiExports.reportSections[kind].label);
+    assert.equal(h.exports.matchesReport({ ...reports[0], report_date: null, unit_labels: ["A-101"] }, "a-101"), true);
+  }
 });

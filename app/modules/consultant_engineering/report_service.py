@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from app.modules.access.dependencies import ActorContext
 from app.modules.audit.service import record_event
+from app.modules.consultant_engineering import report_targets
 
 # Reuse the bounded PDF worker and source validation used by Plans.
 from app.modules.consultant_engineering.drawing_service import (
@@ -27,6 +28,7 @@ from app.modules.consultant_engineering.models import ProjectSiteReport
 from app.modules.consultant_engineering.permissions import EDITOR_ROLES, READER_ROLES
 from app.modules.consultant_engineering.report_schemas import (
     ReportFields,
+    ReportKind,
     ReportLink,
     ReportRead,
     ReportUpdate,
@@ -64,12 +66,18 @@ def report(session: Session, project_id: uuid.UUID, report_id: uuid.UUID) -> Pro
     return row
 
 
-def list_reports(session: Session, project_id: uuid.UUID) -> list[ReportRead]:
+def list_reports(
+    session: Session, project_id: uuid.UUID, kind: ReportKind = "site_report"
+) -> list[ReportRead]:
     rows = session.scalars(
         select(ProjectSiteReport)
-        .where(ProjectSiteReport.project_id == project_id, ProjectSiteReport.is_deleted.is_(False))
+        .where(
+            ProjectSiteReport.project_id == project_id,
+            ProjectSiteReport.is_deleted.is_(False),
+            ProjectSiteReport.kind == kind,
+        )
         .order_by(
-            ProjectSiteReport.report_date.desc(),
+            ProjectSiteReport.report_date.desc().nulls_last(),
             ProjectSiteReport.created_at.desc(),
             ProjectSiteReport.id,
         )
@@ -119,11 +127,11 @@ def create(
 ) -> ProjectSiteReport:
     row = ProjectSiteReport(
         project_id=project_id,
-        **fields.model_dump(),
         filename=validate_document(filename, document),
         document=document,
         sha256=hashlib.sha256(document).hexdigest(),
     )
+    report_targets.apply(session, row, fields)
     session.add(row)
     audit(session, row, actor, "create")
     return row
@@ -161,9 +169,10 @@ def update(
     session: Session, row: ProjectSiteReport, actor: ActorContext, fields: ReportUpdate
 ) -> ProjectSiteReport:
     check_version(row, fields.expected_version)
+    if fields.kind != row.kind:
+        raise ValidationError("The report section cannot be changed. Add a new document instead.")
     before = snapshot(row)
-    for key, value in fields.model_dump(exclude={"expected_version"}).items():
-        setattr(row, key, value)
+    report_targets.apply(session, row, fields)
     row.version += 1
     audit(session, row, actor, "update", before)
     return row
@@ -189,7 +198,8 @@ def create_link(
     session: Session, project_id: uuid.UUID, actor: ActorContext, fields: ReportLink
 ) -> ProjectSiteReport:
     scope(session, project_id, actor, write=True)
-    row = ProjectSiteReport(project_id=project_id, **fields.model_dump())
+    row = ProjectSiteReport(project_id=project_id, source_url=fields.source_url)
+    report_targets.apply(session, row, fields)
     session.add(row)
     audit(session, row, actor, "create")
     return row
