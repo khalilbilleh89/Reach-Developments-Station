@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ValidationError
 from app.modules.audit.service import record_event
 from app.modules.projects.models import LandMarketAssumption, LandParcel, PlanningControl, Project
-from app.modules.projects.service import get_parcel, lock_project
+from app.modules.projects.service import get_parcel, lock_project, update_parcel
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -166,6 +166,7 @@ def write_market_assumption(
     parcel_id: uuid.UUID,
     year: int,
     change_rate_fraction: Decimal,
+    commit: bool = True,
     actor_user_id: uuid.UUID,
     correlation_id: uuid.UUID,
 ) -> None:
@@ -203,7 +204,8 @@ def write_market_assumption(
             "change_rate_fraction": str(change_rate_fraction),
         },
     )
-    session.commit()
+    if commit:
+        session.commit()
 
 
 def complete_project_acquisition_cost(session: Session, *, project_id: uuid.UUID) -> Decimal | None:
@@ -219,3 +221,44 @@ def complete_project_acquisition_cost(session: Session, *, project_id: uuid.UUID
     if not values or any(value is None for value in values):
         return None
     return amount(sum(values, ZERO))
+
+
+def update_inputs(
+    session: Session,
+    *,
+    project: Project,
+    parcel_id: uuid.UUID,
+    values: dict,
+    actor_user_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+) -> dict:
+    """Save the tab's input changes and audit events in one transaction."""
+    lock_project(session, project.id)
+    parcel = get_parcel(session, project_id=project.id, parcel_id=parcel_id)
+    year = values.pop("year", None)
+    rate = values.pop("change_rate_fraction", None)
+    if (year is None) != (rate is None):
+        raise ValidationError("Enter both a market year and its change rate.")
+    if year is not None:
+        write_market_assumption(
+            session,
+            project=project,
+            parcel_id=parcel_id,
+            year=year,
+            change_rate_fraction=rate,
+            actor_user_id=actor_user_id,
+            correlation_id=correlation_id,
+            commit=False,
+        )
+    if values:
+        update_parcel(
+            session,
+            project=project,
+            parcel=parcel,
+            actor_user_id=actor_user_id,
+            correlation_id=correlation_id,
+            commit=False,
+            **values,
+        )
+    session.commit()
+    return read_analytics(session, parcel=parcel)

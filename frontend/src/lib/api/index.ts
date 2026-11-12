@@ -303,6 +303,8 @@ export const projects = {
 
   landAnalytics: (id: string, parcelId: string) =>
     get<import("./types").LandAnalytics>(`/projects/${id}/parcels/${parcelId}/analytics`),
+  updateLandAnalytics: (id: string, parcelId: string, values: Record<string, unknown>) =>
+    patch<import("./types").LandAnalytics>(`/projects/${id}/parcels/${parcelId}/analytics`, values),
   writeLandMarketYear: (id: string, parcelId: string, year: string, changeRate: string) =>
     put<import("./types").LandAnalytics>(`/projects/${id}/parcels/${parcelId}/market-assumptions/${year}`, { change_rate_fraction: changeRate }),
   parcels: (id: string) => get<LandParcel[]>(`/projects/${id}/parcels`),

@@ -179,7 +179,7 @@ function landFixture(canWrite = true) {
   class ApiError extends Error {}
   const projects = {
     landAnalytics: async () => analytics,
-    writeLandMarketYear: async (...args) => { calls.push(args); if (rejectWrite) throw new ApiError("Write refused"); return analytics; },
+    updateLandAnalytics: async (...args) => { calls.push(args); if (rejectWrite) throw new ApiError("Write refused"); return analytics; },
     updateParcel: async (...args) => { calls.push(args); return { ...props.parcel, expected_gdv_amount: "200000.00" }; },
   };
   const render = mount("projects/land/LandAnalytics", "LandAnalytics", {
@@ -190,21 +190,24 @@ function landFixture(canWrite = true) {
 
 test("Land analytics preserves a failed annual draft and sends the exact signed percentage", async () => {
   const f = landFixture(); f.render(); await settle();
+  nodes(nodes(f.render()).find(n => n.type === "SectionHeader").props.actions)[0].props.onClick();
   let tree = nodes(f.render());
   tree.find(n => n.type === "Field" && n.props.label === "Year").props.children.props.onChange({ target: { value: "2027" } });
   tree.find(n => n.type === "Field" && n.props.label === "Expected increase / decrease (%)").props.children.props.onChange({ target: { value: "-5.25" } });
-  await nodes(f.render()).filter(n => n.type === "form")[1].props.onSubmit({ preventDefault() {} });
+  await nodes(f.render()).filter(n => n.type === "form")[0].props.onSubmit({ preventDefault() {} });
   tree = nodes(f.render());
-  assert.equal(f.calls[0][3], "-0.0525");
+  assert.equal(f.calls[0][2].change_rate_fraction, "-0.0525");
   assert.equal(tree.find(n => n.type === "Field" && n.props.label === "Year").props.children.props.value, "2027");
   assert.ok(JSON.stringify(tree).includes("Write refused"));
   f.recover();
-  await tree.filter(n => n.type === "form")[1].props.onSubmit({ preventDefault() {} });
-  assert.equal(nodes(f.render()).find(n => n.type === "Field" && n.props.label === "Year").props.children.props.value, "");
+  await tree.filter(n => n.type === "form")[0].props.onSubmit({ preventDefault() {} });
+  assert.ok(!nodes(f.render()).some(n => n.type === "form"));
 });
 
 test("Land analytics canonicalizes saved GDV so a successful save leaves no false dirty draft", async () => {
   const f = landFixture(); f.render(); await settle();
+  f.recover();
+  nodes(nodes(f.render()).find(n => n.type === "SectionHeader").props.actions)[0].props.onClick();
   nodes(f.render()).find(n => n.type === "Field" && n.props.label === "Expected GDV for this parcel").props.children.props.onChange({ target: { value: "200000" } });
   await nodes(f.render()).find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
   assert.equal(f.calls[0][2].expected_gdv_amount, "200000");
@@ -983,4 +986,64 @@ test("Specification applicability and revision stay optional with an All buildab
   assert.ok(form.props.fields.find(f => f.name === "scope").options.some(o => o.value === "buildable" && o.label === "All buildable area"));
   await form.props.onSave({ title: "Shared insulation", description: "Synthetic specification", scope: "buildable", inclusion: "included", status: "confirmed" });
   assert.equal(payload.applies_to, ""); assert.equal(payload.source_reference, ""); assert.equal(payload.scope, "buildable");
+});
+
+
+test("parcel tab edits isolate overview and save site and utilities together", async () => {
+  let parcel = { id: "parcel", plot_number: "334", land_area: "100", area_unit: "sqm", is_active: true,
+    financials_visible: false, power_available: true, water_available: null, sewer_available: false,
+    stormwater_available: null, telecom_available: null, utility_notes: "Original notes", road_access: "Track" };
+  const writes = [];
+  const documentWrites = [];
+  const planningWrites = [];
+  let document = { id: "doc", title: "Survey", reference_number: null, notes: null };
+  const projects = {
+    parcels: async () => [parcel], planning: async () => ({}), documents: async () => [document],
+    updateDocument: async (_project, _id, changes) => { documentWrites.push(changes); document = { ...document, ...changes }; return document; },
+    writePlanning: async (_project, _id, changes) => { planningWrites.push(changes); return changes; },
+    updateParcel: async (_project, _id, changes) => { writes.push(changes); parcel = { ...parcel, ...changes }; return parcel; },
+  };
+  const render = mount("projects/LandTab", "LandTab", {
+    "@/lib/api": { projects, settings: { referenceValues: async () => [] }, ApiError: class extends Error {} },
+    "@/lib/format": landFormat,
+    "@/components/ui/UnsavedChangesGuard": { DraftBoundary: "DraftBoundary", requestFormLeave: (_root, callback) => callback() },
+    "@/components/projects/EditForm": { EditForm: "EditForm", asValue: value => value ?? "" },
+    "@/components/projects/land/ParcelCollection": { ParcelCollection: "ParcelCollection" },
+    "@/components/projects/land/AcquisitionCosts": { AcquisitionCosts: "AcquisitionCosts" },
+  }, { projectId: "project", canWriteLand: true, canWritePlanning: true, canSeeCost: false });
+  render(); await settle();
+  await nodes(render()).find(node => node.type === "ParcelCollection").props.onOpen(parcel);
+  let tree = nodes(render());
+  assert.ok(!tree.some(node => node.type === "SectionHeader" && node.props.title === "Title & ownership"));
+  tree.find(node => node.type === "Button" && node.props.children === "Edit overview").props.onClick();
+  let form = nodes(render()).find(node => node.type === "EditForm");
+  assert.ok(!form.props.fields.some(field => field.name === "road_access"));
+  nodes(render()).find(node => node.type === "RecordPage").props.onSelectTab("site");
+  nodes(render()).find(node => node.type === "Button" && node.props.children === "Edit site & utilities").props.onClick();
+  form = nodes(render()).find(node => node.type === "EditForm");
+  assert.equal(form.props.initial.power_network_availability, "available");
+  assert.equal(form.props.initial.water_network_availability, "not_checked");
+  assert.equal(form.props.initial.sewer_network_availability, "unavailable");
+  assert.equal(form.props.fields.filter(field => field.name.endsWith("_connection_status")).length, 5);
+  assert.ok(!form.props.fields.some(field => field.name === "purchase_price"));
+  await form.props.onSave({ road_access: "Paved", water_connection_status: "submitted", sewer_requirements: "Apply", utility_notes: "Updated" });
+  assert.equal(writes.length, 1);
+  assert.equal(parcel.power_available, true);
+  tree = nodes(render());
+  assert.equal(tree.find(node => node.type === "RecordPage").props.activeTab, "site");
+  assert.ok(JSON.stringify(tree).includes("Paved"));
+  tree.find(node => node.type === "RecordPage").props.onSelectTab("documents");
+  nodes(render()).find(node => node.type === "Button" && node.props.children === "Edit documents").props.onClick();
+  await nodes(render()).find(node => node.type === "EditForm").props.onSave({ reference_number: "S-334" });
+  assert.equal(documentWrites[0].reference_number, "S-334");
+  assert.equal(nodes(render()).find(node => node.type === "RecordPage").props.activeTab, "documents");
+  assert.ok(JSON.stringify(nodes(render())).includes("S-334"));
+  nodes(render()).find(node => node.type === "RecordPage").props.onSelectTab("planning");
+  nodes(render()).find(node => node.type === "Button" && node.props.children === "Edit planning").props.onClick();
+  const planningField = nodes(render()).find(node => node.type === "Field" && node.props.label === "Permitted uses");
+  nodes(planningField).find(node => node.type === "input" || node.type === "textarea").props.onChange({ target: { value: "Residential" } });
+  await nodes(render()).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+  assert.equal(planningWrites[0].permitted_uses, "Residential");
+  assert.equal(nodes(render()).find(node => node.type === "RecordPage").props.activeTab, "planning");
+  assert.equal(writes.length, 1);
 });

@@ -1,9 +1,9 @@
 "use client";
 
 import * as ui from "@/components/ui";
-import { DraftBoundary } from "@/components/ui/UnsavedChangesGuard";
+import { DraftBoundary, requestFormLeave } from "@/components/ui/UnsavedChangesGuard";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, projects, settings } from "@/lib/api";
 import type { DocumentReference, LandParcel, PlanningControl, ReferenceValue } from "@/lib/api";
@@ -66,10 +66,37 @@ function readParcelColumn(parcel: LandParcel, column: string): string | null {
   }
 }
 
-/** Tri-state: null means nobody has established it yet, which is not "no". */
-function utility(value: boolean | null): string {
-  if (value === null) return "Not established";
-  return value ? "Available" : "Not available";
+const UTILITIES = ["power", "water", "sewer", "stormwater", "telecom"] as const;
+const AVAILABILITY = [
+  { value: "not_checked", label: "Not yet checked" },
+  { value: "available", label: "Available" },
+  { value: "conditional", label: "Available subject to conditions" },
+  { value: "unavailable", label: "Unavailable" },
+];
+const CONNECTION = [
+  { value: "not_checked", label: "Not yet checked" },
+  { value: "not_connected", label: "Not connected" },
+  { value: "submitted", label: "Application submitted" },
+  { value: "approved", label: "Approved, awaiting connection" },
+  { value: "connected", label: "Connected" },
+];
+function utilityAvailability(parcel: LandParcel, utility: typeof UTILITIES[number]) {
+  return parcel[`${utility}_network_availability`] ??
+    (parcel[`${utility}_available`] === true ? "available" : parcel[`${utility}_available`] === false ? "unavailable" : "not_checked");
+}
+function sectionFields(parcel: LandParcel, section: string): EditField[] {
+  const fields = parcelFields(parcel, parcel.financials_visible);
+  if (section === "overview") return fields.filter(field => !["Site", "Constraints"].includes(field.group ?? "") || field.name === "is_active");
+  return [
+    ...fields.filter(field => field.group === "Site"),
+    ...UTILITIES.flatMap(utility => [
+      { name: `${utility}_network_availability`, label: "Network availability", kind: "select" as const, group: utility[0].toUpperCase() + utility.slice(1), options: AVAILABILITY },
+      { name: `${utility}_connection_status`, label: "Connection status", kind: "select" as const, group: utility[0].toUpperCase() + utility.slice(1), options: CONNECTION },
+      { name: `${utility}_requirements`, label: "Requirements or next action", group: utility[0].toUpperCase() + utility.slice(1) },
+    ]),
+    ...fields.filter(field => field.group === "Constraints" && field.name !== "is_active").map(field =>
+      field.name === "utility_notes" ? { ...field, label: "Supporting utility notes" } : field),
+  ];
 }
 
 /**
@@ -274,6 +301,10 @@ export function LandTab({
   const [planningForm, setPlanningForm] = useState(planningFrom(null));
   const [editingPlanning, setEditingPlanning] = useState(false);
   const [editingParcel, setEditingParcel] = useState(false);
+  const sectionHost = useRef<HTMLDivElement>(null);
+  const [editingDocuments, setEditingDocuments] = useState(false);
+  const [documentId, setDocumentId] = useState("");
+
   const [documentsError, setDocumentsError] = useState(false);
   const [documents, setDocuments] = useState<DocumentReference[] | null>(null);
   const [form, setForm] = useState(emptyParcel());
@@ -322,6 +353,8 @@ export function LandTab({
     setSection("overview");
     setEditingParcel(false);
     setEditingPlanning(false);
+    setEditingDocuments(false);
+    setDocumentId("");
     setNotice(null);
     setPlanning(null);
     setPlanningRead(false);
@@ -499,7 +532,7 @@ export function LandTab({
         : selected.financials_visible && !selected.total_acquisition_cost
           ? {
               text: "The acquisition cost is incomplete: record every cost input, using zero where no fee applies.",
-              action: canWriteLand ? <Button small data-leaves-editor onClick={() => setEditingParcel(true)}>Edit parcel</Button> : undefined,
+              action: canWriteLand ? <Button small data-leaves-editor onClick={() => { setSection("overview"); setEditingParcel(true); }}>Edit overview</Button> : undefined,
             }
           : undefined;
 
@@ -870,13 +903,6 @@ export function LandTab({
             items: facts,
           }}
           next={next}
-          actions={
-            canWriteLand ? (
-              <Button onClick={() => setEditingParcel((open) => !open)}>
-                {editingParcel ? "Stop editing" : "Edit parcel"}
-              </Button>
-            ) : undefined
-          }
           tabs={[
             { key: "overview", icon: "overview", label: "Overview" },
             { key: "planning", icon: "blueprint", label: "Planning" },
@@ -885,18 +911,22 @@ export function LandTab({
             { key: "analytics", icon: "economics", label: "Analytics" },
           ]}
           activeTab={section}
-          onSelectTab={setSection}
+          onSelectTab={value => requestFormLeave(sectionHost.current, () => { setSection(value); setEditingParcel(false); setEditingPlanning(false); setPlanningForm(planningFrom(planning)); setEditingDocuments(false); })}
           onClose={() => setSelected(null)}
         >
-          {editingParcel ? (
-            <Card title="Edit parcel">
-              <EditForm
-                fields={parcelFields(selected, selected.financials_visible)}
+          <div ref={sectionHost} className="stack">
+          {(section === "overview" || section === "site") && canWriteLand && !editingParcel ? <SectionHeader title={section === "overview" ? "Overview" : "Site & utilities"} actions={<Button onClick={() => setEditingParcel(true)}>{section === "overview" ? "Edit overview" : "Edit site & utilities"}</Button>} /> : null}
+          {editingParcel && (section === "overview" || section === "site") ? (
+            <Card title={section === "overview" ? "Edit overview" : "Edit site & utilities"}>
+              <EditForm key={section}
+                fields={sectionFields(selected, section)}
                 columns={3}
                 initial={Object.fromEntries(
-                  parcelFields(selected, selected.financials_visible).map((field) => [
+                  sectionFields(selected, section).map((field) => [
                     field.name,
-                    field.name === "acquisition_tax_rate_fraction"
+                    field.name.endsWith("_network_availability") ? utilityAvailability(selected, field.name.replace("_network_availability", "") as typeof UTILITIES[number])
+                      : field.name.endsWith("_connection_status") ? asValue(selected[field.name as keyof LandParcel] as never) || "not_checked"
+                      : field.name === "acquisition_tax_rate_fraction"
                       ? percentInput(selected.acquisition_tax_rate_fraction)
                       : asValue(selected[field.name as keyof LandParcel] as never),
                   ]),
@@ -917,24 +947,6 @@ export function LandTab({
 
           {section === "overview" ? (
             <div className="record-columns land-overview">
-              <section className="record-section">
-                <SectionHeader title="Title & ownership" description="Recorded legal identity and planning classification." />
-                <KeyValueGrid columns={2}>
-                  <KeyValue label="Ownership" value={selected.ownership_type} />
-                  <KeyValue
-                    label="Ownership share"
-                    value={
-                      selected.ownership_share_fraction
-                        ? percent(selected.ownership_share_fraction)
-                        : "Not recorded"
-                    }
-                  />
-                  <KeyValue label="Title status" value={selected.title_status} />
-                  <KeyValue label="Zoning" value={selected.zoning} />
-                  <KeyValue label="Title deed" mono value={selected.title_deed_number} />
-                  <KeyValue label="Cadastral reference" mono value={selected.cadastral_reference} />
-                </KeyValueGrid>
-              </section>
               <section className="record-section">
                 <SectionHeader
                   title="Acquisition"
@@ -1009,8 +1021,8 @@ export function LandTab({
                 description="What the authority permits on this parcel. Zoning says what it is classified as; this says what may be built."
                 actions={
                   canWritePlanning ? (
-                    <Button data-leaves-editor onClick={() => setEditingPlanning((open) => !open)}>
-                      {editingPlanning ? "Stop editing" : planning ? "Edit planning" : "Record planning"}
+                    <Button data-leaves-editor onClick={() => { setPlanningForm(planningFrom(planning)); setEditingPlanning((open) => !open); }}>
+                      {editingPlanning ? "Cancel editing" : "Edit planning"}
                     </Button>
                   ) : undefined
                 }
@@ -1286,7 +1298,7 @@ export function LandTab({
                     </FormSection>
                     <StickyActions
                       dirty={JSON.stringify(planningForm) !== JSON.stringify(planningFrom(planning))}
-                      submitLabel="Save planning envelope"
+                      submitLabel="Save changes"
                       busy={busy}
                       onCancel={() => setEditingPlanning(false)}
                     />
@@ -1317,17 +1329,17 @@ export function LandTab({
               <section>
                 <SectionHeader
                   title="Utilities"
-                  description="Recorded availability. Supporting notes do not confirm a connection."
+                  description="Network availability, connection status and next action for each utility."
                 />
                 <dl className="land-utilities">
-                  {([
-                    ["Power", selected.power_available], ["Water", selected.water_available],
-                    ["Sewer", selected.sewer_available], ["Stormwater", selected.stormwater_available],
-                    ["Telecom", selected.telecom_available],
-                  ] as const).map(([label, available]) => (
-                    <div key={label}>
-                      <dt>{label}</dt>
-                      <dd><StatusDot tone={available === null ? "muted" : available ? "success" : "warning"}>{utility(available)}</StatusDot></dd>
+                  {UTILITIES.map(utility => (
+                    <div key={utility}>
+                      <dt>{utility[0].toUpperCase() + utility.slice(1)}</dt>
+                      <dd>
+                        <div>Network availability: {AVAILABILITY.find(option => option.value === utilityAvailability(selected, utility))?.label}</div>
+                        <div>Connection status: {CONNECTION.find(option => option.value === (selected[`${utility}_connection_status`] ?? "not_checked"))?.label}</div>
+                        <div>Requirements or next action: {selected[`${utility}_requirements`] || "Not entered"}</div>
+                      </dd>
                     </div>
                   ))}
                 </dl>
@@ -1356,6 +1368,22 @@ export function LandTab({
                 description="Title deeds, surveys and planning decisions linked to this parcel. Files open at their recorded source."
                 actions={<a className="button" href={projectHref(projectId, "documents")}>Open project documents</a>}
               />
+              {canWritePlanning && !editingDocuments ? <SectionHeader title="Document details" actions={<Button disabled={!documents?.length || documentsError} onClick={() => { setDocumentId(documents?.[0]?.id ?? ""); setEditingDocuments(true); }}>Edit documents</Button>} /> : null}
+              {editingDocuments && documents ? <div className="stack">
+                <Field label="Document"><select className="input" value={documentId} onChange={event => { const value = event.target.value; requestFormLeave(sectionHost.current, () => setDocumentId(value)); }}>
+                  {documents.map(document => <option key={document.id} value={document.id}>{document.title}</option>)}
+                </select></Field>
+                {documents.filter(document => document.id === documentId).map(document => <EditForm key={document.id}
+                  fields={[{ name: "title", label: "Document title" }, { name: "reference_number", label: "Reference" }, { name: "notes", label: "Notes", kind: "textarea" }]}
+                  initial={{ title: document.title, reference_number: document.reference_number, notes: document.notes }}
+                  onSave={async changes => {
+                    const saved = await projects.updateDocument(projectId, document.id, changes);
+                    setDocuments(current => current?.map(row => row.id === saved.id ? saved : row) ?? []);
+                    setEditingDocuments(false);
+                  }}
+                  onCancel={() => setEditingDocuments(false)}
+                />)}
+              </div> : null}
               {documentsError ? <><Notice tone="error">Supporting documents could not be loaded.</Notice><Button onClick={() => { setDocumentsError(false); void projects.documents(projectId, selected.id ? {parcel_id: selected.id} : {}).then(setDocuments).catch(() => setDocumentsError(true)); }}>Retry documents</Button></> : documents === null ? (
                 <Loading label="Loading documents…" shape="rows" rows={3} />
               ) : documents.length === 0 ? (
@@ -1378,7 +1406,7 @@ export function LandTab({
                   <tbody>
                     {documents.map((document) => (
                       <tr key={document.id}>
-                        <th scope="row">{document.title}</th>
+                        <th scope="row">{document.title}{document.notes ? <span className="cell-secondary">{document.notes}</span> : null}</th>
                         <td>{document.document_type_code}</td>
                         <td className="mono">{document.reference_number ?? "—"}</td>
                         <td>
@@ -1391,6 +1419,7 @@ export function LandTab({
               )}
             </section>
           ) : null}
+          </div>
         </RecordPage>
       ) : null}
     </>
