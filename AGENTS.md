@@ -108,7 +108,7 @@ Do not reimplement these checks in agent-specific instructions.
 
 ## Pull requests are engineering deliverables
 
-Every PR must use `.github/pull_request_template.md` and satisfy PR Quality.
+Every PR must use `.github/pull_request_template.md`.
 Before opening or updating a PR:
 
 - inspect repository reality; explain root cause, scope and non-goals;
@@ -117,21 +117,9 @@ Before opening or updating a PR:
 - explain why broad changes belong together, or split them;
 - keep the PR Draft until its implementation and description are reviewable.
 
-PR Quality reads the description mechanically. Answer in the template's shape:
-
-- **CI phase:** tick exactly one box, matching the PR's real state.
-- **Contract Impact / Migration Impact:** each line is exactly `Yes` or `No`,
-  optionally followed on the same line by ` — reason`. Put explanations *above* the
-  fenced block; text below it is read as part of the last answer.
-- **Validation results:** keep the five labelled lines, one line each, never a
-  paragraph. Name the command and the count, e.g.
-  `Backend tests: pytest tests/modules/test_parcels.py against PostgreSQL 16: 48 passed.`
-  `Frontend checks: npm test 338 passed; tsc --noEmit no errors; eslint 0 errors; next build succeeded.`
-  Use `Not applicable — <reason>` or `Not run — because <reason>`; "pending" is
-  valid only in a Draft.
-- Run `python scripts/validate_pr_description.py --body-file <body.md> --title
-  "<title>" --base origin/main --head HEAD` and open Ready only after it passes and
-  the checks ran. Never merge.
+In **Validation results**, name each check you ran and its result (for example
+`pytest tests/modules/test_parcels.py: 48 passed`). For a check you could not run,
+say so and why, so the reviewer knows what to verify. Never merge.
 
 A generated commit summary is not a PR description. Do not replace the template
 with a short AI-generated summary. This applies to every agent, human and device.

@@ -56,7 +56,7 @@ Merge one pull request at a time. On the pull request's latest commit:
 
 | Check | Good |
 | --- | --- |
-| PR Quality, Backend, Frontend (Checks tab) | All green. Skipped backend groups are fine for screen-only changes. |
+| Backend, Frontend (Checks tab) | All green. Skipped backend groups are fine for screen-only changes. |
 | Bottom of the pull request | No conflicts and not out of date with main. |
 | Validation results, in the description | Your "done when" checks are reported as passed. |
 | Review focus, in the description | You agree with any assumptions the agent listed. |

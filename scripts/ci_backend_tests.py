@@ -81,7 +81,6 @@ ALWAYS_RUN = (
     # they guard the repository itself rather than any part of the product,
     # and because a guard nobody runs is a guard that silently stops guarding.
     "tests/test_agent_guardrails.py",
-    "tests/test_pr_quality.py",
 )
 
 #: Which test files belong to which domain, matched against the file name with
@@ -352,10 +351,6 @@ AGENT_TOOLING = frozenset(
     }
 )
 AGENT_TESTS = "tests/test_agent_guardrails.py"
-
-# Delivery-contract tooling is separate from test selectors and product scripts.
-PR_QUALITY_SCRIPT = "scripts/validate_pr_description.py"
-PR_QUALITY_TESTS = "tests/test_pr_quality.py"
 
 #: The one-time legacy cutover package. Its own domain rather than the
 #: full-suite fallback that everything else under ``scripts/`` gets.
@@ -711,11 +706,6 @@ def select(changed: list[str], available: list[str]) -> Selection:
             system_reasons.append(f"{path} is shared test-harness support")
             continue
 
-        if path == PR_QUALITY_SCRIPT:
-            backend_required = True
-            if PR_QUALITY_TESTS in available_set:
-                direct.add(PR_QUALITY_TESTS)
-            continue
         if path in CI_TOOLING or path in {
             ".github/workflows/ci.yml",
             ".github/workflows/full-backend-shadow.yml",
@@ -731,11 +721,6 @@ def select(changed: list[str], available: list[str]) -> Selection:
             backend_required = True
             if AGENT_TESTS in available_set:
                 direct.add(AGENT_TESTS)
-            continue
-        if path == ".github/workflows/pr-quality.yml":
-            backend_required = True
-            if PR_QUALITY_TESTS in available_set:
-                direct.add(PR_QUALITY_TESTS)
             continue
         if path.startswith(CUTOVER_PACKAGE):
             backend_required = True

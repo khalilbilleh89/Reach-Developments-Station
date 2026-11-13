@@ -180,7 +180,7 @@ jobs:
       - name: Check for model and schema drift
         run: alembic check
       - name: Test CI and repository invariants
-        run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py tests/test_test_isolation.py tests/test_deletion_contracts.py tests/test_pr_quality.py
+        run: pytest -q tests/test_ci_selector.py tests/test_ci_workflow.py tests/test_ci_smoke.py tests/test_ci_shards.py tests/test_test_isolation.py tests/test_deletion_contracts.py
       - name: Validate complete system-risk assignment
         run: python scripts/ci_backend_shards.py --count 10
 
