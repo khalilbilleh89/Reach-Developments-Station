@@ -194,3 +194,40 @@ def test_document_migration_retains_history(
     with pytest.raises(RuntimeError, match="Retained document history"):
         command.downgrade(config, "0045_inventory_masterplans")
     command.upgrade(config, "head")
+
+
+def test_parcel_sources_survive_reload_and_retained_removal(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    from tests.modules.conftest import parcel_payload
+
+    base = f"{PROJECTS}/{project_id}"
+    parcel = admin_client.post(base + "/parcels", json=parcel_payload()).json()
+    other = admin_client.post(base + "/parcels", json=parcel_payload(plot_number="TEST-B")).json()
+    pdf = upload(admin_client, base, parcel_id=parcel["id"]).json()
+    response = admin_client.post(
+        base + "/documents",
+        json={
+            "title": "Synthetic survey link",
+            "document_type_code": "TITLE_DEED",
+            "parcel_id": parcel["id"],
+            "external_url": "https://drive.google.com/file/d/synthetic/view",
+        },
+    )
+    assert response.status_code == 201, response.text
+    link = response.json()
+    rows = admin_client.get(base + "/documents", params={"parcel_id": parcel["id"]}).json()
+    assert {row["id"] for row in rows} == {pdf["id"], link["id"]}
+    assert admin_client.get(base + "/documents", params={"parcel_id": other["id"]}).json() == []
+    assert admin_client.get(base + f"/documents/{pdf['id']}/file").content == PDF
+    assert (
+        next(row for row in rows if row["id"] == link["id"])["external_url"] == link["external_url"]
+    )
+    for row in rows:
+        url = base + f"/documents/{row['id']}/delete"
+        assert admin_client.post(url, json={"reason": "Synthetic cleanup"}).status_code == 204
+        assert admin_client.post(url, json={"reason": "Repeated"}).status_code == 404
+    assert admin_client.get(base + "/documents", params={"parcel_id": parcel["id"]}).json() == []
+    db.rollback()
+    assert db.get(DocumentReference, uuid.UUID(pdf["id"])).document == PDF
+    assert db.get(DocumentReference, uuid.UUID(link["id"])).external_url == link["external_url"]

@@ -40,6 +40,9 @@ def test_acquisition_api_and_cost_pool_include_itemized_fees(
     assert result["agent_fee_rate_fraction"] == "0.020000"
     assert project_acquisition_total(db, project_id=uuid.UUID(project_id)) == 1079000
     url = f"{PROJECTS}/{project_id}/parcels/{result['id']}"
+    analytics = admin_client.get(url + "/analytics").json()
+    assert analytics["acquisition_fees_amount"] == "79000.00"
+    assert analytics["acquisition_fees_to_purchase_fraction"] == "0.079000"
     changed = admin_client.patch(url, json={"purchase_price": "2000000"}).json()
     assert changed["acquisition_tax_amount"] == "100000.00"
     assert changed["agent_fee_rate_fraction"] == "0.010000"
