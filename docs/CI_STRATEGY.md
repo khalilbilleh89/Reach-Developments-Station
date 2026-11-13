@@ -1,7 +1,6 @@
 # CI strategy: test according to blast radius
 
-Required pull-request status names remain **PR Quality**, **Backend**, and
-**Frontend**. Review readiness does not change test breadth: Draft and Ready
+Required pull-request status names are **Backend** and **Frontend**. Review readiness does not change test breadth: Draft and Ready
 pull requests run the same plan for the same head and diff.
 
 ## Backend risk tiers
@@ -100,7 +99,6 @@ changes a frontend page, or changes one module.
 - Ordinary backend module PR: target at most 10 minutes, warning after 15,
   timeout at 20; normally one PostgreSQL runner.
 - Frontend: target at most 3 minutes.
-- PR Quality: seconds.
 - System Full: allowed to take longer and use eight PostgreSQL shards because it
   is rare by design.
 

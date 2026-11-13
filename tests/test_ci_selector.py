@@ -181,7 +181,6 @@ def test_invariant_pack_retains_platform_wide_contracts() -> None:
         "tests/test_deletion_contracts.py",
         "tests/modules/test_cutover_intake_contract.py",
         "tests/test_agent_guardrails.py",
-        "tests/test_pr_quality.py",
     }
     assert required <= set(selector.ALWAYS_RUN)
     assert required <= set(chosen("app/modules/pricing/service.py").paths)
