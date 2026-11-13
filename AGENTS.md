@@ -50,11 +50,40 @@ to the canonical sources; they do not replace them.
 One skill is the single source of truth for its subject. Do not copy skill content into
 this file or into `CLAUDE.md`.
 
-## Owner change requests
+## Owner requests
 
-Owner requests to add, change or remove something arrive in the format of
-`docs/CHANGE_REQUEST_TEMPLATE.md`. Its standing instructions point to the rules
-above; follow them even when a request arrives without the template.
+Requests usually arrive as a few plain sentences ("add X to Y", "rename A to B",
+"Z is broken"), not a filled template. Turn them into a correct change yourself:
+
+1. **Understand before building.** Restate the request as one outcome. Find the
+   module and the nearest existing Reach screen that does the same job. If a detail
+   that changes what you build is missing — the fields and their types, who can see,
+   edit or delete, how deletion behaves, what "done" means — ask. If you cannot ask,
+   choose the smallest assumption consistent with the rules above and list every
+   assumption under the PR's Review focus.
+2. **One request, one branch, one PR.** Branch from the latest `origin/main`. Split a
+   request with independent outcomes. Check open PRs for the same files or another
+   new migration and name any overlap under Review focus.
+3. **Build with the skills above** and the design system. Use the requester's words
+   for labels. A rename changes every user-visible place: menu, breadcrumb, page
+   title, buttons, empty and error messages, exports and tests.
+4. **Synthetic data only** in code, tests, fixtures, screenshots and PR text. Never
+   name, open or test against production records.
+5. **Migrations.** Fetch `origin/main` first; number = current Alembic head + 1 and
+   `down_revision` = that head. In the same PR set `HEAD_REVISION` in
+   `tests/test_migrations.py`, add the revision to `scripts/ci_backend_tests.py` and
+   `scripts/ci_backend_smoke.py`, and add a test that downgrades to its own parent,
+   upgrades to head, runs `alembic check` and proves existing data survived. Never
+   hard-code a later revision in a test. A downgrade restores the old shape or refuses
+   while new data exists; it never silently drops data.
+6. **Verify.** Run the checks in `CLAUDE.md` for what changed, never skipping or
+   weakening a test. Render each changed screen with synthetic data at 1440px and
+   390px and walk through what the requester will check.
+7. **Report back** in plain language: what changed, how to check it, assumptions,
+   anything not done and any visual debt.
+
+`docs/CHANGE_REQUEST_TEMPLATE.md` lists the details a requester can add up front;
+a request without it follows the same steps.
 
 ## Agent automation
 
@@ -87,6 +116,22 @@ Before opening or updating a PR:
 - report only validation that actually ran; state unavailable/pending evidence explicitly;
 - explain why broad changes belong together, or split them;
 - keep the PR Draft until its implementation and description are reviewable.
+
+PR Quality reads the description mechanically. Answer in the template's shape:
+
+- **CI phase:** tick exactly one box, matching the PR's real state.
+- **Contract Impact / Migration Impact:** each line is exactly `Yes` or `No`,
+  optionally followed on the same line by ` — reason`. Put explanations *above* the
+  fenced block; text below it is read as part of the last answer.
+- **Validation results:** keep the five labelled lines, one line each, never a
+  paragraph. Name the command and the count, e.g.
+  `Backend tests: pytest tests/modules/test_parcels.py against PostgreSQL 16: 48 passed.`
+  `Frontend checks: npm test 338 passed; tsc --noEmit no errors; eslint 0 errors; next build succeeded.`
+  Use `Not applicable — <reason>` or `Not run — because <reason>`; "pending" is
+  valid only in a Draft.
+- Run `python scripts/validate_pr_description.py --body-file <body.md> --title
+  "<title>" --base origin/main --head HEAD` and open Ready only after it passes and
+  the checks ran. Never merge.
 
 A generated commit summary is not a PR description. Do not replace the template
 with a short AI-generated summary. This applies to every agent, human and device.
