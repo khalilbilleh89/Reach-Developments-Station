@@ -144,7 +144,7 @@ export const PROJECT_NAVIGATION: NavGroup<ProjectSection>[] = [
       },
       {
         key: "prelaunch",
-        label: "Authorities",
+        label: "NOS",
         icon: "money",
         description: "Authority and other development expenses, with optional notes and confirmed cash kept distinct.",
         visible: (roles) => hasAnyRole(roles, CASHFLOW_READERS),
