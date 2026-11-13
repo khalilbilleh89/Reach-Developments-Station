@@ -18,6 +18,7 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
   const [rate, setRate] = useState("");
   const [gdv, setGdv] = useState(parcel.expected_gdv_amount ?? "");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   // The barrel's hook, or a no-op where a test harness stands the barrel in.
   const { toast } = typeof ui.useToast === "function" ? ui.useToast() : { toast: () => {} };
   const setNotice = (text: string | null) => { if (text) toast({ title: text }); };
@@ -33,9 +34,10 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
   const price = (value: string | null) => value === null ? "Unavailable" : money(value, parcel.base_currency_code);
   const changedGdv = gdv !== (parcel.expected_gdv_amount ?? "");
   const existingYear = data?.market_years.some(row => String(row.year) === year);
-  return <DraftBoundary dirty={Boolean(year || rate || changedGdv)} busy={busy}>
+  return <DraftBoundary dirty={editing && Boolean(year || rate || changedGdv)} busy={busy}>
     <div className="stack">
-      <SectionHeader title="Land economics" description="Acquisition costs and development assumptions for this parcel." />
+      <SectionHeader title="Land economics" description="Acquisition costs and development assumptions for this parcel."
+        actions={canWrite && !editing ? <Button onClick={() => { setGdv(parcel.expected_gdv_amount ?? ""); setEditing(true); }}>Edit analytics</Button> : undefined} />
       {error ? <Notice tone="error">{error}<Button onClick={() => setAttempt(value => value + 1)}>Retry analytics</Button></Notice> : null}
       {!data && !error ? <Loading label="Calculating land analytics…" /> : null}
       {data ? <>
@@ -54,48 +56,49 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
           <KeyValue label="All-in acquisition cost as % of GDV" value={percent(data.acquisition_cost_to_gdv_fraction)} />
         </KeyValueGrid>
         <p className="footnote">GDV means expected Gross Development Value for this parcel, in {parcel.base_currency_code}. Missing or zero GDV/buildable area cannot produce a ratio. Buildable area uses recorded Maximum GFA, not an inferred planning permission. Sqft measurements are converted to sqm.</p>
-        {canWrite ? <form onSubmit={async event => {
-          event.preventDefault(); if (busy) return;
-          setBusy(true); setError(null); setNotice(null);
-          try {
-            const saved = await projects.updateParcel(projectId, parcel.id, { expected_gdv_amount: gdv.trim() || null });
-            setGdv(saved.expected_gdv_amount ?? "");
-            await onChanged(); setNotice("Expected GDV saved.");
-          } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save GDV."); }
-          finally { setBusy(false); }
-        }}>
-          <Field label="Expected GDV for this parcel" optional hint={parcel.base_currency_code ?? undefined}>
-            <input className="input" inputMode="decimal" disabled={busy} value={gdv} onChange={e => setGdv(e.target.value)} />
-          </Field>
-          <FormActions><Button type="submit" disabled={busy || !changedGdv}>Save GDV</Button></FormActions>
-        </form> : <KeyValue label="Expected GDV" value={price(parcel.expected_gdv_amount)} />}
+        <KeyValue label="Expected GDV" value={price(parcel.expected_gdv_amount)} />
         <SectionHeader title="Annual market value estimates" />
         <p>Each entered year applies its change to the previous calculated value. The first starts from purchase price; acquisition fees do not appreciate. Years without an entry are not estimated. These are your assumptions, not a market valuation.</p>
         {data.market_years.length ? <TableScroll label="Annual land market estimates">
-          <thead><tr><th scope="col">Year</th><th scope="col">Market change</th><th scope="col">Opening estimate</th><th scope="col">Closing estimate</th>{canWrite ? <th scope="col">Action</th> : null}</tr></thead>
+          <thead><tr><th scope="col">Year</th><th scope="col">Market change</th><th scope="col">Opening estimate</th><th scope="col">Closing estimate</th>{canWrite && editing ? <th scope="col">Action</th> : null}</tr></thead>
           <tbody>{data.market_years.map(row => <tr key={row.year}>
             <th scope="row">{row.year}</th><td>{percent(row.change_rate_fraction)}</td>
             <td>{price(row.opening_value)}</td><td>{price(row.estimated_value)}{row.value_basis !== "calculated" ? <span className="cell-secondary">Missing purchase price or estimate outside supported range</span> : null}</td>
-            {canWrite ? <td><Button small disabled={busy} data-leaves-editor onClick={() => { setYear(String(row.year)); setRate(percentInput(row.change_rate_fraction)); }}>Edit year</Button></td> : null}
+            {canWrite && editing ? <td><Button small disabled={busy} data-leaves-editor onClick={() => { setYear(String(row.year)); setRate(percentInput(row.change_rate_fraction)); }}>Edit year</Button></td> : null}
           </tr>)}</tbody>
         </TableScroll> : <p className="subtle">No annual market assumptions recorded yet.</p>}
-        {canWrite ? <form onSubmit={async event => {
+        {canWrite && editing ? <form onSubmit={async event => {
           event.preventDefault(); if (busy) return;
           setBusy(true); setError(null); setNotice(null);
           try {
-            setData(await projects.writeLandMarketYear(projectId, parcel.id, year, fractionFromPercent(rate)));
-            setYear(""); setRate(""); setNotice("Annual assumption saved; later estimates recalculated.");
-          } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save the market assumption."); }
+            const payload: Record<string, unknown> = {};
+            if (changedGdv) payload.expected_gdv_amount = gdv.trim() || null;
+            if (year || rate.trim()) {
+              if (!year || !rate.trim()) throw new Error("Enter both a market year and its change rate.");
+              payload.year = year;
+              payload.change_rate_fraction = fractionFromPercent(rate);
+            }
+            setData(await projects.updateLandAnalytics(projectId, parcel.id, payload));
+            await onChanged();
+            setYear(""); setRate(""); setEditing(false);
+            setNotice("Analytics inputs saved.");
+          } catch (caught) { setError(caught instanceof ApiError || caught instanceof Error ? caught.message : "Could not save analytics inputs."); }
           finally { setBusy(false); }
         }}>
+          <Field label="Expected GDV for this parcel" optional hint={parcel.base_currency_code ?? undefined}>
+            <input className="input" inputMode="decimal" disabled={busy} value={gdv} onChange={event => setGdv(event.target.value)} />
+          </Field>
           <FieldRow columns={2}>
-            <Field label="Year"><input className="input" type="number" min={1900} max={2200} step={1} required disabled={busy} value={year} onChange={e => setYear(e.target.value)} /></Field>
+            <Field label="Year"><input className="input" type="number" min={1900} max={2200} step={1} disabled={busy} value={year} onChange={e => setYear(e.target.value)} /></Field>
             <Field label="Expected increase / decrease (%)" hint="Use a negative value for a decrease; −100% to +1,000%.">
-              <input className="input" inputMode="decimal" required disabled={busy} value={rate} onChange={e => setRate(e.target.value)} />
+              <input className="input" inputMode="decimal" disabled={busy} value={rate} onChange={e => setRate(e.target.value)} />
             </Field>
           </FieldRow>
           {existingYear ? <p>This replaces the assumption for {year} and recalculates later recorded years.</p> : null}
-          <FormActions><Button variant="primary" type="submit" disabled={busy || !year || !rate.trim()}>{existingYear ? "Update year" : "Add year"}</Button></FormActions>
+          <FormActions>
+            <Button variant="primary" type="submit" disabled={busy}>Save changes</Button>
+            <Button disabled={busy} data-leaves-editor onClick={() => { setYear(""); setRate(""); setGdv(parcel.expected_gdv_amount ?? ""); setEditing(false); }}>Cancel</Button>
+          </FormActions>
         </form> : null}
       </> : null}
     </div>

@@ -164,3 +164,61 @@ def test_migration_round_trip_preserves_original_land_amounts(
             assert connection.scalar(text("SELECT count(*) FROM land_market_assumptions")) == 0
     finally:
         command.upgrade(config, "head")
+
+
+def test_analytics_section_saves_inputs_together(
+    admin_client: TestClient,
+    project_id: str,
+    db: Session,
+) -> None:
+    parcel = create(admin_client, project_id, acquisition_date="2026-01-01")
+    url = f"{PROJECTS}/{project_id}/parcels/{parcel['id']}"
+    saved = admin_client.patch(
+        f"{url}/analytics",
+        json={"expected_gdv_amount": "6000000", "year": 2027, "change_rate_fraction": "-0.05"},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["market_years"][0]["estimated_value"] == "950000.00"
+    assert admin_client.get(url).json()["expected_gdv_amount"] == "6000000.00"
+    rejected = admin_client.patch(
+        f"{url}/analytics",
+        json={"expected_gdv_amount": "100", "year": 2025, "change_rate_fraction": "0.1"},
+    )
+    assert rejected.status_code == 422
+    assert admin_client.get(url).json()["expected_gdv_amount"] == "6000000.00"
+    assert len(admin_client.get(f"{url}/analytics").json()["market_years"]) == 1
+    user = make_user(db, email="analytics-view-only@example.com", roles=("sales_advisor",))
+    grant_access(admin_client, project_id, user)
+    assert (
+        client_for(user.email)
+        .patch(f"{url}/analytics", json={"expected_gdv_amount": "200"})
+        .status_code
+        == 403
+    )
+    assert (
+        admin_client.patch(
+            f"{PROJECTS}/{uuid.uuid4()}/parcels/{parcel['id']}/analytics",
+            json={"expected_gdv_amount": "200"},
+        ).status_code
+        == 404
+    )
+
+
+def test_utility_migration_preserves_known_and_unknown_availability(
+    admin_client: TestClient,
+    project_id: str,
+    db: Session,
+) -> None:
+    parcel = create(admin_client, project_id, power_available=True, water_available=False)
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    db.rollback()
+    command.downgrade(config, "0072_company_document_metadata")
+    command.upgrade(config, "head")
+    command.check(config)
+    url = f"{PROJECTS}/{project_id}/parcels/{parcel['id']}"
+    migrated = admin_client.get(url).json()
+    assert migrated["power_network_availability"] == "available"
+    assert migrated["water_network_availability"] == "unavailable"
+    assert migrated["sewer_network_availability"] is None
+    assert migrated["power_connection_status"] is None
+    assert migrated["power_available"] is True

@@ -428,3 +428,51 @@ def test_parcel_changes_are_audited(admin_client: TestClient, project_id: str, d
     assert [event.action for event in events] == ["land_parcel.created", "land_parcel.updated"]
     assert events[1].before_data["seller"] == "Original Owner"
     assert events[1].after_data["seller"] == "Corrected Owner"
+
+
+def test_site_utilities_save_together_and_preserve_other_sections(
+    admin_client: TestClient,
+    project_id: str,
+) -> None:
+    created = admin_client.post(
+        f"{PROJECTS}/{project_id}/parcels",
+        json=parcel_payload(
+            power_available=True,
+            telecom_available=False,
+            title_deed_number="TD-334",
+            utility_notes="Original notes",
+            road_access="Track",
+        ),
+    )
+    assert created.status_code == 201, created.text
+    url = f"{PROJECTS}/{project_id}/parcels/{created.json()['id']}"
+    changes = {
+        "road_access": "Paved access",
+        "water_network_availability": "conditional",
+        "water_connection_status": "submitted",
+        "water_requirements": "Confirm pressure",
+        "sewer_network_availability": "available",
+        "sewer_connection_status": "not_connected",
+        "sewer_requirements": "Apply for connection",
+        "utility_notes": "Coordinate with the municipality",
+    }
+    saved = admin_client.patch(url, json=changes)
+    assert saved.status_code == 200, saved.text
+    reopened = admin_client.get(url).json()
+    for field, value in changes.items():
+        assert reopened[field] == value
+    assert reopened["power_available"] is True
+    assert reopened["telecom_available"] is False
+    assert reopened["stormwater_network_availability"] is None
+    assert reopened["title_deed_number"] == "TD-334"
+    assert reopened["sewer_available"] is True
+    rejected = admin_client.patch(
+        url, json={"road_access": "Must not save", "water_connection_status": "invalid"}
+    )
+    assert rejected.status_code == 422
+    assert admin_client.get(url).json()["road_access"] == "Paved access"
+    assert (
+        admin_client.patch(url, json={"water_network_availability": "not_checked"}).status_code
+        == 200
+    )
+    assert admin_client.get(url).json()["water_network_availability"] == "not_checked"

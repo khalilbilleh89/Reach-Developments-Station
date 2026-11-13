@@ -477,7 +477,7 @@
     "status": "missing",
     "removal_route": null,
     "ui_file": null,
-    "notes": "Delete is missing on current main."
+    "notes": "Delete is missing on current main. Section editing and utility metadata update the existing parcel and retain its audit history."
   },
   {
     "handler": "projects.create_permit",

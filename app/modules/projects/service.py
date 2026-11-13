@@ -851,6 +851,21 @@ _PARCEL_FIELDS = (
     "sewer_available",
     "stormwater_available",
     "telecom_available",
+    "power_network_availability",
+    "power_connection_status",
+    "power_requirements",
+    "water_network_availability",
+    "water_connection_status",
+    "water_requirements",
+    "sewer_network_availability",
+    "sewer_connection_status",
+    "sewer_requirements",
+    "stormwater_network_availability",
+    "stormwater_connection_status",
+    "stormwater_requirements",
+    "telecom_network_availability",
+    "telecom_connection_status",
+    "telecom_requirements",
     "utility_notes",
     "easements",
     "encroachments",
@@ -936,6 +951,16 @@ def _normalize_classifications(values: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
+def _normalize_utility_availability(values: dict, *, creating: bool = False) -> None:
+    for utility in ("power", "water", "sewer", "stormwater", "telecom"):
+        availability = f"{utility}_network_availability"
+        legacy = f"{utility}_available"
+        if availability in values and (not creating or values[availability] is not None):
+            values[legacy] = {"available": True, "unavailable": False}.get(values[availability])
+        elif legacy in values:
+            values[availability] = {True: "available", False: "unavailable"}.get(values[legacy])
+
+
 def create_parcel(
     session: Session,
     *,
@@ -956,6 +981,7 @@ def create_parcel(
     project = lock_project(session, project.id)
 
     _normalize_classifications(fields)
+    _normalize_utility_availability(fields, creating=True)
     if area_unit is None:
         pack = session.get(CountryPack, project.country_pack_id)
         area_unit = pack.area_unit if pack is not None else "sqm"
@@ -1003,6 +1029,7 @@ def update_parcel(
     parcel: LandParcel,
     actor_user_id: uuid.UUID,
     correlation_id: uuid.UUID,
+    commit: bool = True,
     **changes: object,
 ) -> LandParcel:
     updates = resolve_updates(changes, fields=_PARCEL_UPDATABLE, clearable=_PARCEL_CLEARABLE)
@@ -1016,6 +1043,7 @@ def update_parcel(
         project = lock_project(session, project.id)
         session.refresh(parcel)
 
+    _normalize_utility_availability(updates)
     _normalize_classifications(updates)
     if "plot_number" in updates and updates["plot_number"] != parcel.plot_number:
         clash = session.scalars(
@@ -1045,7 +1073,8 @@ def update_parcel(
         before=before,
         after=_snapshot(parcel, _PARCEL_FIELDS),
     )
-    session.commit()
+    if commit:
+        session.commit()
     session.refresh(parcel)
     return parcel
 

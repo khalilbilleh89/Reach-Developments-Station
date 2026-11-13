@@ -52,3 +52,20 @@ Local validation: 42 migration/retention/Land tests passed, 59 frontend tests
 passed and the production build passed. Ruff check/format and compilation passed.
 The corrected exact-head Full CI run is still required; no checks were skipped
 or timeouts increased to obtain these results.
+
+
+## Parcel section editing
+
+Overview, Planning, Site & utilities, Documents and Analytics expose section-specific
+editing in the open parcel. Save changes returns to the same tab. The outer Land
+register retains title and ownership details.
+
+Site & utilities saves site facts, all utility changes and supporting notes with
+one parcel PATCH. Network availability and connection status are independent.
+Existing availability booleans migrate to their known availability, with null
+remaining unknown. Connection and next-action fields start unrecorded.
+
+Analytics edits expected GDV and an optional annual market assumption together
+through PATCH /projects/{project_id}/parcels/{parcel_id}/analytics. Its transaction
+retains existing permissions, audit events and calculations. Existing annual
+assumption endpoints continue to operate.

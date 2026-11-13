@@ -237,6 +237,41 @@ class _ParcelFacts(StrictRequest):
     sewer_available: bool | None = None
     stormwater_available: bool | None = None
     telecom_available: bool | None = None
+    power_network_availability: (
+        Literal["not_checked", "available", "conditional", "unavailable"] | None
+    ) = None
+    power_connection_status: (
+        Literal["not_checked", "not_connected", "submitted", "approved", "connected"] | None
+    ) = None
+    power_requirements: str | None = Field(default=None, max_length=500)
+    water_network_availability: (
+        Literal["not_checked", "available", "conditional", "unavailable"] | None
+    ) = None
+    water_connection_status: (
+        Literal["not_checked", "not_connected", "submitted", "approved", "connected"] | None
+    ) = None
+    water_requirements: str | None = Field(default=None, max_length=500)
+    sewer_network_availability: (
+        Literal["not_checked", "available", "conditional", "unavailable"] | None
+    ) = None
+    sewer_connection_status: (
+        Literal["not_checked", "not_connected", "submitted", "approved", "connected"] | None
+    ) = None
+    sewer_requirements: str | None = Field(default=None, max_length=500)
+    stormwater_network_availability: (
+        Literal["not_checked", "available", "conditional", "unavailable"] | None
+    ) = None
+    stormwater_connection_status: (
+        Literal["not_checked", "not_connected", "submitted", "approved", "connected"] | None
+    ) = None
+    stormwater_requirements: str | None = Field(default=None, max_length=500)
+    telecom_network_availability: (
+        Literal["not_checked", "available", "conditional", "unavailable"] | None
+    ) = None
+    telecom_connection_status: (
+        Literal["not_checked", "not_connected", "submitted", "approved", "connected"] | None
+    ) = None
+    telecom_requirements: str | None = Field(default=None, max_length=500)
     utility_notes: str | None = Field(default=None, max_length=2000)
     easements: str | None = Field(default=None, max_length=2000)
     encroachments: str | None = Field(default=None, max_length=2000)
@@ -355,6 +390,12 @@ class LandParcelUpdateRequest(_ParcelFacts):
 
 class LandMarketAssumptionWrite(StrictRequest):
     change_rate_fraction: Annotated[DecimalStr, Field(ge=-1, le=10, decimal_places=6)]
+
+
+class LandAnalyticsUpdate(StrictRequest):
+    expected_gdv_amount: Money | None = None
+    year: int | None = Field(default=None, ge=1900, le=2200)
+    change_rate_fraction: Annotated[DecimalStr, Field(ge=-1, le=10, decimal_places=6)] | None = None
 
 
 class LandMarketYearRead(BaseModel):

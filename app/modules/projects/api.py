@@ -44,6 +44,7 @@ from app.modules.projects.schemas import (
     DocumentTypeRead,
     DocumentUpload,
     LandAnalyticsRead,
+    LandAnalyticsUpdate,
     LandMarketAssumptionWrite,
     LandParcelCreateRequest,
     LandParcelRead,
@@ -530,6 +531,32 @@ def read_land_analytics(
     if not can_view_project_financials(actor):
         raise PermissionDeniedError("You do not have permission to view land financial analytics.")
     return LandAnalyticsRead.model_validate(land_analytics.read_analytics(session, parcel=parcel))
+
+
+@router.patch("/{project_id}/parcels/{parcel_id}/analytics", response_model=LandAnalyticsRead)
+def update_land_analytics(
+    parcel_id: uuid.UUID,
+    payload: LandAnalyticsUpdate,
+    project: AccessibleProject,
+    session: DbSession,
+    actor: ActiveActor,
+) -> LandAnalyticsRead:
+    from app.core.errors import PermissionDeniedError
+    from app.modules.projects import land_analytics
+
+    require_project_writer(actor)
+    if not can_view_project_financials(actor):
+        raise PermissionDeniedError("You do not have permission to edit land financial analytics.")
+    return LandAnalyticsRead.model_validate(
+        land_analytics.update_inputs(
+            session,
+            project=project,
+            parcel_id=parcel_id,
+            values=payload.model_dump(exclude_unset=True),
+            actor_user_id=actor.user_id,
+            correlation_id=actor.correlation_id,
+        )
+    )
 
 
 @router.put(
