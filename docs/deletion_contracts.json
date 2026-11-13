@@ -253,7 +253,7 @@
     "status": "implemented",
     "removal_route": "POST /engagements/{engagement_id}/delete",
     "ui_file": "frontend/src/components/projects/ConsultantEngineerTab.tsx",
-    "notes": "Unused draft main/sub-consultant agreements have reasoned Delete; programme/deliverable references block deletion and audit is retained."
+    "notes": "Unused draft main/sub-consultant agreements have reasoned Delete; programme/deliverable references block deletion and audit is retained. Engagement-type corrections retain the same agreement identity and removal rules; active/completed evidence is not deleted or recreated."
   },
   {
     "handler": "consultant_engineering.create_stage",

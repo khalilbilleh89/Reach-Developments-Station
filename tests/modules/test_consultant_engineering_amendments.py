@@ -218,3 +218,93 @@ def test_reopen_preserves_one_active_main_and_independent_subconsultants(
         next(item for item in workspace["engagements"] if item["id"] == old["id"])["status"]
         == "completed"
     )
+
+
+@pytest.mark.parametrize("state", ["draft", "active", "completed"])
+def test_engagement_type_correction_is_scoped_versioned_and_audited(
+    manager_member_client: TestClient,
+    executive_client: TestClient,
+    project_id: str,
+    db: Session,
+    state: str,
+) -> None:
+    client = manager_member_client
+    target = engagement(client, project_id, "Synthetic quantity surveyor")
+    untouched = engagement(client, project_id, "Synthetic other agreement")
+    url = root(project_id) + f"/engagements/{target['id']}"
+    stage = None
+    if state != "draft":
+        target = client.post(url + "/activate").json()
+        stage = client.post(url + "/stages", json={"name": "Synthetic design"}).json()
+    if state == "completed":
+        target = client.post(url + "/complete").json()
+    body = {
+        "consultant_name": target["consultant_name"],
+        "agreement_reference": target["agreement_reference"],
+        "engagement_type": "subconsultant",
+        "expected_updated_at": target["updated_at"],
+    }
+    assert executive_client.put(url, json=body).status_code == 403
+    response = client.put(url, json=body)
+    assert response.status_code == 200, response.text
+    changed = response.json()
+    assert changed["id"] == target["id"] and changed["status"] == state
+    assert changed["engagement_type"] == "subconsultant"
+    assert client.put(url, json=body).status_code == 409
+    workspace = client.get(root(project_id)).json()
+    assert (
+        next(row for row in workspace["engagements"] if row["id"] == target["id"])[
+            "engagement_type"
+        ]
+        == "subconsultant"
+    )
+    assert (
+        next(row for row in workspace["engagements"] if row["id"] == untouched["id"]) == untouched
+    )
+    if stage:
+        assert workspace["stages"][0]["id"] == stage["id"]
+    audit = db.scalar(
+        select(AuditEvent).where(AuditEvent.action == "consultant.engagement_updated")
+    )
+    assert audit.before_data["engagement_type"] == "main"
+    assert audit.after_data["engagement_type"] == "subconsultant"
+    assert audit.actor_user_id
+    # The same editor can correct it back without creating a new agreement.
+    response = client.put(
+        url, json={**body, "engagement_type": "main", "expected_updated_at": changed["updated_at"]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["engagement_type"] == "main"
+
+
+def test_active_subconsultant_cannot_replace_another_active_main(
+    manager_member_client: TestClient, project_id: str
+) -> None:
+    client = manager_member_client
+    main = engagement(client, project_id, "Synthetic main")
+    main_url = root(project_id) + f"/engagements/{main['id']}"
+    assert client.post(main_url + "/activate").status_code == 200
+    sub = client.post(
+        root(project_id) + "/engagements",
+        json={
+            "consultant_name": "Synthetic sub",
+            "agreement_reference": "SUB-TEST",
+            "engagement_type": "subconsultant",
+        },
+    ).json()
+    url = root(project_id) + f"/engagements/{sub['id']}"
+    sub = client.post(url + "/activate").json()
+    body = {
+        "consultant_name": sub["consultant_name"],
+        "agreement_reference": sub["agreement_reference"],
+        "engagement_type": "main",
+        "expected_updated_at": sub["updated_at"],
+    }
+    response = client.put(url, json=body)
+    assert response.status_code == 409, response.text
+    workspace = client.get(root(project_id)).json()
+    assert workspace["active_engagement"]["id"] == main["id"]
+    assert (
+        next(row for row in workspace["engagements"] if row["id"] == sub["id"])["engagement_type"]
+        == "subconsultant"
+    )
