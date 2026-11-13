@@ -733,7 +733,7 @@
     "status": "implemented",
     "removal_route": "POST /content/bio/delete",
     "ui_file": "frontend/src/components/projects/marketing/MarketingContentTab.tsx",
-    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded content rows are removed in the full-page editor."
+    "notes": "Version-checked retained deletion under a project lock; reason and prior values remain audited. Embedded pools and balcony entries have named Delete confirmations in Edit project bio. Each fixed amenity also offers Delete details. Save changes applies removals through PUT /content/bio with removal_reason required for saved child removal or clearing an entire amenity. Existing roles and scope apply; no linked document is deleted. Previous nested values remain in the content update audit event. Repeated stale writes conflict."
   },
   {
     "handler": "marketing.create_branding",

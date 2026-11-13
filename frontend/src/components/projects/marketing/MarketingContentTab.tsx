@@ -11,6 +11,8 @@ import { DeleteRecordButton } from "../DeleteRecordButton";
 import { MarketingAssets } from "./MarketingAssets";
 import { MarketingContentEditor } from "./MarketingContentEditor";
 
+import { ProjectAmenities } from "./ProjectAmenities";
+
 export const NARRATIVES = [["country", "About Country"], ["area", "About Area"], ["project", "About Project"], ["location", "About Location"]] as const;
 
 export function MarketingContentTab({ projectId, roles, kind }: { projectId: string; roles: Set<string>; kind: "bio" | "branding" }) {
@@ -18,7 +20,7 @@ export function MarketingContentTab({ projectId, roles, kind }: { projectId: str
   const [editing, setEditing] = useState(false);
   const canWrite = hasAnyRole(roles, MARKETING_WRITERS);
   const title = kind === "bio" ? "Project Bio" : "Branding";
-  if (editing && answer.status === "ready") return <MarketingContentEditor kind={kind} initial={answer.data.data} onClose={() => setEditing(false)} onSave={async data => { await marketing.saveContent(projectId, kind, data, answer.data.version); setEditing(false); answer.retry(); }} />;
+  if (editing && answer.status === "ready") return <MarketingContentEditor kind={kind} initial={answer.data.data} onClose={() => setEditing(false)} onSave={async (data, removalReason) => { await marketing.saveContent(projectId, kind, data, answer.data.version, removalReason); setEditing(false); answer.retry(); }} />;
   return <div className="stack">
     <PageHeader icon={sectionIcon(kind === "bio" ? "marketing-bio" : "marketing-branding")} title={title} subtitle={kind === "bio" ? "The story and setting behind this development." : "A consistent identity for every project touchpoint."} actions={canWrite && answer.status === "ready" ? <Button onClick={() => setEditing(true)}>{answer.data.version ? "Edit" : "Create"} {title.toLowerCase()}</Button> : undefined} />
     {kind === "branding" ? <MarketingAssets projectId={projectId} roles={roles} placement="logo" /> : null}
@@ -26,7 +28,7 @@ export function MarketingContentTab({ projectId, roles, kind }: { projectId: str
     {answer.status === "denied" ? <Notice tone="info">Not available to your access level.</Notice> : null}
     {answer.status === "failed" ? <Notice tone="error">{answer.message} <Button onClick={answer.retry}>Retry</Button></Notice> : null}
     {answer.status === "ready" ? <>
-      {!answer.data.version ? <Card><EmptyState title={`No ${title.toLowerCase()} recorded`} hint="Create the project content using confirmed sources. No marketing facts are prefilled." /></Card> : <>
+      {!answer.data.version ? <><Card><EmptyState title={`No ${title.toLowerCase()} recorded`} hint="Create the project content using confirmed sources. No marketing facts are prefilled." /></Card>{kind === "bio" ? <BioView data={answer.data.data as Bio} /> : null}</> : <>
         {kind === "bio" ? <BioView data={answer.data.data as Bio} /> : <BrandView data={answer.data.data as Branding} />}
         <div className="marketing-meta"><span>Source: {answer.data.data.source || "Not recorded"} · As at {businessDate(answer.data.data.as_of)}</span>
           {canWrite ? <RowMenu label={`Actions for ${title.toLowerCase()}`}><DeleteRecordButton label={title.toLowerCase()} recordName={title} confirmLabel={`Delete ${title.toLowerCase()}`} description="Remove this content from Marketing. Previous revisions and the deletion reason remain in the audit history." onDelete={reason => marketing.remove(projectId, `content/${kind}`, answer.data.version, reason)} onDeleted={async () => { answer.retry(); }} /></RowMenu> : null}
@@ -45,7 +47,7 @@ function BioView({ data }: { data: Bio }) {
       {key === "location" && data.nearby.length ? <div className="marketing-nearby">{data.nearby.map((place, index) => <section className="marketing-place" key={index}><strong>{place.name}</strong><span>{place.duration_minutes === null ? "Time not recorded" : `${place.duration_minutes} min`} · {place.travel_mode}</span>{place.note ? <p>{place.note}</p> : null}</section>)}</div> : null}
     </section>)}</Card>
     <div className="stack">
-    <Card><SectionHeader title="Amenities" level={2} />{data.amenities.length ? <ul className="marketing-bullets">{data.amenities.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="muted">No amenities recorded.</p>}</Card>
+    <ProjectAmenities details={data.amenity_details} legacyNames={data.amenities} />
     <Card><SectionHeader title="Indicative return on investment" level={2} /><p className="marketing-return">{data.roi_min_percent === null ? "Not recorded" : `${data.roi_min_percent}% – ${data.roi_max_percent}%`}</p><p>{data.roi_basis || "Record the return period, basis and supporting source before quoting a range."}</p><p className="muted">Marketing estimate; returns are not guaranteed. Unit projections are available in Economics.</p></Card>
     </div>
   </div>;

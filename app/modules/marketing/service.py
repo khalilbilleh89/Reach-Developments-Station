@@ -12,6 +12,7 @@ from app.modules.audit.service import record_event
 from app.modules.inventory import service as inventory
 from app.modules.inventory.permissions import require_unit
 from app.modules.inventory.physical import gross_measurement
+from app.modules.marketing.amenities import removed_details
 from app.modules.marketing.calculations import calculate
 from app.modules.marketing.models import MarketIndicator, MarketingContent, RentalScenario
 from app.modules.marketing.schemas import (
@@ -43,12 +44,19 @@ def commit_record(
     before: dict | None,
     *,
     reason: str | None = None,
+    content_edit: bool = False,
 ) -> None:
     session.add(row)
     session.flush()
     record_event(
         session,
-        action="delete" if reason else "update" if before else "create",
+        action="update"
+        if content_edit
+        else "delete"
+        if reason
+        else "update"
+        if before
+        else "create",
         entity_type=row.__tablename__,
         entity_id=row.id,
         actor_user_id=actor.user_id,
@@ -94,6 +102,8 @@ def save_content(
     data: Bio | Branding,
     expected: int,
     actor: ActorContext,
+    *,
+    removal_reason: str | None = None,
 ) -> ContentRead:
     row = current_content(session, project_id, kind)
     version_check(row, expected)
@@ -110,8 +120,22 @@ def save_content(
         row = MarketingContent(project_id=project_id, kind=kind, version=last_version + 1)
     else:
         row.version += 1
-    row.data = data.model_dump(mode="json")
-    commit_record(session, row, actor, before)
+    saved = data.model_dump(mode="json")
+    if kind == "bio" and "amenity_details" not in data.model_fields_set and row.data:
+        # Older clients editing the narrative must not erase the newer details.
+        saved["amenity_details"] = row.data.get("amenity_details", saved["amenity_details"])
+    if kind == "bio" and before:
+        if removed_details(before["data"].get("amenity_details", {}), saved["amenity_details"]):
+            if not removal_reason or not removal_reason.strip() or len(removal_reason) > 320:
+                raise ValidationError(
+                    "Enter a reason (up to 320 characters) for deleting saved amenity details."
+                )
+        else:
+            removal_reason = None
+    else:
+        removal_reason = None
+    row.data = saved
+    commit_record(session, row, actor, before, reason=removal_reason, content_edit=bool(before))
     return read_content(session, project_id, kind)
 
 

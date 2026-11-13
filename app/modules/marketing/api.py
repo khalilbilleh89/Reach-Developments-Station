@@ -4,6 +4,7 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Query, Response
+from pydantic import Field
 
 from app.modules.access.dependencies import ActiveActor, DbSession
 from app.modules.inventory.service import marketing_unit_references
@@ -30,6 +31,7 @@ router.include_router(asset_router)
 
 class BioWrite(ContentWrite):
     data: Bio
+    removal_reason: str | None = Field(default=None, min_length=1, max_length=320)
 
 
 class BrandWrite(ContentWrite):
@@ -49,7 +51,15 @@ def create_bio(
     project_id: uuid.UUID, body: BioWrite, session: DbSession, actor: ActiveActor
 ) -> ContentRead:
     scope(session, project_id, actor, write=True)
-    return service.save_content(session, project_id, "bio", body.data, body.expected_version, actor)
+    return service.save_content(
+        session,
+        project_id,
+        "bio",
+        body.data,
+        body.expected_version,
+        actor,
+        removal_reason=body.removal_reason,
+    )
 
 
 @router.put("/content/branding", response_model=ContentRead)

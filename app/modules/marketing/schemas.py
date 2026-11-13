@@ -7,6 +7,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from app.modules.marketing.amenities import Amenities
+
 Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)]
 Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)]
 Money = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]
@@ -37,6 +39,7 @@ class Bio(Request):
     location: Narrative = Field(default_factory=Narrative)
     nearby: list[Nearby] = Field(default_factory=list, max_length=100)
     amenities: list[Label] = Field(default_factory=list, max_length=100)
+    amenity_details: Amenities = Field(default_factory=Amenities)
     roi_min_percent: Percent | None = None
     roi_max_percent: Percent | None = None
     roi_basis: Text = ""

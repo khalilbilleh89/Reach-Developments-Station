@@ -123,3 +123,62 @@ test("unit analysis renders server resale, yield and unavailable cap valuation e
   assert.ok(serialized.includes("Multiple sign transitions"));
   assert.ok(!serialized.includes(result.currency_id));
 });
+
+function amenityFieldModule() {
+  const source = readFileSync(new URL('../src/components/projects/marketing/amenityFields.ts', import.meta.url), 'utf8');
+  const exports = {};
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  runInNewContext(`(function(exports){${code}\n})`)(exports);
+  return exports;
+}
+
+test('amenities keep seven ordered names and show recorded zero/false without inventing facts', () => {
+  const fields = amenityFieldModule();
+  assert.equal(fields.AMENITIES.map(item => item.name).join('|'), "Swimming Pools|Garden View Gym|Tropical Garden View|Energy-Efficient Project|Kid's Play Area|Balconies With Premium View|Dedicated Parking Lots");
+  const h = harness('ProjectAmenities', { './amenityFields': fields });
+  assert.equal(h.exports.amenityFacts('parking', {}).length, 0);
+  assert.ok(h.exports.amenityFacts('parking', { parking: { visitor_spaces: 0 } }).includes('Visitor spaces: 0'));
+  assert.ok(h.exports.amenityFacts('garden', { garden: { shared_garden: false } }).includes('Shared garden: No'));
+  const facts = h.exports.amenityFacts('gym', { gym: { area_sqm: '120.25', location: 'Garden', equipment: 'Treadmills', access: 'Residents', status: 'available' } });
+  assert.equal(facts.length, 3);
+  let tree = h.render('ProjectAmenities', { legacyNames: ['Legacy name'] });
+  assert.equal(find(tree, 'Button').length, 7);
+  find(tree, 'Button')[1].props.onClick();
+  tree = h.render('ProjectAmenities', { legacyNames: ['Legacy name'] });
+  assert.equal(find(tree, 'RecordPage')[0].props.title, 'Garden View Gym');
+});
+
+test('amenity child deletion asks for confirmation and retains other entries and amenities', () => {
+  const fields = amenityFieldModule();
+  const h = harness('AmenityEditor', { './amenityFields': fields });
+  let value = { swimming_pools: { pools: [{ id: 'one', name: 'First pool' }, { id: 'two', name: 'Second pool' }] }, parking: { visitor_spaces: 0 }, balconies: { balconies: [{ id: 'three', unit_type: 'Studio' }] } };
+  const props = () => ({ value, onChange: next => { value = next; } });
+  let tree = h.render('AmenityEditor', props());
+  find(tree, 'Button').find(node => String(node.props.children).replaceAll(',', '') === 'Delete pool 1').props.onClick();
+  assert.equal(value.swimming_pools.pools.length, 2);
+  tree = h.render('AmenityEditor', props());
+  assert.equal(find(tree, 'ConfirmDialog')[0].props.title, 'Delete First pool?');
+  find(tree, 'ConfirmDialog')[0].props.onConfirm();
+  assert.equal(value.swimming_pools.pools.length, 1);
+  assert.equal(value.swimming_pools.pools[0].id, 'two');
+  assert.equal(value.parking.visitor_spaces, 0);
+  assert.equal(value.balconies.balconies[0].id, 'three');
+});
+
+test('bio Save changes forwards optional amenity details and retains draft after save failure', async () => {
+  const h = harness('MarketingContentEditor');
+  const narrative = { paragraph: '', bullets: [] };
+  const initial = { country: narrative, area: narrative, project: narrative, location: narrative, nearby: [], amenities: ['Existing amenity'], source: '', as_of: null, roi_min_percent: null, roi_max_percent: null, roi_basis: '' };
+  let submitted;
+  const props = { kind: 'bio', initial, onClose() {}, onSave: async data => { submitted = data; throw new Error('offline'); } };
+  let tree = h.render('MarketingContentEditor', props);
+  find(tree, 'AmenityEditor')[0].props.onChange({ gym: { area_sqm: '42.75' } });
+  tree = h.render('MarketingContentEditor', props);
+  assert.equal(find(tree, 'StickyActions')[0].props.submitLabel, 'Save changes');
+  await find(tree, 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(submitted.amenity_details.gym.area_sqm, '42.75');
+  assert.equal(submitted.amenities[0], 'Existing amenity');
+  tree = h.render('MarketingContentEditor', props);
+  assert.equal(find(tree, 'AmenityEditor')[0].props.value.gym.area_sqm, '42.75');
+  assert.equal(find(tree, 'DraftBoundary')[0].props.dirty, true);
+});
