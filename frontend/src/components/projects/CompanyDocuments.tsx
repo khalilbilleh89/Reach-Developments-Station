@@ -146,7 +146,6 @@ export function CompanyDocuments({ projectId, companyId, canWrite }: { projectId
   const [editor, setEditor] = useState<{ row?: CompanyDocument } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [expandedDates, setExpandedDates] = useState<string | null>(null);
   const due = answer.status === "ready" ? answer.data.filter(row => row.reminder_status === "expired" || row.reminder_status === "renewal_due" || row.verification_status === "expired").length : 0;
   return <div className="company-documents"><Card>
     <SectionHeader level={2} title="Registration documents" description={due ? `${due} ${due === 1 ? "document needs" : "documents need"} renewal attention.` : undefined} actions={canWrite ? <Button onClick={() => setEditor({})}>Add document</Button> : undefined} />
@@ -162,15 +161,10 @@ export function CompanyDocuments({ projectId, companyId, canWrite }: { projectId
       facts={[
         { label: "Category", value: row.other_category || row.category || <span className="muted">Not entered</span> },
         { label: "Expires", value: row.expiry_date ? businessDate(row.expiry_date) : row.expiry_note ? EXPIRY_NOTES[row.expiry_note] : <span className="muted">Not entered</span> },
-        { label: "Dates & renewal", value: <>
-          <Button variant="link" aria-expanded={expandedDates === row.id} aria-controls={`company-document-dates-${row.id}`} onClick={() => setExpandedDates(expandedDates === row.id ? null : row.id)}>
-            {expandedDates === row.id ? "Hide details" : "Show details"}
-          </Button>
-          <span id={`company-document-dates-${row.id}`} hidden={expandedDates !== row.id}>
-            Issue date: {row.issue_date ? businessDate(row.issue_date) : row.issue_date_not_stated ? "Not stated" : "Not entered"}<br />
-            Renewal reminder: {row.reminder_days ? `${row.reminder_days} days before expiry` : row.reminder_date ? businessDate(row.reminder_date) : "None"}
-          </span>
-        </> },
+        { label: "Dates & renewal", value: <span>
+          Issue date: {row.issue_date ? businessDate(row.issue_date) : row.issue_date_not_stated ? "Not stated" : "Not entered"}<br />
+          Renewal reminder: {row.reminder_days ? `${row.reminder_days} days before expiry` : row.reminder_date ? businessDate(row.reminder_date) : "None"}
+        </span> },
       ]}
       status={<>{renewalState(row)}{row.verification_status === "expired" ? <Badge tone="danger">Expired</Badge> : <StatusDot tone={row.verification_status === "verified" ? "success" : "neutral"}>{STATUS[row.verification_status ?? ""] ?? "Status not entered"}</StatusDot>}</>}
       actions={<>
