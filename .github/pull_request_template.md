@@ -5,11 +5,8 @@ Governing policy: docs/ENGINEERING_RULES.md
 Roadmap position: docs/MVP_ROADMAP.md
 
 Keep every required section. For non-applicable sections give a brief reason.
-PR Quality enforces this contract; comments and checkboxes are not explanations.
-Draft requires Context, Scope, Non-goals, Architecture, Contract Impact,
-Migration Impact and Validation results; explicit pending evidence is allowed.
-Ready requires all delivery sections below. Page layout is required for frontend
-source changes. Broad Drafts and Ready PRs also require Change cohesion.
+Comments and checkboxes are not explanations. Report only checks that actually
+ran; say plainly which checks could not run and why.
 -->
 
 ## CI phase

@@ -420,7 +420,7 @@ Tests protect business behaviour, not implementation trivia.
 ## 10a. Risk-based module CI
 
 CI scope is determined by code risk, not pull-request size or Draft/Ready state.
-The required statuses remain **PR Quality**, **Backend**, and **Frontend**.
+The required statuses are **Backend** and **Frontend**.
 
 - **Module:** one changed product domain, the invariant pack, that domain's
   tests, and direct consumer tests/contracts.
@@ -493,25 +493,22 @@ Explain root cause, scope, non-goals, cohesion and applicable impacts precisely;
 concise answers are welcome. Non-applicability requires a reason.
 
 - PR template = authoring contract.
-- PR Quality workflow = deterministic delivery-contract enforcement.
 - CI = implementation/test evidence.
 - GitHub ruleset = merge enforcement (owner configuration after merge).
 
-Passing PR Quality does not prove the code is correct. Passing Backend/Frontend
-does not make a poor or misleading PR description acceptable. Both are required.
-Drafts may report pending validation but must explain their core design and scope.
-Ready PRs must complete the contract, resolve declarations and explain limitations.
+Passing Backend/Frontend does not make a poor or misleading PR description
+acceptable; the reviewer reads the description. Drafts may report pending validation
+but must explain their core design and scope. Ready PRs complete the template and
+explain limitations.
 
 A test, build, migration, browser review, deployment check or manual validation may
 be claimed as passed only if that exact check actually ran successfully against the
 reported code. Name the command/test family and result. If PostgreSQL is unavailable,
 say that integration tests did not run locally and CI is still required; never turn
-missing evidence into "Backend: pass" or "Fully tested". PR Quality can check the
-representation, not verify that an author's claims are true. Independent review and
+missing evidence into "Backend: pass" or "Fully tested". Independent review and
 exact-head CI remain required. Agents never merge; a human merges.
 
-See [AGENT_AUTOMATION.md](AGENT_AUTOMATION.md) for the validator's limits, local usage
-and the manual ruleset activation step.
+See [AGENT_AUTOMATION.md](AGENT_AUTOMATION.md) for the manual ruleset activation step.
 
 ### Size discipline
 
@@ -537,8 +534,7 @@ A PR is done when all of the following hold:
 - [ ] Migrations apply forward and reverse cleanly.
 - [ ] `npm run lint` and `npm run build` pass.
 - [ ] CI is green.
-- [ ] The PR template is filled in truthfully, including dependency and contract impact,
-      and the PR Quality check passes for the current description and head.
+- [ ] The PR template is filled in truthfully, including dependency and contract impact.
 - [ ] No secret, credential or production connection string is in the diff.
 - [ ] Financial rules in section 6 are respected wherever money is touched.
 - [ ] Documentation affected by the change has been updated in the same PR.

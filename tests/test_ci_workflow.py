@@ -32,8 +32,8 @@ def setting(job: str, key: str) -> str | None:
 def test_required_status_names_are_preserved_exactly() -> None:
     assert setting("backend", "name") == "Backend"
     assert setting("frontend", "name") == "Frontend"
-    quality = (ROOT / ".github/workflows/pr-quality.yml").read_text(encoding="utf-8-sig")
-    assert "name: PR Quality" in quality
+    # The owner retired the PR description check on 13 Nov 2026; it must not return silently.
+    assert not (ROOT / ".github/workflows/pr-quality.yml").exists()
 
 
 def test_draft_and_ready_events_use_the_same_plan() -> None:
@@ -166,13 +166,8 @@ def test_full_shadow_is_explicit_observable_and_not_required_backend() -> None:
     assert str(SHADOW.name) in (ROOT / "scripts/ci_backend_tests.py").read_text(encoding="utf-8")
 
 
-def test_pr_quality_is_separate_and_description_edits_do_not_run_backend() -> None:
-    quality = (ROOT / ".github/workflows/pr-quality.yml").read_text(encoding="utf-8-sig")
-    assert "name: PR Quality" in quality
-    assert "edited" in quality.split("permissions:", 1)[0]
+def test_description_edits_do_not_run_backend() -> None:
     assert "edited" not in source().split("permissions:", 1)[0]
-    assert "services:" not in quality
-    assert "postgres" not in quality
 
 
 def test_workflow_has_read_only_permissions_and_no_deployment() -> None:
