@@ -1,174 +1,66 @@
-# Change request template (for Claude, Codex or any agent)
+# Asking for a change
 
-Copy the block below into a new conversation or task whenever you want a pull
-request that **adds**, **changes** or **removes** something in Reach. Fill in the
-owner part in plain business language; leave the standing instructions as they
-are. They are the same on every device, so work submitted from a phone, a laptop
-or another agent lands on the same design system.
-
-The standing instructions only *point* at the rules. The rules themselves live
-in [UX_SYSTEM.md](UX_SYSTEM.md), the
-[Experience 6 catalogue](design-system/README.md), [AGENTS.md](../AGENTS.md),
-[ENGINEERING_RULES.md](ENGINEERING_RULES.md) and
-[DELETION_POLICY.md](DELETION_POLICY.md). If one of those changes, this template
-does not need to.
-
----
+Anyone can ask Codex, Claude or another agent to add, change, remove or fix
+something in Reach. Write what you want in plain words and start with one line:
 
 ```text
-REQUEST TYPE: Add | Change | Remove            (pick one)
-
-1. WHERE
-   Module / screen: (e.g. Development > Company, Delivery > Reports, Sales > Buyers)
-   Record or section: (e.g. the bank account block, the report register)
-
-2. WHAT I WANT
-   In one or two sentences, in business words:
-   (e.g. "Record each company's authorised signatories with their ID expiry date.")
-
-3. THE QUESTION THIS SCREEN SHOULD ANSWER
-   What do I need to know at a glance when I open it?
-   (e.g. "Who can sign for this company, and is anyone's ID about to expire?")
-   What should lead / be most visible:
-   What can sit behind a click (secondary detail):
-
-4. DATA
-   Fields to add / change / remove, and for each: required or optional,
-   text / date / money (which currency) / percentage / file / Drive link / choice
-   (list the choices):
-   Existing data that must be preserved or migrated:
-
-5. WHO
-   Who can see it:            (e.g. finance and admins only)
-   Who can add / edit:
-   Who can delete:
-
-6. DELETE / REMOVE BEHAVIOUR
-   For Add: how should Delete work? What blocks it (linked records)?
-   For Remove: remove the feature, hide it, or retire it but keep history?
-   What history or evidence must be kept:
-
-7. MUST NOT CHANGE
-   (e.g. "Do not change how collections are calculated.")
-
-8. DONE WHEN
-   How I will check it works:
-   (e.g. "I can add two signatories, see the expiring one flagged, and delete one.")
-
-9. REFERENCE (optional)
-   Screenshots, a similar screen in Reach to copy, or an example document:
-
----------------------------------------------------------------------------
-STANDING INSTRUCTIONS FOR THE AGENT (do not edit)
-
-Before writing code:
-- Follow CLAUDE.md and AGENTS.md. Read docs/ENGINEERING_RULES.md and
-  docs/DELETION_POLICY.md.
-- For any screen work, load the .claude/skills listed in AGENTS.md:
-  frontend-product-design, frontend-implementation, frontend-review, and
-  financial-ui-integrity for amounts, rates, percentages or dates. Read the
-  matching section of docs/UX_SYSTEM.md (§8 for workspaces) and the component
-  entry in docs/design-system/README.md.
-- Find the nearest existing Reach screen that does the same job and match it.
-  If the request conflicts with a rule, or changes which figure a page leads
-  with, ask me before building.
-
-While building:
-- Compose only from @/components/ui primitives and the approved catalogue
-  entries. No new colours, no screen-local component copies, no side drawers.
-- Lead with the answer to question 3. Show entered values at full weight; say
-  what is missing once, in muted text, not as a column of "Not entered".
-- Sentence-case headings and labels. One primary (gold) action per view.
-  Secondary row actions go in the row menu (⋯); a lone action stays visible.
-- Short fixed choices are segmented controls or choice cards; lists that grow
-  with data stay dropdowns. Long forms (3+ sections) get section links and the
-  sticky save bar.
-- Show loading, empty, denied and failed as different states. The browser never
-  calculates money.
-- Every Add ships with a working, reasoned, audited Delete (AGENTS.md).
-
-Before opening the PR:
-- Run the checks in CLAUDE.md (frontend lint, tsc, tests, build; Product
-  Experience guards; Ruff and PostgreSQL tests when Python changes).
-- Render the changed screens with realistic synthetic data at 1440px and 390px
-  and compare before/after. Name any visual debt left.
-- Fill every section of .github/pull_request_template.md. Open it ready for
-  review once checks pass. Never merge.
----------------------------------------------------------------------------
+Read AGENTS.md first and follow it. Then: <what you want, in plain words>.
 ```
 
----
+That is enough. `AGENTS.md` tells the agent how to understand the request, ask
+about anything unclear, build it to Reach's design and engineering rules, test
+it with made-up data and open a pull request that passes the checks. If you
+pass the request through GPT, ask GPT to forward it in your own words and add
+nothing you did not say.
 
-## Example: a filled request (illustrative)
+## Make it land first time (optional)
+
+Each of these the agent would otherwise have to ask about or assume:
+
+- **Where** — the module and section, e.g. "Development > Land, the Site & utilities tab".
+- **Why** — the business reason, one line.
+- **Fields** — for each: required or optional, and text / date / money (which
+  currency) / percentage / file / Drive link / choice (list the choices).
+- **Wording** — exact labels; for a rename, "everywhere" or the places to change.
+- **Who** — who can see it, edit it and delete it.
+- **Done when** — two or three checks you will do yourself.
+- **Must not change** — anything that has to stay exactly as it is.
+
+Never paste real customer, buyer or company data. Describe it, or make up an example.
+
+### Examples
 
 ```text
-REQUEST TYPE: Add
-
-1. WHERE
-   Module / screen: Development > Company
-   Record or section: a new "Authorised signatories" section under the company
-
-2. WHAT I WANT
-   Record each company's authorised signatories and the expiry of their ID.
-
-3. THE QUESTION THIS SCREEN SHOULD ANSWER
-   Who can sign for this company today, and whose ID expires soon?
-   Lead: the list of current signatories with an "ID expired" / "Expiring" pill.
-   Behind a click: ID numbers and the scanned ID.
-
-4. DATA
-   Name (required, text); role (optional, text); ID number (optional, text);
-   ID expiry (optional, date); scanned ID (optional, PDF up to 10 MB or Drive link).
-
-5. WHO
-   See: anyone who can see Company. Add/edit/delete: admins, project managers, finance.
-
-6. DELETE / REMOVE BEHAVIOUR
-   Delete with a reason; keep the record and its PDF in history.
-
-7. MUST NOT CHANGE
-   Bank accounts and company documents stay as they are.
-
-8. DONE WHEN
-   I add two signatories, one with an expired ID shows the red pill, and I can
-   delete the other.
-
-9. REFERENCE
-   Look like the Registration documents rows on the same page.
-
-(standing instructions block unchanged)
+Read AGENTS.md first and follow it. Then: rename the Authorities section to NOS
+everywhere — menu, page title, buttons and messages. Amounts and statuses must
+not change.
 ```
-
-## Example: a removal (illustrative)
 
 ```text
-REQUEST TYPE: Remove
-
-1. WHERE
-   Module / screen: Commercial > Agreements
-   Record or section: the "Internal reference" field
-
-2. WHAT I WANT
-   Nobody uses it; take it off the form and the register.
-
-3. THE QUESTION THIS SCREEN SHOULD ANSWER
-   Unchanged.
-
-4. DATA
-   Existing values must be kept in the database and visible in the record's history.
-
-5. WHO
-   Unchanged.
-
-6. DELETE / REMOVE BEHAVIOUR
-   Retire the field: hide it from entry and display, keep stored values, no data deletion.
-
-7. MUST NOT CHANGE
-   Agreement status and dates.
-
-8. DONE WHEN
-   The field no longer appears on the form, register or record page, and old
-   agreements still open without errors.
-
-(standing instructions block unchanged)
+Read AGENTS.md first and follow it. Then: in Development > Company, record each
+company's authorised signatories: name (required), role, ID number, ID expiry
+date and a scanned ID (PDF or Drive link). Show an "ID expired" pill when the
+date has passed. Admins, project managers and finance can add, edit and delete
+with a reason. Done when I can add two, one shows "ID expired", and I can
+delete the other.
 ```
+
+```text
+Read AGENTS.md first and follow it. Then: on a land parcel, the "Available
+subject to conditions" option spills out of its box on desktop. Fix it.
+```
+
+## Before you merge
+
+Merge one pull request at a time. On the pull request's latest commit:
+
+| Check | Good |
+| --- | --- |
+| PR Quality, Backend, Frontend (Checks tab) | All green. Skipped backend groups are fine for screen-only changes. |
+| Bottom of the pull request | No conflicts and not out of date with main. |
+| Validation results, in the description | Your "done when" checks are reported as passed. |
+| Review focus, in the description | You agree with any assumptions the agent listed. |
+
+After each merge, other open pull requests fall behind main and need updating
+before they can merge. Never merge a red pull request; ask the agent to fix it on
+the same branch.
