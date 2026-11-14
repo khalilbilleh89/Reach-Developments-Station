@@ -253,7 +253,7 @@
     "status": "implemented",
     "removal_route": "POST /engagements/{engagement_id}/delete",
     "ui_file": "frontend/src/components/projects/ConsultantEngineerTab.tsx",
-    "notes": "Unused draft main/sub-consultant agreements have reasoned Delete; programme/deliverable references block deletion and audit is retained."
+    "notes": "Unused draft main/sub-consultant agreements have reasoned Delete; programme/deliverable references block deletion and audit is retained. Engagement-type corrections retain the same agreement identity and removal rules; active/completed evidence is not deleted or recreated."
   },
   {
     "handler": "consultant_engineering.create_stage",
@@ -469,7 +469,7 @@
     "status": "implemented",
     "removal_route": "POST /{project_id}/documents/{document_id}/delete",
     "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
-    "notes": "Reasoned retained removal for links and PDFs. Scope, role and audit enforced; original evidence retained."
+    "notes": "Reasoned retained removal for links and PDFs. Scope, role and audit enforced; original evidence retained. Parcel Documents also exposes creation and reasoned Delete via LandTab.tsx; the same scoped retained-removal API applies."
   },
   {
     "handler": "projects.create_parcel",
@@ -837,7 +837,7 @@
     "status": "implemented",
     "removal_route": "POST /{project_id}/documents/{document_id}/delete",
     "ui_file": "frontend/src/components/projects/DocumentsTab.tsx",
-    "notes": "PDF uploaded atomically with metadata, removed with reason while bytes and audit are retained."
+    "notes": "PDF uploaded atomically with metadata, removed with reason while bytes and audit are retained. Parcel Documents also exposes creation and reasoned Delete via LandTab.tsx; the same scoped retained-removal API applies."
   },
   {
     "handler": "projects.create_company_document",

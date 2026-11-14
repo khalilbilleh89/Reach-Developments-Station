@@ -100,6 +100,7 @@ def derive_analytics(
         planning.maximum_gfa * factor if planning and planning.maximum_gfa is not None else None
     )
     total = costs["total_acquisition_cost"]
+    fees = amount(total - parcel.purchase_price) if total is not None else None
     years = []
     opening = parcel.purchase_price
     for row in sorted(assumptions, key=lambda item: item.year):
@@ -124,6 +125,8 @@ def derive_analytics(
         opening = closing
     return {
         "land_area_sqm": area,
+        "acquisition_fees_amount": fees,
+        "acquisition_fees_to_purchase_fraction": ratio(fees, parcel.purchase_price),
         "max_buildable_area_sqm": buildable,
         "purchase_cost_per_sqm": amount(parcel.purchase_price / area)
         if parcel.purchase_price is not None and area > 0

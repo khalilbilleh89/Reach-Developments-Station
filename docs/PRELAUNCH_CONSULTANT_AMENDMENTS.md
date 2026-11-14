@@ -34,6 +34,13 @@ completed agreements also permit these metadata edits while retaining completed
 status. Terminated agreements remain read-only. The latest agreement is displayed
 even when every agreement is completed, so details stay reachable after reload.
 
+Engagement type can also be corrected between Main consultant and Sub-consultant
+on an editable agreement. The correction is scoped to the selected agreement,
+uses the same saved-version and project-lock checks, and records both types in
+the update audit. An active sub-consultant cannot become a main consultant while
+another active main exists. Existing programme, payments and files remain linked
+to the same agreement; reporting continues to select only the active main.
+
 Editors may reopen a completed agreement through a reason prompt and
 `POST /engagements/{id}/reopen`, supplying `expected_updated_at` and `reason`.
 The server validates the saved version and completed state under the project lock,

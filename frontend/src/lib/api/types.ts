@@ -255,6 +255,8 @@ export interface LandParcel {
 }
 
 export interface LandAnalytics {
+  acquisition_fees_amount: string | null;
+  acquisition_fees_to_purchase_fraction: string | null;
   land_area_sqm: string;
   max_buildable_area_sqm: string | null;
   purchase_cost_per_sqm: string | null;
