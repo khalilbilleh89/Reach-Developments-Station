@@ -162,8 +162,21 @@ def update_engagement(
     values = payload.model_dump(exclude={"expected_updated_at"})
     if "engagement_type" not in payload.model_fields_set:
         values.pop("engagement_type", None)
-    elif payload.engagement_type != row.engagement_type:
-        raise ValidationError("Agreement type is fixed at creation; create a separate agreement.")
+    elif (
+        payload.engagement_type == "main"
+        and row.engagement_type != "main"
+        and row.status == "active"
+    ):
+        other_main = session.scalar(
+            select(models.ConsultantEngagement.id).where(
+                models.ConsultantEngagement.project_id == project.id,
+                models.ConsultantEngagement.id != row.id,
+                models.ConsultantEngagement.engagement_type == "main",
+                models.ConsultantEngagement.status == "active",
+            )
+        )
+        if other_main is not None:
+            raise ConflictError("This project already has an active main consultant agreement.")
     before = {key: getattr(row, key) for key in values}
     for key, value in values.items():
         setattr(row, key, value.strip() if isinstance(value, str) else value)
