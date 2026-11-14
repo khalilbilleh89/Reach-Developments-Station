@@ -15,9 +15,11 @@ New itemized fields default to zero to preserve existing recorded totals. Cleari
 
 ## Analytics
 
+- Acquisition fees = Total Acquisition Cost − Purchase Price, with fees ÷ Purchase Price shown only for a positive purchase price. Incomplete acquisition inputs remain unavailable.
 - Purchase cost per sqm = Purchase Price ÷ Land Area.
 - Purchase cost per buildable sqm = Purchase Price ÷ recorded Maximum GFA (Planning).
 - All-in counterparts use Total Acquisition Cost as numerator.
+- Total acquisition cost per buildable sqm retains Total Acquisition Cost ÷ recorded Maximum GFA.
 - Land cost as % of GDV = cost ÷ Expected GDV × 100, showing both purchase and all-in bases.
 
 Expected GDV is an optional, user-entered estimate **for this parcel**, not an inferred whole-development total. Areas recorded in sqft are converted to sqm using 0.09290304. Missing/zero denominators produce unavailable results, never a fabricated zero. Maximum GFA is assumed to use the parcel's area unit, as in the existing planning record.
