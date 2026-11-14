@@ -1065,6 +1065,7 @@ export function LandTab({
                   </KeyValueGrid>
                   </div>
                   <SectionHeader title="Setbacks & minimums" description="Linear dimensions retain the units of the recorded planning decision." />
+                  <div className="land-envelope">
                   <KeyValueGrid columns={3}>
                     <KeyValue label="Front setback" value={measurement(planning.front_setback)} />
                     <KeyValue label="Side setback" value={measurement(planning.side_setback)} />
@@ -1073,6 +1074,7 @@ export function LandTab({
                     <KeyValue label="Minimum frontage" value={measurement(planning.minimum_frontage)} />
                     <KeyValue label="Density" value={measurement(planning.density)} />
                   </KeyValueGrid>
+                  </div>
                   {planning.parking_requirement ? (
                     <>
                       <SectionHeader title="Parking" />
