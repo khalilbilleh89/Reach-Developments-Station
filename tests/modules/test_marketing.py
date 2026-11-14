@@ -443,3 +443,201 @@ def test_economics_invalid_evidence_rejected(
         f"{root(project_id)}/scenarios", json=scenario(currency_id, unit_id=unit_id, **changes)
     )
     assert response.status_code == 422
+
+
+def amenity_fixture() -> dict:
+    return {
+        "swimming_pools": {
+            "applicability": "whole_project",
+            "status": "planned",
+            "supporting_url": "https://example.com/pools.pdf",
+            "pools": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "Synthetic main pool",
+                    "pool_type": "main",
+                    "setting": "outdoor",
+                    "length_m": "20.5",
+                    "width_m": "8",
+                    "min_depth_m": "1",
+                    "max_depth_m": "2",
+                    "location": "Courtyard",
+                    "access": "Residents",
+                    "heating": False,
+                    "step_free_entry": True,
+                    "shallow_area": True,
+                    "sun_deck": True,
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "Synthetic children pool",
+                    "pool_type": "children",
+                    "area_sqm": "12",
+                    "status": "under_construction",
+                },
+            ],
+        },
+        "gym": {
+            "area_sqm": "120.25",
+            "location": "Ground floor",
+            "equipment": "Treadmills",
+            "access": "Residents",
+            "status": "available",
+        },
+        "garden": {
+            "shared_garden": True,
+            "garden_view": True,
+            "area_sqm": "500",
+            "facilities": "Benches",
+            "access": "Residents",
+            "view_blocks": "Block A",
+            "view_units": "A101",
+        },
+        "energy": {
+            "features": "Insulation",
+            "rating": "A",
+            "certificate_url": "https://example.com/spec.pdf",
+        },
+        "play_area": {
+            "area_sqm": "70",
+            "location": "Garden",
+            "setting": "outdoor",
+            "min_age": 3,
+            "max_age": 10,
+            "equipment": "Swings",
+            "shade": "Canopy",
+        },
+        "balconies": {
+            "applicability": "selected",
+            "blocks": "A",
+            "units": "A101",
+            "balconies": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "unit_type": "Two bedroom",
+                    "min_area_sqm": "10",
+                    "max_area_sqm": "18",
+                    "overlooks": "Garden",
+                    "blocks": "A",
+                    "units": "A101",
+                }
+            ],
+        },
+        "parking": {
+            "total_spaces": 80,
+            "spaces_per_unit": 1,
+            "covered_spaces": 60,
+            "uncovered_spaces": 20,
+            "visitor_spaces": 0,
+            "ev_charging": "planned",
+            "ev_notes": "Six bays",
+        },
+    }
+
+
+def test_amenities_roundtrip_legacy_edit_and_retained_removal(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    url = f"{root(project_id)}/content/bio"
+    details = amenity_fixture()
+    original = {
+        "amenities": ["Existing pool name"],
+        "country": {"paragraph": "Synthetic narrative"},
+        "amenity_details": details,
+    }
+    response = admin_client.put(url, json={"expected_version": 0, "data": original})
+    assert response.status_code == 200, response.text
+    saved = response.json()["data"]
+    reread = admin_client.get(url).json()["data"]
+    assert saved == reread
+    assert reread["amenity_details"]["gym"]["area_sqm"] == "120.25"
+    assert reread["amenity_details"]["parking"]["visitor_spaces"] == 0
+    assert reread["amenity_details"]["swimming_pools"]["pools"][0]["heating"] is False
+    assert reread["amenities"] == ["Existing pool name"]
+    # Old clients may edit the existing narrative contract without deleting new details.
+    legacy = {key: value for key, value in saved.items() if key != "amenity_details"}
+    response = admin_client.put(url, json={"expected_version": 1, "data": legacy})
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["amenity_details"] == saved["amenity_details"]
+    kept_pool = saved["amenity_details"]["swimming_pools"]["pools"][1]
+    saved["amenity_details"]["swimming_pools"]["pools"] = [kept_pool]
+    saved["amenity_details"]["balconies"]["balconies"] = []
+    saved["amenity_details"]["gym"] = {}
+    rejected = admin_client.put(url, json={"expected_version": 2, "data": saved})
+    assert rejected.status_code == 422, rejected.text
+    response = admin_client.put(
+        url, json={"expected_version": 2, "data": saved, "removal_reason": "Synthetic correction"}
+    )
+    assert response.status_code == 200, response.text
+    assert (
+        admin_client.put(
+            url, json={"expected_version": 2, "data": saved, "removal_reason": "Repeated request"}
+        ).status_code
+        == 409
+    )
+    current = admin_client.get(url).json()["data"]
+    assert current["amenity_details"]["swimming_pools"]["pools"] == [kept_pool]
+    assert current["amenity_details"]["parking"] == reread["amenity_details"]["parking"]
+    assert current["country"] == reread["country"]
+    assert current["amenity_details"]["gym"]["area_sqm"] is None
+    event = db.scalar(select(AuditEvent).where(AuditEvent.reason == "Synthetic correction"))
+    assert event.action == "update"
+    assert len(event.before_data["data"]["amenity_details"]["swimming_pools"]["pools"]) == 2
+    assert event.before_data["data"]["amenity_details"]["balconies"]["balconies"]
+    assert event.after_data["data"]["amenity_details"]["balconies"]["balconies"] == []
+
+
+@pytest.mark.parametrize(
+    "details",
+    [
+        {"gym": {"area_sqm": "-1"}},
+        {"parking": {"total_spaces": -1}},
+        {"parking": {"total_spaces": 1.5}},
+        {"swimming_pools": {"pools": [{"min_depth_m": "2", "max_depth_m": "1"}]}},
+        {"balconies": {"balconies": [{"min_area_sqm": "20", "max_area_sqm": "10"}]}},
+        {"play_area": {"min_age": 10, "max_age": 3}},
+        {"energy": {"certificate_url": "javascript:alert(1)"}},
+        {"gym": {"supporting_url": "file:///tmp/private"}},
+        {"garden": {"status": "unknown_status"}},
+    ],
+)
+def test_amenity_validation(details: dict) -> None:
+    from pydantic import ValidationError
+
+    from app.modules.marketing.schemas import Bio
+
+    with pytest.raises(ValidationError):
+        Bio(amenity_details=details)
+
+
+def test_amenity_empty_defaults_and_duplicate_entries() -> None:
+    from pydantic import ValidationError
+
+    from app.modules.marketing.schemas import Bio
+
+    assert Bio(amenities=["Legacy"]).amenity_details.parking.total_spaces is None
+    identifier = str(uuid.uuid4())
+    with pytest.raises(ValidationError, match="distinct identifiers"):
+        Bio(amenity_details={"swimming_pools": {"pools": [{"id": identifier}, {"id": identifier}]}})
+
+
+def test_amenity_changes_use_existing_project_and_role_scope(
+    admin_client: TestClient, project_id: str, db: Session
+) -> None:
+    url = f"{root(project_id)}/content/bio"
+    data = {"amenity_details": amenity_fixture()}
+    assert admin_client.put(url, json={"expected_version": 0, "data": data}).status_code == 200
+    writer = make_user(db, email="amenity-writer@example.test", roles=("sales_operations",))
+    writer_client = client_for(writer.email)
+    deletion = {
+        "expected_version": 1,
+        "data": {"amenity_details": {}},
+        "removal_reason": "Synthetic correction",
+    }
+    assert writer_client.put(url, json=deletion).status_code == 404
+    reader = make_user(db, email="amenity-reader@example.test", roles=("sales_advisor",))
+    grant_access(admin_client, project_id, reader)
+    assert client_for(reader.email).put(url, json=deletion).status_code == 403
+    grant_access(admin_client, project_id, writer)
+    assert writer_client.put(url, json=deletion).status_code == 200
+    assert admin_client.get(url).json()["data"]["amenity_details"]["swimming_pools"]["pools"] == []

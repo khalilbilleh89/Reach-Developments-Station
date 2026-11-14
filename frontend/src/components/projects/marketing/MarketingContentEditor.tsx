@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import type { Bio, Branding, Nearby } from "@/lib/api/marketing";
-import { Button, DraftBoundary, Field, FieldRow, FormOutline, FormSection, Notice, RecordPage, Segmented, StickyActions } from "@/components/ui";
+import { Button, Disclosure, DraftBoundary, Field, FieldRow, FormOutline, FormSection, Notice, RecordPage, Segmented, StickyActions } from "@/components/ui";
+
+import { AmenityEditor } from "./AmenityEditor";
 
 const sections = [["country", "About Country"], ["area", "About Area"], ["project", "About Project"], ["location", "About Location"]] as const;
 const lines = (value: string) => value.split("\n");
 const cleanLines = (value: string[]) => value.map(line => line.trim()).filter(Boolean);
 
-export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kind: "bio" | "branding"; initial: Bio | Branding; onClose: () => void; onSave: (data: Bio | Branding) => Promise<void> }) {
+export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kind: "bio" | "branding"; initial: Bio | Branding; onClose: () => void; onSave: (data: Bio | Branding, removalReason?: string) => Promise<void> }) {
   const [data, setData] = useState(initial);
+  const [removalReason, setRemovalReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bio = data as Bio;
@@ -23,7 +26,7 @@ export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kin
         event.preventDefault(); if (busy) return; setBusy(true); setError(null);
         try {
           const saved = kind === "bio" ? { ...bio, country: { ...bio.country, bullets: cleanLines(bio.country.bullets) }, area: { ...bio.area, bullets: cleanLines(bio.area.bullets) }, project: { ...bio.project, bullets: cleanLines(bio.project.bullets) }, location: { ...bio.location, bullets: cleanLines(bio.location.bullets) }, amenities: cleanLines(bio.amenities) } : brand;
-          await onSave(saved);
+          await onSave(saved, removalReason || undefined);
         } catch (caught) { setError(caught instanceof ApiError ? caught.message : "Could not save. Your entries have been kept."); }
         finally { setBusy(false); }
       }}>
@@ -46,7 +49,11 @@ export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kin
               </div>)}
               <Button variant="default" onClick={() => updateBio({ nearby: [...bio.nearby, { name: "", duration_minutes: null, travel_mode: "drive", note: "" }] })}>Add nearby location</Button>
             </FormSection>
-            <FormSection title="Project Amenities"><Field label="Amenities" hint="One amenity per line. Remove a line to delete it." optional><textarea className="input" rows={5} value={bio.amenities.join("\n")} onChange={e => updateBio({ amenities: lines(e.target.value) })} /></Field></FormSection>
+            <FormSection title="Project Amenities">
+              <AmenityEditor value={bio.amenity_details} onChange={amenity_details => updateBio({ amenity_details })} />
+              <Field label="Reason for deleting saved amenity details" hint="Required when removing a saved pool, balcony entry or an amenity’s entire details. Retained with the previous values in audit history." optional><input className="input" maxLength={320} value={removalReason} onChange={event => setRemovalReason(event.target.value)} /></Field>
+              {bio.amenities.length ? <Disclosure title="Previously recorded amenity names"><Field label="Previously recorded names" hint="These existing names are retained separately from the seven amenity records." optional><textarea className="input" rows={5} value={bio.amenities.join("\n")} onChange={e => updateBio({ amenities: lines(e.target.value) })} /></Field></Disclosure> : null}
+            </FormSection>
             <FormSection title="Indicative ROI Range" description="This is a stated marketing range. Economics calculates each unit's return separately.">
               <FieldRow><Field label="Minimum ROI (%)" optional><input className="input" inputMode="decimal" value={bio.roi_min_percent ?? ""} onChange={e => updateBio({ roi_min_percent: e.target.value || null })} /></Field><Field label="Maximum ROI (%)" optional><input className="input" inputMode="decimal" value={bio.roi_max_percent ?? ""} onChange={e => updateBio({ roi_max_percent: e.target.value || null })} /></Field></FieldRow>
               <Field label="Return period and basis" hint="For example: annual net rental yield, or total five-year return including resale." optional><textarea className="input" maxLength={4000} value={bio.roi_basis} onChange={e => updateBio({ roi_basis: e.target.value })} /></Field>
@@ -68,7 +75,7 @@ export function MarketingContentEditor({ kind, initial, onClose, onSave }: { kin
           </>}
           <FormSection title="Supporting Source"><Field label="Source or reference" optional><textarea className="input" maxLength={4000} value={data.source} onChange={e => setData({ ...data, source: e.target.value })} /></Field><Field label="As-at date" optional><input className="input" type="date" value={data.as_of ?? ""} onChange={e => setData({ ...data, as_of: e.target.value || null })} /></Field></FormSection>
         </fieldset>
-        <StickyActions dirty={JSON.stringify(initial) !== JSON.stringify(data)} submitLabel="Save" busy={busy} onCancel={onClose} />
+        <StickyActions dirty={JSON.stringify(initial) !== JSON.stringify(data)} submitLabel={kind === "bio" ? "Save changes" : "Save"} busy={busy} onCancel={onClose} />
         </div>
       </form>
     </DraftBoundary>

@@ -1,10 +1,12 @@
 import { get, post, put } from "./client";
+import type { AmenityDetails } from "./amenities";
 
 export type Narrative = { paragraph: string; bullets: string[] };
 export type Nearby = { name: string; duration_minutes: number | null; travel_mode: "drive" | "walk" | "transit" | "cycle"; note: string };
 export type Bio = {
   country: Narrative; area: Narrative; project: Narrative; location: Narrative;
   nearby: Nearby[]; amenities: string[]; roi_min_percent: string | null;
+  amenity_details?: AmenityDetails;
   roi_max_percent: string | null; roi_basis: string; source: string; as_of: string | null;
 };
 export type Branding = {
@@ -41,7 +43,7 @@ const root = (id: string) => `/projects/${id}/marketing`;
 export const marketing = {
   bio: (id: string) => get<SavedContent<Bio>>(`${root(id)}/content/bio`),
   branding: (id: string) => get<SavedContent<Branding>>(`${root(id)}/content/branding`),
-  saveContent: (id: string, kind: "bio" | "branding", data: Bio | Branding, version: number) => put<SavedContent<Bio | Branding>>(`${root(id)}/content/${kind}`, { data, expected_version: version }),
+  saveContent: (id: string, kind: "bio" | "branding", data: Bio | Branding, version: number, removalReason?: string) => put<SavedContent<Bio | Branding>>(`${root(id)}/content/${kind}`, { data, expected_version: version, removal_reason: removalReason }),
   scenarios: (id: string) => get<Scenario[]>(`${root(id)}/scenarios`),
   saveScenario: (id: string, data: ScenarioFields, row?: Scenario) => row
     ? put<Scenario>(`${root(id)}/scenarios/${row.id}`, { ...data, expected_version: row.version })
