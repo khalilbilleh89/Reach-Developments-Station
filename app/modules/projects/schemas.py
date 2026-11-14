@@ -407,6 +407,8 @@ class LandMarketYearRead(BaseModel):
 
 
 class LandAnalyticsRead(BaseModel):
+    acquisition_fees_amount: DecimalStr | None
+    acquisition_fees_to_purchase_fraction: DecimalStr | None
     land_area_sqm: DecimalStr
     max_buildable_area_sqm: DecimalStr | None
     purchase_cost_per_sqm: DecimalStr | None

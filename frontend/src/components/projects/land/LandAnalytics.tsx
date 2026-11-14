@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ApiError, projects } from "@/lib/api";
 import type { LandAnalytics as Analytics, LandParcel } from "@/lib/api";
 import { measurement } from "./presentation";
-import { fractionFromPercent, money, percent, percentInput } from "@/lib/format";
+import { decimalText, fractionFromPercent, money, percent, percentInput } from "@/lib/format";
 import { Button, DraftBoundary, Field, FieldRow, FormActions, KeyValue, KeyValueGrid, Loading, Notice, Position, PositionFigure, SectionHeader, TableScroll, Tooltip } from "@/components/ui";
 
 export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
@@ -32,6 +32,7 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
     return () => { cancelled = true; };
   }, [projectId, parcel, attempt]);
   const price = (value: string | null) => value === null ? "Unavailable" : money(value, parcel.base_currency_code);
+  const fees = data?.acquisition_fees_amount == null ? "Unavailable" : parcel.base_currency_code === "EUR" ? `€${money(decimalText(data.acquisition_fees_amount))}` : money(decimalText(data.acquisition_fees_amount), parcel.base_currency_code);
   const changedGdv = gdv !== (parcel.expected_gdv_amount ?? "");
   const existingYear = data?.market_years.some(row => String(row.year) === year);
   return <DraftBoundary dirty={editing && Boolean(year || rate || changedGdv)} busy={busy}>
@@ -43,6 +44,7 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
       {data ? <>
         <Position compact>
           <PositionFigure label="Purchase price" value={price(parcel.purchase_price)} />
+          <PositionFigure label="Acquisition fees" value={<>{fees}{data.acquisition_fees_to_purchase_fraction != null ? ` (${percent(data.acquisition_fees_to_purchase_fraction)} of purchase price)` : ""}</>} />
           <PositionFigure label="Total acquisition cost" value={price(parcel.total_acquisition_cost)} />
           <PositionFigure label="Total land area" value={measurement(data.land_area_sqm, "sqm")} />
           <PositionFigure label="Max buildable area" value={data.max_buildable_area_sqm === null ? "Not recorded" : measurement(data.max_buildable_area_sqm, "sqm")} note={data.max_buildable_area_sqm === null ? <>Record the maximum <Tooltip term="GFA">Gross floor area: the total floor area of the buildings on the plot.</Tooltip> in Planning</> : undefined} />
@@ -51,7 +53,7 @@ export function LandAnalytics({ projectId, parcel, canWrite, onChanged }: {
           <KeyValue label="Land cost per sqm · purchase price / land area" value={price(data.purchase_cost_per_sqm)} />
           <KeyValue label="Land cost per buildable sqm · purchase price / max buildable area" value={price(data.purchase_cost_per_buildable_sqm)} />
           <KeyValue label="All-in cost per sqm · total acquisition cost / land area" value={price(data.acquisition_cost_per_sqm)} />
-          <KeyValue label="All-in cost per buildable sqm · total acquisition cost / max buildable area" value={price(data.acquisition_cost_per_buildable_sqm)} />
+          <KeyValue label="Total acquisition cost per buildable sqm · total acquisition cost / max buildable area" value={price(data.acquisition_cost_per_buildable_sqm)} />
           <KeyValue label="Purchase land cost as % of GDV" value={percent(data.purchase_cost_to_gdv_fraction)} />
           <KeyValue label="All-in acquisition cost as % of GDV" value={percent(data.acquisition_cost_to_gdv_fraction)} />
         </KeyValueGrid>

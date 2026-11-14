@@ -42,6 +42,20 @@ def test_land_and_buildable_costs_use_different_areas() -> None:
     assert result["acquisition_cost_per_buildable_sqm"] == Decimal("269.75")
     assert result["purchase_cost_to_gdv_fraction"] == Decimal("0.200000")
     assert result["acquisition_cost_to_gdv_fraction"] == Decimal("0.215800")
+    assert result["acquisition_fees_amount"] == Decimal("79000.00")
+    assert result["acquisition_fees_to_purchase_fraction"] == Decimal("0.079000")
+
+
+@pytest.mark.parametrize("price", [None, Decimal("0"), Decimal("-1")])
+def test_fees_percentage_requires_positive_purchase_price(price: Decimal | None) -> None:
+    result = derive_analytics(parcel(purchase_price=price), None, [])
+    assert result["acquisition_fees_to_purchase_fraction"] is None
+
+
+def test_incomplete_fees_remain_unknown() -> None:
+    result = derive_analytics(parcel(legal_fee_amount=None), None, [])
+    assert result["acquisition_fees_amount"] is None
+    assert result["acquisition_fees_to_purchase_fraction"] is None
 
 
 @pytest.mark.parametrize(

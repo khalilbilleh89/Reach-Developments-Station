@@ -48,6 +48,8 @@ import { EditForm, asValue } from "@/components/projects/EditForm";
 import type { EditField } from "@/components/projects/EditForm";
 import { ACQUISITION_METHOD, AcquisitionCosts } from "@/components/projects/land/AcquisitionCosts";
 import { LandAnalytics } from "@/components/projects/land/LandAnalytics";
+import { ParcelDocumentForm } from "@/components/projects/land/ParcelDocumentForm";
+import { DeleteRecordButton } from "@/components/projects/DeleteRecordButton";
 import { ParcelCollection } from "@/components/projects/land/ParcelCollection";
 import { measurement } from "@/components/projects/land/presentation";
 
@@ -303,6 +305,7 @@ export function LandTab({
   const [editingParcel, setEditingParcel] = useState(false);
   const sectionHost = useRef<HTMLDivElement>(null);
   const [editingDocuments, setEditingDocuments] = useState(false);
+  const [addingDocument, setAddingDocument] = useState(false);
   const [documentId, setDocumentId] = useState("");
 
   const [documentsError, setDocumentsError] = useState(false);
@@ -354,6 +357,7 @@ export function LandTab({
     setEditingParcel(false);
     setEditingPlanning(false);
     setEditingDocuments(false);
+    setAddingDocument(false);
     setDocumentId("");
     setNotice(null);
     setPlanning(null);
@@ -1368,7 +1372,7 @@ export function LandTab({
               <SectionHeader
                 title="Documents"
                 description="Title deeds, surveys and planning decisions linked to this parcel. Files open at their recorded source."
-                actions={<a className="button" href={projectHref(projectId, "documents")}>Open project documents</a>}
+                actions={<div className="row-actions"><a className="button" href={projectHref(projectId, "documents")}>Open project documents</a>{canWritePlanning ? <Button onClick={() => setAddingDocument(true)}>Add document</Button> : null}</div>}
               />
               {canWritePlanning && !editingDocuments ? <SectionHeader title="Document details" actions={<Button disabled={!documents?.length || documentsError} onClick={() => { setDocumentId(documents?.[0]?.id ?? ""); setEditingDocuments(true); }}>Edit documents</Button>} /> : null}
               {editingDocuments && documents ? <div className="stack">
@@ -1393,7 +1397,7 @@ export function LandTab({
                   compact
                   icon="documents"
                   title="No document recorded for this parcel"
-                  hint="Title deeds, survey reports and planning decisions are referenced from the project's Documents section."
+                  hint="Add a PDF or Google Drive link supporting this parcel."
                 />
               ) : (
                 <TableScroll label="Parcel documents" compact>
@@ -1403,6 +1407,7 @@ export function LandTab({
                       <th scope="col">Type</th>
                       <th scope="col">Reference</th>
                       <th scope="col">Where</th>
+                      {canWritePlanning ? <th scope="col">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -1412,8 +1417,9 @@ export function LandTab({
                         <td>{document.document_type_code}</td>
                         <td className="mono">{document.reference_number ?? "—"}</td>
                         <td>
-                          {document.filename ? <Button small onClick={() => { void projects.downloadDocument(projectId, document).catch(() => setDocumentsError(true)); }}>Download PDF</Button> : document.external_url ? <ExternalLink href={document.external_url}>Open</ExternalLink> : "—"}
+                          {document.filename ? <Button small onClick={() => { void projects.downloadDocument(projectId, document).catch(() => setDocumentsError(true)); }}>Download PDF</Button> : document.external_url ? <ExternalLink href={document.external_url}>Open in Drive</ExternalLink> : "—"}
                         </td>
+                        {canWritePlanning ? <td><DeleteRecordButton label="document" recordName={document.title} confirmLabel="Delete document" description="Remove this document from the register. Its evidence and audit history are retained." onDelete={reason => projects.deleteDocument(projectId, document.id, reason)} onDeleted={async () => { setDocuments(current => current?.filter(row => row.id !== document.id) ?? null); if (documentId === document.id) setEditingDocuments(false); }} /></td> : null}
                       </tr>
                     ))}
                   </tbody>
@@ -1424,6 +1430,7 @@ export function LandTab({
           </div>
         </RecordPage>
       ) : null}
+      {selected && addingDocument && canWritePlanning ? <ParcelDocumentForm projectId={projectId} parcelId={selected.id} onClose={() => setAddingDocument(false)} onSaved={document => { setAddingDocument(false); setDocuments(current => current ? [...current, document] : null); if (!documents || documentsError) { void projects.documents(projectId, { parcel_id: selected.id }).then(rows => { setDocuments(rows); setDocumentsError(false); }).catch(() => setDocumentsError(true)); } }} /> : null}
     </>
   );
 }
